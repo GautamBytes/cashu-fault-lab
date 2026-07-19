@@ -313,7 +313,7 @@ git commit -m "feat: publish delivery schemas and adapter contract"
 - Consumes: adapter observation DTOs only.
 - Produces: `OracleModel`, `applyObservation(model, observation)`, `assertSafety(model)`, `assertQuiescentLiveness(model)`.
 
-- [ ] **Step 1: Write failing example and fast-check properties**
+- [x] **Step 1: Write failing example and fast-check properties**
 
 ```ts
 fc.assert(
@@ -327,13 +327,13 @@ expect(() => assertSafety(modelWithTwoCreditsForOneDelivery())).toThrowError(/on
 expect(() => assertSafety(modelWithTwoOwnersForOneProof())).toThrowError(/unique owner/i);
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/oracle test`
 
 Expected: package missing.
 
-- [ ] **Step 3: Implement independent model**
+- [x] **Step 3: Implement independent model**
 
 ```ts
 export interface OracleModel {
@@ -354,13 +354,13 @@ export type Observation =
 
 Safety invariants: unique proof owner; max one settlement plan per delivery; max one credit per delivery/request reservation; terminal receipt implies own recovered outputs plus one credit; duplicates cannot alter value/ledger; cross-transport same delivery has one effect. Oracle source must have zero imports from `@cashu-fault-lab/delivery-core`.
 
-- [ ] **Step 4: Run property tests with 1,000 cases**
+- [x] **Step 4: Run property tests with 1,000 cases**
 
 Run: `pnpm --filter @cashu-fault-lab/oracle test`
 
 Expected: pass with fixed seed logged only on failure.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/oracle
