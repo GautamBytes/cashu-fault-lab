@@ -644,7 +644,7 @@ git commit -m "feat: persist crash-safe receiver settlement"
 
 - Produces: stable logical delivery creation; proof reservation; exponential full-jitter retry; receipt merge.
 
-- [ ] **Step 1: Write failing sender tests**
+- [x] **Step 1: Write failing sender tests**
 
 ```ts
 const outcome = await sender.send(request, { seed: 'retry-seed' });
@@ -657,13 +657,13 @@ expect(retryDelay({ attempt: 0, random: () => 1 })).toBe(250);
 expect(retryDelay({ attempt: 20, random: () => 1 })).toBe(30_000);
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-sender test`
 
 Expected: app missing.
 
-- [ ] **Step 3: Implement sender ports and state**
+- [x] **Step 3: Implement sender ports and state**
 
 ```ts
 export interface SenderWallet {
@@ -680,13 +680,13 @@ export interface PaymentTransport {
 
 HTTP `200/202/409/410/413/422` parse receipts. `429/5xx` and timeout retry same bytes. Redirects disabled. Sender never releases proof reservation for unknown outcome or `processing/recovery_blocked`. Transport fallback preserves inner bytes and delivery ID.
 
-- [ ] **Step 4: Run sender tests**
+- [x] **Step 4: Run sender tests**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-sender test`
 
 Expected: stable-payload and reservation properties pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/reference-sender

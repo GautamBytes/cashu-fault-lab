@@ -40,6 +40,12 @@ importers:
         specifier: 8.20.0
         version: 8.20.0
 
+  apps/reference-sender:
+    dependencies:
+      '@cashu-fault-lab/delivery-core':
+        specifier: workspace:*
+        version: link:../../packages/delivery-core
+
   packages/adapter-contract:
     dependencies:
       '@cashu-fault-lab/delivery-core':
