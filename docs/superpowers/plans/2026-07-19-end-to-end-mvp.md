@@ -37,7 +37,7 @@
 
 - Produces: sparse-array-safe JSON validation; initial receiver receipt version invariant; reproducible upstream commit lock.
 
-- [ ] **Step 1: Add failing sparse-array and initial-version tests**
+- [x] **Step 1: Add failing sparse-array and initial-version tests**
 
 ```ts
 it('rejects a sparse proof array', () => {
@@ -53,13 +53,13 @@ it('requires the first receiver receipt to start at version one', () => {
 });
 ```
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/delivery-core test -- fingerprint.test.ts receipt.test.ts`
 
 Expected: both new tests fail because array holes are skipped and any positive initial version is accepted.
 
-- [ ] **Step 3: Implement indexed array validation and initial version check**
+- [x] **Step 3: Implement indexed array validation and initial version check**
 
 ```ts
 function assertDenseArray(value: readonly unknown[], path: string): void {
@@ -76,7 +76,7 @@ if (!previous) {
 }
 ```
 
-- [ ] **Step 4: Add upstream lock**
+- [x] **Step 4: Add upstream lock**
 
 ```json
 {
@@ -92,13 +92,13 @@ if (!previous) {
 }
 ```
 
-- [ ] **Step 5: Run delivery-core gate**
+- [x] **Step 5: Run delivery-core gate**
 
 Run: `pnpm --filter @cashu-fault-lab/delivery-core test && pnpm --filter @cashu-fault-lab/delivery-core typecheck && pnpm --filter @cashu-fault-lab/delivery-core build`
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add spec/upstream-lock.json packages/delivery-core

@@ -99,6 +99,14 @@ function isPlainRecord(value: unknown): value is Readonly<Record<string, unknown
   return prototype === Object.prototype || prototype === null;
 }
 
+function assertDenseArray(value: readonly unknown[], path: string): void {
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index)) {
+      invalidFingerprint(`${path} must not contain holes`);
+    }
+  }
+}
+
 function assertJsonValue(value: unknown, path: string): asserts value is JsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number') {
@@ -109,7 +117,10 @@ function assertJsonValue(value: unknown, path: string): asserts value is JsonVal
   }
 
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertJsonValue(item, `${path}[${index}]`));
+    assertDenseArray(value, path);
+    for (let index = 0; index < value.length; index += 1) {
+      assertJsonValue(value[index], `${path}[${index}]`);
+    }
     return;
   }
 
@@ -163,7 +174,10 @@ function validatePayloadInput(input: PayloadFingerprintInput): void {
   if (!Array.isArray(input.proofs) || input.proofs.length > 256) {
     invalidFingerprint('Payload must contain at most 256 proofs');
   }
-  input.proofs.forEach(assertCashuProof);
+  assertDenseArray(input.proofs, 'proofs');
+  for (let index = 0; index < input.proofs.length; index += 1) {
+    assertCashuProof(input.proofs[index], index);
+  }
   if (!Number.isSafeInteger(input.createdAt) || !Number.isSafeInteger(input.expiresAt)) {
     invalidFingerprint('Delivery timestamps must be safe integers');
   }

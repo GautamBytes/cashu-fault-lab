@@ -184,6 +184,14 @@ describe('delivery fingerprints', () => {
     expect(() => computePayloadHash(input as PayloadFingerprintInput)).toThrowError();
   });
 
+  it('rejects a sparse proof array before hashing', () => {
+    expect(() =>
+      computePayloadHash(
+        payloadInput({ proofs: Array(1) as unknown as readonly CashuProof[] }),
+      ),
+    ).toThrowError(/holes/i);
+  });
+
   it('makes proof-set hash independent of Y ordering', () => {
     const y1 = Uint8Array.from([2, ...new Array<number>(32).fill(1)]);
     const y2 = Uint8Array.from([3, ...new Array<number>(32).fill(2)]);

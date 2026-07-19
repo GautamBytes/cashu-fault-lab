@@ -79,6 +79,12 @@ describe('assertReceiptTransition', () => {
     expect(() => assertReceiptTransition(processing, settled)).not.toThrow();
   });
 
+  it('requires the first receiver receipt to start at version one', () => {
+    expect(() => assertReceiptTransition(undefined, receipt({ statusVersion: 2 }))).toThrowError(
+      /start at version 1/i,
+    );
+  });
+
   it('accepts an exact duplicate without incrementing the status version', () => {
     const processing = receipt();
     expect(() => assertReceiptTransition(processing, { ...processing })).not.toThrow();

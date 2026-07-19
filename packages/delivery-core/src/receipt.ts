@@ -159,7 +159,15 @@ export function assertReceiptTransition(
   next: DeliveryReceipt,
 ): void {
   assertValidReceipt(next);
-  if (!previous) return;
+  if (!previous) {
+    if (next.statusVersion !== 1) {
+      throw new DeliveryValidationError(
+        'STATUS_VERSION_CONFLICT',
+        'Receipt must start at version 1',
+      );
+    }
+    return;
+  }
 
   assertValidReceipt(previous);
   if (!sameIdentity(previous, next)) {

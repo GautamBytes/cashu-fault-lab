@@ -1,0 +1,11 @@
+{
+  "checked_at": "2026-07-19",
+  "cashu_nuts": {
+    "repository": "https://github.com/cashubtc/nuts",
+    "ref": "fccb68e9129de5348003f573dc97e1ee380a1076"
+  },
+  "nostr_nips": {
+    "repository": "https://github.com/nostr-protocol/nips",
+    "ref": "bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91"
+  }
+}
