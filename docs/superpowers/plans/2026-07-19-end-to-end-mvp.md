@@ -386,7 +386,7 @@ git commit -m "feat: add independent payment safety oracle"
 - Consumes: `AdapterClient`, fault-controller clients, oracle observation sink.
 - Produces: deterministic `ScenarioRunner.run(spec, seed)`, serialized `FailureArtifact`, exact replay.
 
-- [ ] **Step 1: Write failing scheduler/replay tests**
+- [x] **Step 1: Write failing scheduler/replay tests**
 
 ```ts
 const scheduler = new VirtualScheduler(0);
@@ -400,13 +400,13 @@ const first = await runner.run(scenario, 'seed-1');
 expect(await runner.replay(first.artifact)).toEqual(first);
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/scenario-runner test`
 
 Expected: package missing.
 
-- [ ] **Step 3: Implement command/history model**
+- [x] **Step 3: Implement command/history model**
 
 ```ts
 export type ScenarioCommand =
@@ -427,15 +427,15 @@ export interface FailureArtifact {
 }
 ```
 
-Runner records invocation/completion pairs, passes every observation to oracle, redacts secrets at event creation, shrinks command histories through fast-check, and never uses wall-clock sleeps.
+Runner records invocation/completion pairs, passes every observation to oracle, redacts secrets at event creation, shrinks command histories with bounded deterministic delta debugging, and never uses wall-clock sleeps.
 
-- [ ] **Step 4: Run runner/oracle tests**
+- [x] **Step 4: Run runner/oracle tests**
 
 Run: `pnpm --filter @cashu-fault-lab/scenario-runner test && pnpm --filter @cashu-fault-lab/oracle test`
 
 Expected: deterministic replay passes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/scenario-runner

@@ -45,6 +45,15 @@ importers:
         specifier: 4.9.0
         version: 4.9.0
 
+  packages/scenario-runner:
+    dependencies:
+      '@cashu-fault-lab/adapter-contract':
+        specifier: workspace:*
+        version: link:../adapter-contract
+      '@cashu-fault-lab/oracle':
+        specifier: workspace:*
+        version: link:../oracle
+
 packages:
 
   '@emnapi/core@1.11.1':
