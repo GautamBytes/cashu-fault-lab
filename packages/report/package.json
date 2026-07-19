@@ -1,0 +1,25 @@
+{
+  "name": "@cashu-fault-lab/report",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@cashu-fault-lab/adapter-contract": "workspace:*",
+    "@cashu-fault-lab/scenario-runner": "workspace:*"
+  }
+}

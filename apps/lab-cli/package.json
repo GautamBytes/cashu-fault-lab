@@ -1,0 +1,29 @@
+{
+  "name": "@cashu-fault-lab/lab-cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cashu-fault-lab": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@cashu-fault-lab/report": "workspace:*",
+    "@cashu-fault-lab/scenario-runner": "workspace:*",
+    "commander": "15.0.0"
+  }
+}

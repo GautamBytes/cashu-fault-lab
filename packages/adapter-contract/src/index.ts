@@ -12,6 +12,7 @@ export {
   validateDeliveryPayload,
   validateDeliveryReceipt,
   validateDeliveryRequest,
+  validateScenarioResult,
 } from './validation.js';
 export type {
   AdapterCapabilities,

@@ -4,6 +4,7 @@ import {
   deliveryPayloadSchema,
   deliveryReceiptSchema,
   deliveryRequestSchema,
+  scenarioResultSchema,
 } from './schemas.js';
 import { normalizeMintUrl } from '@cashu-fault-lab/delivery-core';
 import type {
@@ -46,6 +47,7 @@ const validators = {
   deliveryPayload: ajv.compile(deliveryPayloadSchema),
   deliveryReceipt: ajv.compile(deliveryReceiptSchema),
   capabilities: ajv.compile(adapterCapabilitiesSchema),
+  scenarioResult: ajv.compile(scenarioResultSchema),
 } as const;
 
 const resetSchema = {
@@ -254,6 +256,10 @@ export function validateDeliveryPayload(value: unknown): ValidationResult {
 
 export function validateDeliveryReceipt(value: unknown): ValidationResult {
   return result(validators.deliveryReceipt, value);
+}
+
+export function validateScenarioResult(value: unknown): ValidationResult {
+  return result(validators.scenarioResult, value);
 }
 
 export function validateAdapterRequest(

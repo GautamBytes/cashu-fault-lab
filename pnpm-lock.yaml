@@ -26,6 +26,18 @@ importers:
 
   apps/http-fault-gateway: {}
 
+  apps/lab-cli:
+    dependencies:
+      '@cashu-fault-lab/report':
+        specifier: workspace:*
+        version: link:../../packages/report
+      '@cashu-fault-lab/scenario-runner':
+        specifier: workspace:*
+        version: link:../../packages/scenario-runner
+      commander:
+        specifier: 15.0.0
+        version: 15.0.0
+
   apps/reference-receiver:
     dependencies:
       '@cashu-fault-lab/adapter-contract':
@@ -92,6 +104,15 @@ importers:
       fast-check:
         specifier: 4.9.0
         version: 4.9.0
+
+  packages/report:
+    dependencies:
+      '@cashu-fault-lab/adapter-contract':
+        specifier: workspace:*
+        version: link:../adapter-contract
+      '@cashu-fault-lab/scenario-runner':
+        specifier: workspace:*
+        version: link:../scenario-runner
 
   packages/scenario-runner:
     dependencies:
@@ -717,6 +738,10 @@ packages:
 
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
+
+  commander@15.0.0:
+    resolution: {integrity: sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==}
+    engines: {node: '>=22.12.0'}
 
   compress-commons@6.0.2:
     resolution: {integrity: sha512-6FqVXeETqWPoGcfzrXb37E50NP0LXT8kAMu5ooZayhWWdgEY4lBEEcbQNXtkuKQsGduxiIcI4gOTsxTmuq/bSg==}
@@ -2067,6 +2092,8 @@ snapshots:
       color-name: 1.1.4
 
   color-name@1.1.4: {}
+
+  commander@15.0.0: {}
 
   compress-commons@6.0.2:
     dependencies:

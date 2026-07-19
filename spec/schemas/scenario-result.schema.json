@@ -10,6 +10,31 @@
     "scenarioId": { "type": "string", "minLength": 1 },
     "seed": { "type": "string", "minLength": 1 },
     "status": { "enum": ["passed", "failed", "skipped"] },
+    "commands": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "implementation": { "type": "string" },
+        "version": { "type": "string" },
+        "nuts": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "transports": { "type": "array", "items": { "type": "string" } },
+        "evidenceTier": { "type": "string" },
+        "sender": { "type": "string" },
+        "receiver": { "type": "string" }
+      }
+    },
+    "componentVersions": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "imageDigests": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+    },
     "invariants": {
       "type": "array",
       "items": {
@@ -32,8 +57,11 @@
         "properties": {
           "sequence": { "type": "integer", "minimum": 0 },
           "at": { "type": "integer", "minimum": 0 },
+          "phase": { "enum": ["invoked", "observation", "completed"] },
           "actor": { "type": "string", "minLength": 1 },
           "event": { "type": "string", "minLength": 1 },
+          "commandIndex": { "type": "integer", "minimum": 0 },
+          "outcome": { "enum": ["passed", "failed"] },
           "data": {}
         }
       }

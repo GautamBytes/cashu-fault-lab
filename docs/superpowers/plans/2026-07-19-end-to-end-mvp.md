@@ -871,7 +871,7 @@ git commit -m "feat: settle and recover against real Cashu mint"
 
 - Produces: `pnpm lab up|run|matrix|replay|report`; JSON/JUnit/static HTML redacted evidence.
 
-- [ ] **Step 1: Write failing redaction and CLI tests**
+- [x] **Step 1: Write failing redaction and CLI tests**
 
 ```ts
 const output = renderJson(failureArtifactContainingFakeSecrets);
@@ -882,23 +882,23 @@ expect(output).toContain('payload_hash');
 await expect(runCli(['replay', fixturePath])).resolves.toMatchObject({ exitCode: 0 });
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/report test && pnpm --filter @cashu-fault-lab/lab-cli test`
 
 Expected: packages missing.
 
-- [ ] **Step 3: Implement report allowlist and CLI**
+- [x] **Step 3: Implement report allowlist and CLI**
 
 Report serialization is allowlist-only: seed, scenario, command/fault names, timestamps, component versions, capability manifests, image digests, receipt status/version/detail, payload/proof-set hashes, invariant result, redacted errors. HTML is self-contained static output with escaped data. CLI uses Commander 15.0.0 and exits nonzero on conformance failure or unreplayable artifact.
 
-- [ ] **Step 4: Run report secret scan and replay tests**
+- [x] **Step 4: Run report secret scan and replay tests**
 
 Run: `pnpm --filter @cashu-fault-lab/report test && pnpm --filter @cashu-fault-lab/lab-cli test`
 
 Expected: artifacts replay; fake bearer patterns absent.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/report apps/lab-cli package.json

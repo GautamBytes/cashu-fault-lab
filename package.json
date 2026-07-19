@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "lab": "turbo run build --filter=@cashu-fault-lab/lab-cli && node apps/lab-cli/dist/bin.js",
     "test": "turbo run test",
     "test:consumer": "turbo run test:consumer",
     "typecheck": "turbo run typecheck",
