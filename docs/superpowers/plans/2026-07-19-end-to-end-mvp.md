@@ -762,7 +762,7 @@ git commit -m "feat: expose HTTP payment and adapter services"
 
 - Produces: message-aware forward/drop/delay/duplicate/reorder/status injection; first complete HTTP proof.
 
-- [ ] **Step 1: Write failing semantic-fault tests**
+- [x] **Step 1: Write failing semantic-fault tests**
 
 ```ts
 gateway.setRule({ phase: 'after_downstream_response', action: 'drop', count: 1 });
@@ -775,23 +775,23 @@ expect(result.oracle.settlements).toHaveLength(1);
 expect(result.finalReceipt.status).toBe('settled');
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/http-fault-gateway test && pnpm --filter @cashu-fault-lab/scenario-runner test -- http-e2e.test.ts`
 
 Expected: gateway/scenarios missing.
 
-- [ ] **Step 3: Implement gateway**
+- [x] **Step 3: Implement gateway**
 
 Rules match method, path, delivery ID hash, attempt ordinal, and phase (`before_forward`, `after_downstream_commit`, `after_downstream_response`). Gateway streams no proof-bearing body to logs; control API exposes counters and rule IDs only. Drop-after-response destroys upstream socket after downstream fully completes.
 
-- [ ] **Step 4: Run three HTTP scenarios**
+- [x] **Step 4: Run three HTTP scenarios**
 
 Run: `pnpm --filter @cashu-fault-lab/scenario-runner test -- http-e2e.test.ts`
 
 Expected: request loss settles once after retry; response loss returns stored receipt after retry; 100 duplicates produce one credit.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/http-fault-gateway scenarios packages/scenario-runner

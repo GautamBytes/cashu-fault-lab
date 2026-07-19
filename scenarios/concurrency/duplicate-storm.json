@@ -1,0 +1,12 @@
+{
+  "name": "http-duplicate-storm",
+  "commands": [
+    {
+      "type": "configure_fault",
+      "target": "http",
+      "rule": { "kind": "duplicate", "occurrence": 1, "duplicateCount": 99 }
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

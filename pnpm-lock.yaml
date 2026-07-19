@@ -24,6 +24,8 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1)(yaml@2.9.0))
 
+  apps/http-fault-gateway: {}
+
   apps/reference-receiver:
     dependencies:
       '@cashu-fault-lab/adapter-contract':
@@ -90,9 +92,21 @@ importers:
       '@cashu-fault-lab/adapter-contract':
         specifier: workspace:*
         version: link:../adapter-contract
+      '@cashu-fault-lab/delivery-core':
+        specifier: workspace:*
+        version: link:../delivery-core
+      '@cashu-fault-lab/http-fault-gateway':
+        specifier: workspace:*
+        version: link:../../apps/http-fault-gateway
       '@cashu-fault-lab/oracle':
         specifier: workspace:*
         version: link:../oracle
+      '@cashu-fault-lab/reference-receiver':
+        specifier: workspace:*
+        version: link:../../apps/reference-receiver
+      '@cashu-fault-lab/reference-sender':
+        specifier: workspace:*
+        version: link:../../apps/reference-sender
 
 packages:
 

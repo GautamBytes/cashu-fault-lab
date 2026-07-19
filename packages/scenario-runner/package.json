@@ -20,6 +20,10 @@
   },
   "dependencies": {
     "@cashu-fault-lab/adapter-contract": "workspace:*",
-    "@cashu-fault-lab/oracle": "workspace:*"
+    "@cashu-fault-lab/delivery-core": "workspace:*",
+    "@cashu-fault-lab/http-fault-gateway": "workspace:*",
+    "@cashu-fault-lab/oracle": "workspace:*",
+    "@cashu-fault-lab/reference-receiver": "workspace:*",
+    "@cashu-fault-lab/reference-sender": "workspace:*"
   }
 }
