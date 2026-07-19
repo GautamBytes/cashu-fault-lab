@@ -124,7 +124,7 @@ git commit -m "fix: close delivery core invariant gaps"
 
 - Produces: `parseDeliveryNegotiation(tags, now)`, `parseDeliveryPayload(value, now)`, `computeNetAmount(proofs, keysets)`, `classifyDelivery(previous, incoming)`.
 
-- [ ] **Step 1: Write failing request-negotiation tests**
+- [x] **Step 1: Write failing request-negotiation tests**
 
 ```ts
 expect(
@@ -139,7 +139,7 @@ expect(
   version: 1,
   expiresAt: 1784400300,
 });
-expect(() => parseDeliveryNegotiation([['delivery', '2']], 1)).toThrowError(/unsupported/i);
+expect(parseDeliveryNegotiation([['delivery', '2']], 1)).toBeUndefined();
 expect(() =>
   parseDeliveryNegotiation(
     [
@@ -151,7 +151,7 @@ expect(() =>
 ).toThrowError(/24 hours/i);
 ```
 
-- [ ] **Step 2: Write failing payload boundary tests**
+- [x] **Step 2: Write failing payload boundary tests**
 
 ```ts
 expect(parseDeliveryPayload(validWirePayload(), now)).toMatchObject({ delivery: { version: 1 } });
@@ -161,7 +161,7 @@ expect(() =>
 ).toThrowError(/expired/i);
 ```
 
-- [ ] **Step 3: Write failing amount and duplicate tests**
+- [x] **Step 3: Write failing amount and duplicate tests**
 
 ```ts
 expect(computeNetAmount([{ amount: 8, id: '00aa' }], new Map([['00aa', 1_000]]))).toBe(7);
@@ -173,13 +173,13 @@ expect(classifyDelivery(stored, { ...stored, payloadHash: 'b'.repeat(64) })).toB
 expect(classifyDelivery(stored, { ...stored, deliveryId: otherId })).toBe('proof_conflict');
 ```
 
-- [ ] **Step 4: Verify RED**
+- [x] **Step 4: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/delivery-core test -- request.test.ts payload.test.ts amount.test.ts duplicate.test.ts`
 
 Expected: modules/exports missing.
 
-- [ ] **Step 5: Implement exact public models**
+- [x] **Step 5: Implement exact public models**
 
 ```ts
 export interface DeliveryNegotiation {
@@ -205,13 +205,13 @@ export type DeliveryClassification =
 
 Implementation requirements: own-property-safe wire parsing, snake_case codec, 60-second expiry skew, exact 65,536-byte UTF-8 JSON limit, 256 proofs, safe integer sums, NUT-02 fee `(sum(input_fee_ppk) + 999) // 1000`, exact requested net amount.
 
-- [ ] **Step 6: Run full core tests and build**
+- [x] **Step 6: Run full core tests and build**
 
 Run: `pnpm --filter @cashu-fault-lab/delivery-core test && pnpm --filter @cashu-fault-lab/delivery-core typecheck && pnpm --filter @cashu-fault-lab/delivery-core build && pnpm --filter @cashu-fault-lab/delivery-core test:consumer`
 
 Expected: all pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/delivery-core

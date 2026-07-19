@@ -9,7 +9,13 @@ export type DeliveryErrorCode =
   | 'STATUS_VERSION_CONFLICT'
   | 'INVALID_FINGERPRINT_INPUT'
   | 'INVALID_PROOF_POINT'
-  | 'DUPLICATE_PROOF_POINT';
+  | 'DUPLICATE_PROOF_POINT'
+  | 'INVALID_DELIVERY_NEGOTIATION'
+  | 'INVALID_DELIVERY_PAYLOAD'
+  | 'DELIVERY_EXPIRED'
+  | 'INVALID_AMOUNT'
+  | 'UNKNOWN_KEYSET'
+  | 'AMOUNT_MISMATCH';
 
 export class DeliveryValidationError extends Error {
   readonly code: DeliveryErrorCode;

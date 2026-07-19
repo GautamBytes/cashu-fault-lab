@@ -1,6 +1,25 @@
 export { DeliveryValidationError, type DeliveryErrorCode } from './errors.js';
 export { generateProtocolId, parseProtocolId, type ProtocolId, type RandomBytes } from './ids.js';
 export { normalizeMintUrl } from './mint-url.js';
+export { parseDeliveryNegotiation, type DeliveryNegotiation } from './request.js';
+export {
+  parseDeliveryPayload,
+  parseDeliveryPayloadJson,
+  serializeDeliveryPayload,
+  type DeliveryPayload,
+  type DeliveryPayloadWire,
+} from './payload.js';
+export {
+  assertExactRequestedAmount,
+  computeInputFee,
+  computeNetAmount,
+  type AmountProof,
+} from './amount.js';
+export {
+  classifyDelivery,
+  type DeliveryClassification,
+  type ExistingDeliveryBinding,
+} from './duplicate.js';
 export {
   assertReceiptTransition,
   mergeObservedReceipt,

@@ -186,9 +186,7 @@ describe('delivery fingerprints', () => {
 
   it('rejects a sparse proof array before hashing', () => {
     expect(() =>
-      computePayloadHash(
-        payloadInput({ proofs: Array(1) as unknown as readonly CashuProof[] }),
-      ),
+      computePayloadHash(payloadInput({ proofs: Array(1) as unknown as readonly CashuProof[] })),
     ).toThrowError(/holes/i);
   });
 
