@@ -1,6 +1,7 @@
 import type { AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
 import {
   CompatibilityMatrix,
+  runExternalDeliveryPair,
   runReferenceDeliveryProbe,
   runReferenceHttpScenario,
   runReferenceNostrScenario,
@@ -16,6 +17,8 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import type { LabRuntime, LabSelection } from './index.js';
+import { ExternalAdapterRegistry } from './adapter-registry.js';
+import type { AdapterManifest } from './adapter-manifest.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -25,6 +28,8 @@ export interface LabServiceController {
 
 export interface PackagedLabRuntimeOptions {
   readonly services?: LabServiceController;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly fetch?: typeof fetch;
 }
 
 class DockerComposeServiceController implements LabServiceController {
@@ -112,9 +117,13 @@ function failedScenario(scenario: ScenarioSpec, seed: string, message: string): 
 
 export class PackagedLabRuntime implements LabRuntime {
   readonly #services: LabServiceController;
+  readonly #env: Readonly<Record<string, string | undefined>>;
+  readonly #fetch: typeof fetch | undefined;
 
   constructor(options: PackagedLabRuntimeOptions = {}) {
     this.#services = options.services ?? new DockerComposeServiceController();
+    this.#env = options.env ?? process.env;
+    this.#fetch = options.fetch;
   }
 
   async up(profile: string): Promise<void> {
@@ -162,7 +171,38 @@ export class PackagedLabRuntime implements LabRuntime {
     return this.run({ name: artifact.scenario, commands: artifact.commands }, artifact.seed);
   }
 
-  async matrix(profileName: string, seed: string): Promise<readonly MatrixCaseResult[]> {
+  async matrix(
+    profileName: string,
+    seed: string,
+    adapterManifest?: AdapterManifest,
+  ): Promise<readonly MatrixCaseResult[]> {
+    if (adapterManifest !== undefined) {
+      const registry = await ExternalAdapterRegistry.load(adapterManifest, this.#env, {
+        ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
+      });
+      const externalMatrix = new CompatibilityMatrix(async (selected, sender, receiver) => {
+        const senderClient = registry.client(sender.id);
+        const receiverClient = registry.client(receiver.id);
+        if (senderClient === undefined || receiverClient === undefined) {
+          return {
+            ok: false,
+            code: 'ADAPTER_REGISTRY_IDENTITY',
+            reason: 'Matrix participant is missing from the external adapter registry',
+          };
+        }
+        return runExternalDeliveryPair({
+          profile: selected,
+          seed,
+          sender: senderClient,
+          receiver: receiverClient,
+          amount: 8,
+          unit: 'sat',
+        });
+      });
+      const externalParticipants = registry.participants();
+      return externalMatrix.run(profileName, externalParticipants, externalParticipants);
+    }
+
     const matrix = new CompatibilityMatrix(async (selected, sender, receiver) => {
       if (selected === 'delivery-v1') {
         if (sender.id !== 'reference-ts' || receiver.id !== 'reference-ts') {
