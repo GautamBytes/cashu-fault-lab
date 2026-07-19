@@ -9,6 +9,7 @@ import {
 import { Command, CommanderError, Option } from 'commander';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
 import { PackagedLabRuntime } from './packaged-runtime.js';
 
 const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
@@ -16,13 +17,18 @@ const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
 export interface LabSelection {
   readonly sender: string;
   readonly receiver: string;
+  readonly adapterManifest?: AdapterManifest;
 }
 
 export interface LabRuntime {
   up(profile: string): Promise<void>;
   run(scenario: ScenarioSpec, seed: string, selection?: LabSelection): Promise<ScenarioRunResult>;
   replay(artifact: FailureArtifact): Promise<ScenarioRunResult>;
-  matrix(profile: string, seed: string): Promise<readonly MatrixCaseResult[]>;
+  matrix(
+    profile: string,
+    seed: string,
+    adapterManifest?: AdapterManifest,
+  ): Promise<readonly MatrixCaseResult[]>;
 }
 
 export interface CliIo {
@@ -127,6 +133,14 @@ async function readScenario(io: CliIo, path: string): Promise<string> {
   throw new Error(`Scenario file was not found: ${path}`);
 }
 
+async function readAdapterManifest(
+  io: CliIo,
+  path: string | undefined,
+): Promise<AdapterManifest | undefined> {
+  if (path === undefined) return undefined;
+  return parseAdapterManifest(json(await io.readText(path)));
+}
+
 export async function runCli(
   argv: readonly string[],
   dependencies: RunCliDependencies = {},
@@ -158,15 +172,24 @@ export async function runCli(
     .option('--artifact <path>', 'write replayable result artifact')
     .option('--sender <adapter>', 'sender adapter', 'reference-ts')
     .option('--receiver <adapter>', 'receiver adapter', 'reference-ts')
+    .option('--adapters <path>', 'external adapter manifest')
     .action(
       async (
         path: string,
-        options: { seed: string; artifact?: string; sender: string; receiver: string },
+        options: {
+          seed: string;
+          artifact?: string;
+          sender: string;
+          receiver: string;
+          adapters?: string;
+        },
       ) => {
         const spec = scenario(json(await readScenario(io, path)));
+        const adapterManifest = await readAdapterManifest(io, options.adapters);
         const result = await runtime.run(spec, options.seed, {
           sender: options.sender,
           receiver: options.receiver,
+          ...(adapterManifest === undefined ? {} : { adapterManifest }),
         });
         await io.writeText(options.artifact ?? DEFAULT_ARTIFACT_PATH, resultArtifact(result));
         io.stdout(`${result.status} ${result.artifact.scenario} seed=${result.artifact.seed}\n`);
@@ -197,27 +220,31 @@ export async function runCli(
     .option('--profile <profile>', 'matrix profile', 'delivery-v1')
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .option('--min-passes <count>', 'minimum passing pairs required')
-    .action(async (options: { profile: string; seed: string; minPasses?: string }) => {
-      const minimum = options.minPasses === undefined ? 0 : Number(options.minPasses);
-      if (!Number.isSafeInteger(minimum) || minimum < 0 || minimum > 10_000) {
-        throw new Error('Minimum matrix passes must be a nonnegative safe integer');
-      }
-      const results = await runtime.matrix(options.profile, options.seed);
-      const passed = results.filter((result) => result.status === 'passed').length;
-      const failed = results.filter((result) => result.status === 'failed').length;
-      const notApplicable = results.filter((result) => result.status === 'not_applicable').length;
-      const expected = results.filter((result) => result.status === 'expected_failure').length;
-      io.stdout(
-        `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure\n`,
-      );
-      if (failed > 0) exitCode = 1;
-      if (passed < minimum) {
-        io.stderr(
-          `matrix ${options.profile} requires at least ${minimum} passing pairs; observed ${passed}\n`,
+    .option('--adapters <path>', 'external adapter manifest')
+    .action(
+      async (options: { profile: string; seed: string; minPasses?: string; adapters?: string }) => {
+        const minimum = options.minPasses === undefined ? 0 : Number(options.minPasses);
+        if (!Number.isSafeInteger(minimum) || minimum < 0 || minimum > 10_000) {
+          throw new Error('Minimum matrix passes must be a nonnegative safe integer');
+        }
+        const adapterManifest = await readAdapterManifest(io, options.adapters);
+        const results = await runtime.matrix(options.profile, options.seed, adapterManifest);
+        const passed = results.filter((result) => result.status === 'passed').length;
+        const failed = results.filter((result) => result.status === 'failed').length;
+        const notApplicable = results.filter((result) => result.status === 'not_applicable').length;
+        const expected = results.filter((result) => result.status === 'expected_failure').length;
+        io.stdout(
+          `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure\n`,
         );
-        exitCode = 1;
-      }
-    });
+        if (failed > 0) exitCode = 1;
+        if (passed < minimum) {
+          io.stderr(
+            `matrix ${options.profile} requires at least ${minimum} passing pairs; observed ${passed}\n`,
+          );
+          exitCode = 1;
+        }
+      },
+    );
 
   program
     .command('report')

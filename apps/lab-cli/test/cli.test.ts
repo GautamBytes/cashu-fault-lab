@@ -8,6 +8,7 @@ import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { AdapterManifest } from '../src/adapter-manifest.js';
 import { runCli, type CliIo, type LabRuntime } from '../src/index.js';
 
 const artifact: FailureArtifact = {
@@ -24,16 +25,18 @@ class FakeRuntime implements LabRuntime {
   runs = 0;
   replays = 0;
   selection: { sender: string; receiver: string } | undefined;
+  adapterManifest: AdapterManifest | undefined;
 
   async up(): Promise<void> {}
 
   async run(
     _scenario: ScenarioSpec,
     _seed: string,
-    selection?: { sender: string; receiver: string },
+    selection?: { sender: string; receiver: string; adapterManifest?: AdapterManifest },
   ): Promise<ScenarioRunResult> {
     this.runs += 1;
     this.selection = selection;
+    this.adapterManifest = selection?.adapterManifest;
     return passed;
   }
 
@@ -42,7 +45,12 @@ class FakeRuntime implements LabRuntime {
     return passed;
   }
 
-  async matrix(): Promise<readonly MatrixCaseResult[]> {
+  async matrix(
+    _profile?: string,
+    _seed?: string,
+    adapterManifest?: AdapterManifest,
+  ): Promise<readonly MatrixCaseResult[]> {
+    this.adapterManifest = adapterManifest;
     return [
       {
         profile: 'delivery-v1',
@@ -205,6 +213,45 @@ describe('lab CLI', () => {
 
     expect(outcome.exitCode).toBe(1);
     expect(setup.stderr()).toMatch(/requires at least 2 passing pairs/i);
+  });
+
+  it('loads and passes a versioned adapter manifest to run and matrix commands', async () => {
+    const manifest = {
+      schemaVersion: 1,
+      adapters: [{ id: 'cdk', url: 'http://127.0.0.1:4102', tokenEnv: 'CFL_CDK_TOKEN' }],
+    } as const;
+    const scenario: ScenarioSpec = {
+      name: 'request-loss',
+      commands: [{ type: 'assert_quiescent' }],
+    };
+    const setup = fixture({
+      'scenario.json': JSON.stringify(scenario),
+      'adapters.json': JSON.stringify(manifest),
+    });
+    const runtime = new FakeRuntime();
+
+    await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        'run',
+        'scenario.json',
+        '--adapters',
+        'adapters.json',
+        '--sender',
+        'cdk',
+        '--receiver',
+        'cdk',
+      ],
+      { runtime, io: setup.io },
+    );
+    expect(runtime.adapterManifest).toEqual(manifest);
+
+    await runCli(['node', 'cashu-fault-lab', 'matrix', '--adapters', 'adapters.json'], {
+      runtime,
+      io: setup.io,
+    });
+    expect(runtime.adapterManifest).toEqual(manifest);
   });
 
   it('renders a report file without secret-bearing artifact fields', async () => {
