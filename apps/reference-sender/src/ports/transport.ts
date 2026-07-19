@@ -8,7 +8,8 @@ export interface TransportTarget {
 
 export type TransportResult =
   | { readonly kind: 'receipt'; readonly receipt: DeliveryReceiptWire }
-  | { readonly kind: 'no_response' };
+  | { readonly kind: 'no_response' }
+  | { readonly kind: 'permanent_failure'; readonly status: number; readonly code: string };
 
 export interface PaymentTransport {
   send(payload: Uint8Array, target: TransportTarget, signal: AbortSignal): Promise<TransportResult>;

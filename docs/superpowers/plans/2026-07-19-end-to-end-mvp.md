@@ -710,7 +710,7 @@ git commit -m "feat: add retry-safe reference sender"
 
 - Produces: NUT-18 POST receiver; all `/v1` adapter control routes; CORS/size/redirect security policy.
 
-- [ ] **Step 1: Write failing HTTP status/idempotency tests**
+- [x] **Step 1: Write failing HTTP status/idempotency tests**
 
 ```ts
 expect((await app.inject({ method: 'POST', url: '/pay', payload })).statusCode).toBe(200);
@@ -721,23 +721,23 @@ expect((await app.inject({ method: 'POST', url: '/pay', payload: oversized })).s
 );
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-receiver test -- http.test.ts`
 
 Expected: HTTP server missing.
 
-- [ ] **Step 3: Implement Fastify services**
+- [x] **Step 3: Implement Fastify services**
 
 Payment route requires `application/json`, byte-counts body before parse, disables framework logging of bodies, maps stable domain errors to `409/410/413/422`, returns `202` plus `Retry-After` while processing. CORS allows configured exact origins, `POST/OPTIONS`, `Content-Type`; no wildcard with credentials. Adapter routes bind loopback by default and require bearer test-control token outside test process.
 
-- [ ] **Step 4: Run service/contract tests**
+- [x] **Step 4: Run service/contract tests**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-receiver test && pnpm --filter @cashu-fault-lab/reference-sender test && pnpm --filter @cashu-fault-lab/adapter-contract test`
 
 Expected: all routes conform to schemas.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/reference-receiver apps/reference-sender

@@ -108,6 +108,7 @@ async function runAttempts(
         }
         if (receipt.detailCode === 'recovery_blocked') shouldRetry = false;
       }
+      if (result.kind === 'permanent_failure') shouldRetry = false;
       await deps.state.save(record);
     } catch {}
 

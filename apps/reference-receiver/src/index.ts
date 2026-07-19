@@ -35,3 +35,5 @@ export {
 } from './ports/mint-gateway.js';
 export type { InspectProofs, InspectProofsResult, ProofVerifier } from './ports/proof-verifier.js';
 export type { ExactSwapPlanView, ReceiverStore } from './ports/receiver-store.js';
+export { buildReceiverHttpServer, type ReceiverHttpServerOptions } from './http/server.js';
+export type { ReceiverAdapterControl, ReceiverAdapterRouteOptions } from './http/adapter-routes.js';

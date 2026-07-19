@@ -177,6 +177,23 @@ describe('sendPayment', () => {
     expect(setup.wallet.reservation(deliveryId)).toBe('recovery-required');
   });
 
+  it('stops retrying permanent HTTP failures without releasing proofs', async () => {
+    const setup = deps();
+    setup.transport.results.push({
+      kind: 'permanent_failure',
+      status: 409,
+      code: 'DELIVERY_CONFLICT',
+    });
+    const outcome = await sendPayment(request(), setup, {
+      seed: 'permanent-failure',
+      maxAttempts: 5,
+    });
+
+    expect(outcome).toMatchObject({ status: 'recovery_required' });
+    expect(setup.transport.payloads).toHaveLength(1);
+    expect(setup.wallet.reservation(deliveryId)).toBe('recovery-required');
+  });
+
   it('resumes persisted bytes without reserving another proof set', async () => {
     const setup = deps();
     setup.transport.results.push(new Error('lost'));

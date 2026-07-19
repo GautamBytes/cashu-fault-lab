@@ -15,3 +15,13 @@ export {
 } from './state.js';
 export type { PaymentTransport, TransportResult, TransportTarget } from './ports/transport.js';
 export type { ReservedProofSet, ReservePayment, SenderWallet } from './ports/wallet.js';
+export {
+  HttpPaymentTransport,
+  type FetchFunction,
+  type HttpPaymentTransportOptions,
+} from './http/payment-transport.js';
+export {
+  buildSenderAdapterServer,
+  type SenderAdapterControl,
+  type SenderAdapterServerOptions,
+} from './http/adapter-server.js';

@@ -19,7 +19,10 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@cashu-fault-lab/adapter-contract": "workspace:*",
     "@cashu-fault-lab/delivery-core": "workspace:*",
+    "@fastify/cors": "11.3.0",
+    "fastify": "5.10.0",
     "pg": "8.22.0"
   },
   "devDependencies": {
