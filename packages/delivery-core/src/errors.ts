@@ -7,7 +7,9 @@ export type DeliveryErrorCode =
   | 'RECEIPT_IDENTITY_MISMATCH'
   | 'STATUS_REGRESSION'
   | 'STATUS_VERSION_CONFLICT'
-  | 'INVALID_PROOF_POINT';
+  | 'INVALID_FINGERPRINT_INPUT'
+  | 'INVALID_PROOF_POINT'
+  | 'DUPLICATE_PROOF_POINT';
 
 export class DeliveryValidationError extends Error {
   readonly code: DeliveryErrorCode;

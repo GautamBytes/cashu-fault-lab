@@ -15,7 +15,13 @@ export {
 export {
   computePayloadHash,
   computeProofSetHash,
+  encodePayloadFingerprint,
+  encodeProofSetFingerprint,
+  parseCompressedPoint,
   type CashuProof,
+  type CompressedPoint,
+  type JsonPrimitive,
+  type JsonValue,
   type PayloadFingerprintInput,
   type ProofSetFingerprintInput,
 } from './fingerprint';
