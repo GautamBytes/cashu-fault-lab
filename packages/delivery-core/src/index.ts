@@ -3,8 +3,13 @@ export { generateProtocolId, parseProtocolId, type ProtocolId, type RandomBytes 
 export { normalizeMintUrl } from './mint-url';
 export {
   assertReceiptTransition,
+  mergeObservedReceipt,
+  parseDeliveryReceipt,
+  serializeDeliveryReceipt,
   type DeliveryReceipt,
+  type DeliveryReceiptWire,
   type DeliveryStatus,
+  type KnownReceiptDetailCode,
   type ReceiptDetailCode,
 } from './receipt';
 export {
