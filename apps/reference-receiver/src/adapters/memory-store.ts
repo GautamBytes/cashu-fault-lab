@@ -306,7 +306,7 @@ export class MemoryReceiverStore implements ReceiverStore {
     });
   }
 
-  settlementPlans(): readonly ExactSwapPlanView[] {
+  async settlementPlans(): Promise<readonly ExactSwapPlanView[]> {
     return [...this.#state.deliveries.values()].map((record) => ({
       deliveryId: record.deliveryId,
       mint: record.plan.mint,
@@ -315,7 +315,7 @@ export class MemoryReceiverStore implements ReceiverStore {
     }));
   }
 
-  credits(): readonly MerchantCredit[] {
+  async credits(): Promise<readonly MerchantCredit[]> {
     return structuredClone([...this.#state.credits.values()]);
   }
 

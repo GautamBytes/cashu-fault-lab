@@ -546,7 +546,7 @@ git commit -m "feat: add idempotent receiver domain"
 
 - Produces: PostgreSQL implementation of `ReceiverStore`; restart-safe recovery worker; encrypted swap-plan persistence.
 
-- [ ] **Step 1: Write failing migration/store tests**
+- [x] **Step 1: Write failing migration/store tests**
 
 ```ts
 await Promise.all(Array.from({ length: 100 }, () => store.prepare(input)));
@@ -558,13 +558,13 @@ expect(await countRows(db, 'merchant_credits')).toBe(1);
 expect(await countRows(db, 'receipt_outbox')).toBe(1);
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-receiver test -- postgres-store.test.ts`
 
 Expected: migration/store missing.
 
-- [ ] **Step 3: Implement schema and constraints**
+- [x] **Step 3: Implement schema and constraints**
 
 ```sql
 CREATE TABLE payment_requests (
@@ -610,17 +610,17 @@ CREATE TABLE receipt_outbox (
 );
 ```
 
-- [ ] **Step 4: Implement transactions and recovery scan**
+- [x] **Step 4: Implement transactions and recovery scan**
 
 Use `SERIALIZABLE` transaction plus unique-violation re-read for prepare races. Lock delivery row `FOR UPDATE` on mutation. AES-256-GCM envelope uses dedicated 32-byte key; authenticated data binds delivery/request/payload hashes. Worker scans `MINT_SENT`/`RECOVERY`, checks NUT-19 replay capability, NUT-09 restore, then NUT-07 evidence; never credits from `SPENT` alone. Outbox publisher claims rows with `FOR UPDATE SKIP LOCKED`, publishes at least once, then marks `published_at`; duplicate publication remains safe.
 
-- [ ] **Step 5: Run PostgreSQL and restart tests**
+- [x] **Step 5: Run PostgreSQL and restart tests**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-receiver test -- postgres-store.test.ts crash-recovery.test.ts`
 
 Expected: restart after mint commit recovers same outputs and creates one credit.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add infra/migrations infra/compose apps/reference-receiver

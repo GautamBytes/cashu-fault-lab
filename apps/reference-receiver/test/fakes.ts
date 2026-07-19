@@ -1,4 +1,5 @@
 import type { DeliveryPayload, DeliveryReceipt, ProtocolId } from '@cashu-fault-lab/delivery-core';
+import { createHash } from 'node:crypto';
 import type {
   ExactSwapPlan,
   InspectProofs,
@@ -12,11 +13,13 @@ import type {
 
 export class FakeProofVerifier implements ProofVerifier {
   async inspect(input: InspectProofs): Promise<InspectProofsResult> {
-    const proofKeys = input.payload.proofs.map((proof) => `claim:${proof.secret}`);
+    const proofKeys = input.payload.proofs.map((proof) =>
+      createHash('sha256').update(`claim:${proof.secret}`).digest('hex'),
+    );
     return {
       ys: input.payload.proofs.map((proof) => `Y:${proof.secret}`),
       proofClaimIds: proofKeys,
-      proofSetHash: `set:${proofKeys.slice().sort().join('|')}`,
+      proofSetHash: createHash('sha256').update(proofKeys.slice().sort().join('|')).digest('hex'),
       netAmount: input.payload.proofs.reduce((sum, proof) => sum + proof.amount, 0),
     };
   }

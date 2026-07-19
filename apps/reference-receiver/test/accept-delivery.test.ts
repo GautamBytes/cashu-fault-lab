@@ -42,9 +42,9 @@ describe('acceptDelivery', () => {
       detailCode: 'settled',
     });
     expect(deps.mint.swapCalls).toBe(1);
-    expect(deps.store.settlementPlans()).toHaveLength(1);
-    expect(deps.store.credits()).toHaveLength(1);
-    expect(deps.store.credits()[0]).toMatchObject({ requestId, deliveryId, amount: 8 });
+    expect(await deps.store.settlementPlans()).toHaveLength(1);
+    expect(await deps.store.credits()).toHaveLength(1);
+    expect((await deps.store.credits())[0]).toMatchObject({ requestId, deliveryId, amount: 8 });
   });
 
   it('returns the stored receipt for an exact retry', async () => {
@@ -55,7 +55,7 @@ describe('acceptDelivery', () => {
 
     expect(duplicate).toEqual(first);
     expect(deps.mint.swapCalls).toBe(1);
-    expect(deps.store.credits()).toHaveLength(1);
+    expect(await deps.store.credits()).toHaveLength(1);
   });
 
   it('rejects delivery ID mutation and proof reuse under another delivery', async () => {
@@ -118,7 +118,7 @@ describe('acceptDelivery', () => {
         ),
       ).rejects.toBeInstanceOf(ReceiverDomainError);
       expect(deps.mint.swapCalls).toBe(0);
-      expect(deps.store.settlementPlans()).toHaveLength(0);
+      expect(await deps.store.settlementPlans()).toHaveLength(0);
     }
   });
 
@@ -173,12 +173,12 @@ describe('acceptDelivery', () => {
     const command = { payload: payload(requestId, deliveryId, now), payloadHash: 'a'.repeat(64) };
     const blocked = await acceptDelivery(command, { ...deps, now: () => now });
     expect(blocked).toMatchObject({ status: 'processing', detailCode: 'recovery_blocked' });
-    expect(deps.store.credits()).toHaveLength(0);
+    expect(await deps.store.credits()).toHaveLength(0);
 
     deps.mint.mode = 'success';
     const recovered = await recoverDelivery(deliveryId, { ...deps, now: () => now });
     expectSettled(recovered);
-    expect(deps.store.credits()).toHaveLength(1);
+    expect(await deps.store.credits()).toHaveLength(1);
   });
 
   it('safely rejects pre-commit timeouts and releases claims', async () => {
@@ -229,6 +229,6 @@ describe('acceptDelivery', () => {
         now,
       }),
     ).rejects.toMatchObject({ code: 'INVALID_STATE' });
-    expect(deps.store.credits()).toHaveLength(0);
+    expect(await deps.store.credits()).toHaveLength(0);
   });
 });

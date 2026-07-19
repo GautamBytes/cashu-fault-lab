@@ -19,6 +19,11 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@cashu-fault-lab/delivery-core": "workspace:*"
+    "@cashu-fault-lab/delivery-core": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "12.0.4",
+    "@types/pg": "8.20.0"
   }
 }

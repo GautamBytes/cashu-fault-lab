@@ -29,8 +29,8 @@ describe('receiver concurrency', () => {
 
     expect(new Set(results.map((result) => result.deliveryId))).toEqual(new Set([deliveryId]));
     expect(mint.swapCalls).toBe(1);
-    expect(store.settlementPlans()).toHaveLength(1);
-    expect(store.credits()).toHaveLength(1);
+    expect(await store.settlementPlans()).toHaveLength(1);
+    expect(await store.credits()).toHaveLength(1);
     expect((await store.current(deliveryId))?.receipt.status).toBe('settled');
   });
 
@@ -63,6 +63,6 @@ describe('receiver concurrency', () => {
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((result) => result.status === 'rejected')).toHaveLength(19);
     expect(mint.swapCalls).toBe(1);
-    expect(store.credits()).toHaveLength(1);
+    expect(await store.credits()).toHaveLength(1);
   });
 });

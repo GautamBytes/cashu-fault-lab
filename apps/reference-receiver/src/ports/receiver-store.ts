@@ -17,8 +17,8 @@ export interface ReceiverStore {
   blockRecovery(deliveryId: string): Promise<DeliveryReceipt>;
   reject(deliveryId: string, detailCode: string, releaseClaims: boolean): Promise<DeliveryReceipt>;
   current(deliveryId: string): Promise<DeliveryRecord | undefined>;
-  settlementPlans(): readonly ExactSwapPlanView[];
-  credits(): readonly MerchantCredit[];
+  settlementPlans(): Promise<readonly ExactSwapPlanView[]>;
+  credits(): Promise<readonly MerchantCredit[]>;
 }
 
 export interface ExactSwapPlanView {

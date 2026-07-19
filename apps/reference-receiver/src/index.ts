@@ -16,6 +16,16 @@ export {
 } from './domain/types.js';
 export { MemoryReceiverStore } from './adapters/memory-store.js';
 export {
+  CryptoEnvelope,
+  replacementAuthenticatedData,
+  swapPlanAuthenticatedData,
+  type EncryptedEnvelope,
+  type EnvelopeRandomBytes,
+} from './adapters/crypto-envelope.js';
+export { PostgresReceiverStore } from './adapters/postgres-store.js';
+export { OutboxPublisher, type ReceiptPublisher } from './outbox-publisher.js';
+export { RecoveryWorker, type RecoveryWorkerDependencies } from './worker.js';
+export {
   isMintGatewayError,
   MintGatewayError,
   type MintGateway,
