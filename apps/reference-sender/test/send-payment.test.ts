@@ -85,10 +85,12 @@ class FakeWallet implements SenderWallet {
 
 class FakeTransport implements PaymentTransport {
   readonly payloads: Uint8Array[] = [];
+  readonly targets: string[] = [];
   readonly results: Array<TransportResult | Error> = [];
 
-  async send(payload: Uint8Array): Promise<TransportResult> {
+  async send(payload: Uint8Array, target: { readonly target: string }): Promise<TransportResult> {
     this.payloads.push(Uint8Array.from(payload));
+    this.targets.push(target.target);
     const result = this.results.shift();
     if (result instanceof Error) throw result;
     return result ?? { kind: 'no_response' };
@@ -132,6 +134,33 @@ describe('sendPayment', () => {
     expect(setup.wallet.createdProofSets).toBe(1);
     expect(setup.wallet.reservation(deliveryId)).toBe('released-settled');
     expect(setup.delays).toHaveLength(2);
+  });
+
+  it('falls back through ordered transports without changing logical payload bytes', async () => {
+    const setup = deps();
+    setup.transport.results.push(
+      { kind: 'no_response' },
+      { kind: 'receipt', receipt: receipt('settled', 1, 'settled') },
+    );
+    const outcome = await sendPayment(
+      request({
+        transports: [
+          { type: 'post', target: 'https://merchant.example/v1/pay' },
+          { type: 'nostr', target: 'nprofile1-receiver' },
+        ],
+      }),
+      setup,
+      { seed: 'transport-fallback', maxAttempts: 2 },
+    );
+
+    expect(outcome.status).toBe('settled');
+    expect(setup.transport.targets).toEqual([
+      'https://merchant.example/v1/pay',
+      'nprofile1-receiver',
+    ]);
+    expect(Buffer.from(setup.transport.payloads[0]!).equals(setup.transport.payloads[1]!)).toBe(
+      true,
+    );
   });
 
   it('merges processing receipts and releases only on terminal settlement', async () => {

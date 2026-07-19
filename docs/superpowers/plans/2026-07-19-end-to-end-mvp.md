@@ -925,7 +925,7 @@ git commit -m "feat: add replay CLI and redacted reports"
 
 - Produces: verified NIP-17 kind-14 inner messages; NIP-59 seal/gift wrap; overlapping inbox recovery; deterministic relay faults.
 
-- [ ] **Step 1: Write failing wrap/verification/inbox tests**
+- [x] **Step 1: Write failing wrap/verification/inbox tests**
 
 ```ts
 const wrapped = wrapDelivery(payloadBytes, senderKey, receiverPubkey, deterministicRandom);
@@ -934,27 +934,27 @@ expect(() => unwrapDelivery(sealRumorPubkeyMismatch, receiverKey)).toThrowError(
 expect(await inbox.backfill({ since: lastSeen - 172_800 })).toContainEqual(expectedDelivery);
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/nostr-delivery test && pnpm --filter @cashu-fault-lab/nostr-fault-relay test`
 
 Expected: packages missing.
 
-- [ ] **Step 3: Implement current NIP behavior**
+- [x] **Step 3: Implement current NIP behavior**
 
 Use nostr-tools 2.23.12 NIP-44 encryption, kind 13 signed seal, kind 1059 gift wrap, kind 14 unsigned rumor. Verify gift-wrap signature, decrypt seal, verify seal signature, require seal pubkey equals rumor pubkey, require receiver `p` tag. Fresh wrapper key/timestamp per retry; inner delivery bytes unchanged. Relay `OK` is transport acceptance only. Query overlap covers NIP-17 randomized timestamps up to two days.
 
-- [ ] **Step 4: Implement relay rules and cross-transport scenarios**
+- [x] **Step 4: Implement relay rules and cross-transport scenarios**
 
 Relay supports duplicate publish, drop `OK`, delayed history, reorder, disconnect, reconnect/backfill, and fresh wrappers. HTTP then Nostr delivery of same inner payload must converge on one receiver record/credit.
 
-- [ ] **Step 5: Run Nostr and cross-transport tests**
+- [x] **Step 5: Run Nostr and cross-transport tests**
 
 Run: `pnpm --filter @cashu-fault-lab/nostr-delivery test && pnpm --filter @cashu-fault-lab/nostr-fault-relay test && pnpm --filter @cashu-fault-lab/scenario-runner test`
 
 Expected: one settlement under multi-relay duplicate and HTTP/Nostr fallback.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/nostr-delivery apps/nostr-fault-relay scenarios apps/reference-sender apps/reference-receiver
@@ -1105,7 +1105,7 @@ git commit -m "ci: enforce end-to-end Cashu fault lab gate"
 - [ ] Lost receiver response retries same payload and converges to stored receipt.
 - [ ] Lost mint response plus restart recovers exact outputs through NUT-19 or NUT-09.
 - [ ] NUT-07 `SPENT` alone never creates credit.
-- [ ] HTTP and NIP-17 delivery of same logical payment have one effect.
+- [x] HTTP and NIP-17 delivery of same logical payment have one effect.
 - [ ] cashu-ts and CDK adapters pass supported T0-T3 evidence.
 - [ ] JSON/JUnit/HTML reports replay and contain no bearer material.
 - [ ] PR/nightly/weekly/release gates match design.

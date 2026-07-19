@@ -81,7 +81,9 @@ async function runAttempts(
 
   for (let localAttempt = 0; localAttempt < maxAttempts; localAttempt += 1) {
     let shouldRetry = true;
-    record = { ...record, attempts: record.attempts + 1 };
+    const target =
+      record.request.transports[Math.min(record.attempts, record.request.transports.length - 1)]!;
+    record = { ...record, target: structuredClone(target), attempts: record.attempts + 1 };
     await deps.state.save(record);
     try {
       const result = await deps.transport.send(

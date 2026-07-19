@@ -1,5 +1,5 @@
 {
-  "name": "@cashu-fault-lab/reference-receiver",
+  "name": "@cashu-fault-lab/nostr-delivery",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,16 +19,10 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@cashu/cashu-ts": "4.7.2",
-    "@cashu-fault-lab/adapter-contract": "workspace:*",
-    "@cashu-fault-lab/delivery-core": "workspace:*",
-    "@cashu-fault-lab/nostr-delivery": "workspace:*",
-    "@fastify/cors": "11.3.0",
-    "fastify": "5.10.0",
-    "pg": "8.22.0"
+    "nostr-tools": "2.23.12",
+    "ws": "8.18.3"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "12.0.4",
-    "@types/pg": "8.20.0"
+    "@types/ws": "8.18.1"
   }
 }

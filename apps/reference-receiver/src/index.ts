@@ -1,4 +1,5 @@
 export { acceptDelivery, type AcceptDeliveryDependencies } from './domain/accept-delivery.js';
+export { acceptPayloadBytes } from './domain/accept-payload.js';
 export { recoverDelivery } from './domain/recover-delivery.js';
 export {
   ReceiverDomainError,
@@ -53,3 +54,4 @@ export type { InspectProofs, InspectProofsResult, ProofVerifier } from './ports/
 export type { ExactSwapPlanView, ReceiverStore } from './ports/receiver-store.js';
 export { buildReceiverHttpServer, type ReceiverHttpServerOptions } from './http/server.js';
 export type { ReceiverAdapterControl, ReceiverAdapterRouteOptions } from './http/adapter-routes.js';
+export { processNostrDelivery, type ProcessNostrDeliveryOptions } from './nostr/controller.js';

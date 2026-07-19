@@ -1,11 +1,7 @@
-import {
-  computePayloadHash,
-  DeliveryValidationError,
-  parseDeliveryPayloadJson,
-  serializeDeliveryReceipt,
-} from '@cashu-fault-lab/delivery-core';
+import { DeliveryValidationError, serializeDeliveryReceipt } from '@cashu-fault-lab/delivery-core';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { acceptDelivery, type AcceptDeliveryDependencies } from '../domain/accept-delivery.js';
+import type { AcceptDeliveryDependencies } from '../domain/accept-delivery.js';
+import { acceptPayloadBytes } from '../domain/accept-payload.js';
 import { ReceiverDomainError, type ReceiverErrorCode } from '../domain/types.js';
 
 export const PAYMENT_BODY_LIMIT = 65_536;
@@ -21,18 +17,6 @@ const CONFLICT_CODES = new Set<ReceiverErrorCode>([
   'SINGLE_USE_CONFLICT',
 ]);
 const EXPIRED_CODES = new Set<ReceiverErrorCode>(['REQUEST_EXPIRED', 'DELIVERY_EXPIRED']);
-
-function payloadHash(payload: ReturnType<typeof parseDeliveryPayloadJson>): string {
-  return computePayloadHash({
-    requestId: payload.id,
-    memo: payload.memo,
-    mint: payload.mint,
-    unit: payload.unit,
-    proofs: payload.proofs,
-    createdAt: payload.delivery.createdAt,
-    expiresAt: payload.delivery.expiresAt,
-  });
-}
 
 function sendError(reply: FastifyReply, statusCode: number, body: ErrorBody): void {
   void reply.code(statusCode).type('application/json').send(body);
@@ -70,11 +54,7 @@ export function registerPaymentRoute(
           message: 'Payment requests require application/json',
         });
       }
-      const payload = parseDeliveryPayloadJson(request.body, dependencies.now());
-      const receipt = await acceptDelivery(
-        { payload, payloadHash: payloadHash(payload) },
-        dependencies,
-      );
+      const receipt = await acceptPayloadBytes(request.body, dependencies);
       if (receipt.status === 'processing') {
         reply.header('Retry-After', '1').code(202);
       } else {

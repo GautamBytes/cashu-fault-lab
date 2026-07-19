@@ -21,6 +21,11 @@ export {
   type HttpPaymentTransportOptions,
 } from './http/payment-transport.js';
 export {
+  NostrPaymentTransport,
+  type NostrPaymentTransportOptions,
+  type NostrPublish,
+} from './nostr/payment-transport.js';
+export {
   buildSenderAdapterServer,
   type SenderAdapterControl,
   type SenderAdapterServerOptions,

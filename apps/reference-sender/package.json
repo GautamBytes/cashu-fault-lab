@@ -22,7 +22,11 @@
     "@cashu/cashu-ts": "4.7.2",
     "@cashu-fault-lab/adapter-contract": "workspace:*",
     "@cashu-fault-lab/delivery-core": "workspace:*",
+    "@cashu-fault-lab/nostr-delivery": "workspace:*",
     "@fastify/cors": "11.3.0",
     "fastify": "5.10.0"
+  },
+  "devDependencies": {
+    "nostr-tools": "2.23.12"
   }
 }
