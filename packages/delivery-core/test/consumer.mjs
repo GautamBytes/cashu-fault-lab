@@ -7,9 +7,7 @@ import {
   parseDeliveryReceipt,
 } from '../dist/index.js';
 
-const requestId = generateProtocolId(() =>
-  Uint8Array.from({ length: 16 }, (_, index) => index),
-);
+const requestId = generateProtocolId(() => Uint8Array.from({ length: 16 }, (_, index) => index));
 const deliveryId = generateProtocolId(() =>
   Uint8Array.from({ length: 16 }, (_, index) => 255 - index),
 );

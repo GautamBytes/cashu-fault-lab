@@ -45,6 +45,7 @@ packages/delivery-core/test/*.test.ts Focused behavior tests
 ### Task 1: Monorepo and Protocol IDs
 
 **Files:**
+
 - Create: `package.json`
 - Create: `pnpm-workspace.yaml`
 - Create: `turbo.json`
@@ -59,6 +60,7 @@ packages/delivery-core/test/*.test.ts Focused behavior tests
 - Create: `packages/delivery-core/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: Node.js `crypto.randomBytes` and `Buffer` base64url support.
 - Produces: `DeliveryValidationError`, `DeliveryErrorCode`, `ProtocolId`, `generateProtocolId()`, and `parseProtocolId()`.
 
@@ -213,16 +215,14 @@ describe('protocol IDs', () => {
     expect(parseProtocolId(id)).toBe(id);
   });
 
-  it.each([
-    '',
-    'AAECAwQFBgcICQoLDA0ODw==',
-    'AAECAwQFBgcICQoLDA0OD',
-    'not+base64url/value____',
-  ])('rejects a non-canonical or wrong-length ID: %s', (value) => {
-    expect(() => parseProtocolId(value)).toThrowError(
-      new DeliveryValidationError('INVALID_PROTOCOL_ID', 'Protocol ID must encode 16 bytes'),
-    );
-  });
+  it.each(['', 'AAECAwQFBgcICQoLDA0ODw==', 'AAECAwQFBgcICQoLDA0OD', 'not+base64url/value____'])(
+    'rejects a non-canonical or wrong-length ID: %s',
+    (value) => {
+      expect(() => parseProtocolId(value)).toThrowError(
+        new DeliveryValidationError('INVALID_PROTOCOL_ID', 'Protocol ID must encode 16 bytes'),
+      );
+    },
+  );
 
   it('rejects a random source that returns the wrong byte count', () => {
     expect(() => generateProtocolId(() => new Uint8Array(15))).toThrowError(
@@ -278,26 +278,18 @@ const PROTOCOL_ID_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 
 export function parseProtocolId(value: string): ProtocolId {
   if (!PROTOCOL_ID_PATTERN.test(value)) {
-    throw new DeliveryValidationError(
-      'INVALID_PROTOCOL_ID',
-      'Protocol ID must encode 16 bytes',
-    );
+    throw new DeliveryValidationError('INVALID_PROTOCOL_ID', 'Protocol ID must encode 16 bytes');
   }
 
   const decoded = Buffer.from(value, 'base64url');
   if (decoded.length !== 16 || decoded.toString('base64url') !== value) {
-    throw new DeliveryValidationError(
-      'INVALID_PROTOCOL_ID',
-      'Protocol ID must encode 16 bytes',
-    );
+    throw new DeliveryValidationError('INVALID_PROTOCOL_ID', 'Protocol ID must encode 16 bytes');
   }
 
   return value as ProtocolId;
 }
 
-export function generateProtocolId(
-  source: RandomBytes = (size) => randomBytes(size),
-): ProtocolId {
+export function generateProtocolId(source: RandomBytes = (size) => randomBytes(size)): ProtocolId {
   const bytes = source(16);
   if (bytes.length !== 16) {
     throw new DeliveryValidationError(
@@ -314,12 +306,7 @@ export function generateProtocolId(
 
 ```ts
 export { DeliveryValidationError, type DeliveryErrorCode } from './errors';
-export {
-  generateProtocolId,
-  parseProtocolId,
-  type ProtocolId,
-  type RandomBytes,
-} from './ids';
+export { generateProtocolId, parseProtocolId, type ProtocolId, type RandomBytes } from './ids';
 ```
 
 - [x] **Step 6: Run tests and type checking**
@@ -342,11 +329,13 @@ git commit -m "feat: establish delivery core protocol IDs"
 ### Task 2: Mint URL Policy
 
 **Files:**
+
 - Create: `packages/delivery-core/test/mint-url.test.ts`
 - Create: `packages/delivery-core/src/mint-url.ts`
 - Modify: `packages/delivery-core/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `DeliveryValidationError` from Task 1.
 - Produces: `normalizeMintUrl(value: string): string`.
 
@@ -416,10 +405,7 @@ export function normalizeMintUrl(value: string): string {
   }
 
   if (url.protocol === 'http:' && !LOOPBACK_HOSTS.has(url.hostname.toLowerCase())) {
-    throw new DeliveryValidationError(
-      'INSECURE_MINT_URL',
-      'Non-loopback mint URL must use HTTPS',
-    );
+    throw new DeliveryValidationError('INSECURE_MINT_URL', 'Non-loopback mint URL must use HTTPS');
   }
 
   if (url.username || url.password || url.search || url.hash) {
@@ -431,7 +417,11 @@ export function normalizeMintUrl(value: string): string {
 
   url.hostname = url.hostname.toLowerCase();
   const pathname =
-    url.pathname === '/' ? '' : url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
+    url.pathname === '/'
+      ? ''
+      : url.pathname.endsWith('/')
+        ? url.pathname.slice(0, -1)
+        : url.pathname;
 
   return `${url.protocol}//${url.host}${pathname}`;
 }
@@ -463,11 +453,13 @@ git commit -m "feat: define safe mint URL normalization"
 ### Task 3: Monotonic Delivery Receipts
 
 **Files:**
+
 - Create: `packages/delivery-core/test/receipt.test.ts`
 - Create: `packages/delivery-core/src/receipt.ts`
 - Modify: `packages/delivery-core/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `ProtocolId`, `parseProtocolId()`, and `DeliveryValidationError`.
 - Produces: `DeliveryStatus`, `ReceiptDetailCode`, `DeliveryReceipt`, and `assertReceiptTransition()`.
 
@@ -477,11 +469,7 @@ git commit -m "feat: define safe mint URL normalization"
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import {
-  assertReceiptTransition,
-  parseProtocolId,
-  type DeliveryReceipt,
-} from '../src/index';
+import { assertReceiptTransition, parseProtocolId, type DeliveryReceipt } from '../src/index';
 
 const requestId = parseProtocolId('AAECAwQFBgcICQoLDA0ODw');
 const deliveryId = parseProtocolId('EBESExQVFhcYGRobHB0eHw');
@@ -564,13 +552,7 @@ import { normalizeMintUrl } from './mint-url';
 
 export type DeliveryStatus = 'processing' | 'settled' | 'rejected';
 export type ReceiptDetailCode =
-  | 'accepted'
-  | 'redeeming'
-  | 'recovery_blocked'
-  | 'settled'
-  | 'invalid'
-  | 'expired'
-  | 'conflict';
+  'accepted' | 'redeeming' | 'recovery_blocked' | 'settled' | 'invalid' | 'expired' | 'conflict';
 
 export interface DeliveryReceipt {
   readonly profile: 'cashu-delivery-v1';
@@ -701,11 +683,13 @@ git commit -m "feat: enforce monotonic delivery receipts"
 ### Task 4: Deterministic Delivery Fingerprints
 
 **Files:**
+
 - Create: `packages/delivery-core/test/fingerprint.test.ts`
 - Create: `packages/delivery-core/src/fingerprint.ts`
 - Modify: `packages/delivery-core/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `ProtocolId`, `normalizeMintUrl()`, Node.js SHA-256, and `cborg` RFC 8949 encoding.
 - Produces: `CashuProof`, `PayloadFingerprintInput`, `ProofSetFingerprintInput`, `computePayloadHash()`, and `computeProofSetHash()`.
 
@@ -770,9 +754,7 @@ describe('delivery fingerprints', () => {
     const y1 = Uint8Array.from([2, ...new Array<number>(32).fill(1)]);
     const y2 = Uint8Array.from([3, ...new Array<number>(32).fill(2)]);
 
-    expect(
-      computeProofSetHash({ mint: 'https://mint.example', unit: 'sat', ys: [y1, y2] }),
-    ).toBe(
+    expect(computeProofSetHash({ mint: 'https://mint.example', unit: 'sat', ys: [y1, y2] })).toBe(
       computeProofSetHash({ mint: 'https://mint.example/', unit: 'sat', ys: [y2, y1] }),
     );
   });
@@ -871,12 +853,7 @@ export function computeProofSetHash(input: ProofSetFingerprintInput): string {
   });
   ys.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
 
-  return sha256Hex([
-    'cashu-delivery-v1/proof-set',
-    normalizeMintUrl(input.mint),
-    input.unit,
-    ys,
-  ]);
+  return sha256Hex(['cashu-delivery-v1/proof-set', normalizeMintUrl(input.mint), input.unit, ys]);
 }
 ```
 

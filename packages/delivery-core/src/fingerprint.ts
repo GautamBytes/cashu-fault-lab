@@ -6,9 +6,7 @@ import { normalizeMintUrl } from './mint-url.js';
 
 export type JsonPrimitive = null | boolean | string | number;
 export type JsonValue =
-  | JsonPrimitive
-  | readonly JsonValue[]
-  | { readonly [key: string]: JsonValue };
+  JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 export interface CashuProof {
   readonly amount: number;
@@ -39,11 +37,7 @@ export interface ProofSetFingerprintInput {
 export type CompressedPoint = Uint8Array & { readonly CompressedPoint: unique symbol };
 
 export function parseCompressedPoint(value: Uint8Array): CompressedPoint {
-  if (
-    !(value instanceof Uint8Array) ||
-    value.length !== 33 ||
-    (value[0] !== 2 && value[0] !== 3)
-  ) {
+  if (!(value instanceof Uint8Array) || value.length !== 33 || (value[0] !== 2 && value[0] !== 3)) {
     throw new DeliveryValidationError(
       'INVALID_PROOF_POINT',
       'Proof Y must be a compressed 33-byte point with prefix 02 or 03',
@@ -187,17 +181,22 @@ function sha256Hex(encoded: Uint8Array): string {
 
 export function encodePayloadFingerprint(input: PayloadFingerprintInput): Uint8Array {
   validatePayloadInput(input);
-  return Uint8Array.from(encode([
-    'cashu-delivery-v1/payload',
-    input.requestId,
-    input.memo,
-    normalizeMintUrl(input.mint),
-    input.unit,
-    input.proofs,
-    1,
-    input.createdAt,
-    input.expiresAt,
-  ], rfc8949EncodeOptions));
+  return Uint8Array.from(
+    encode(
+      [
+        'cashu-delivery-v1/payload',
+        input.requestId,
+        input.memo,
+        normalizeMintUrl(input.mint),
+        input.unit,
+        input.proofs,
+        1,
+        input.createdAt,
+        input.expiresAt,
+      ],
+      rfc8949EncodeOptions,
+    ),
+  );
 }
 
 export function computePayloadHash(input: PayloadFingerprintInput): string {

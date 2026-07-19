@@ -4,7 +4,4 @@ coverage/
 dist/
 artifacts/
 graphify-out/
-.env
-.env.*
-!.env.example
-*.log
+pnpm-lock.yaml

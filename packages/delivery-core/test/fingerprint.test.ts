@@ -47,9 +47,7 @@ const requestId = parseProtocolId('AAECAwQFBgcICQoLDA0ODw');
 const proofA: CashuProof = { amount: 1, id: '00aa', secret: 'secret-a', C: '02aa' };
 const proofB: CashuProof = { C: '02bb', secret: 'secret-b', id: '00bb', amount: 2 };
 
-function payloadInput(
-  overrides: Partial<PayloadFingerprintInput> = {},
-): PayloadFingerprintInput {
+function payloadInput(overrides: Partial<PayloadFingerprintInput> = {}): PayloadFingerprintInput {
   return {
     requestId,
     memo: null,
@@ -144,24 +142,17 @@ describe('delivery fingerprints', () => {
         proofs: [{ ...proofA, witness: undefined } as unknown as CashuProof],
       }),
     ],
-    [
-      'bigint',
-      payloadInput({ proofs: [{ ...proofA, amount: 1n } as unknown as CashuProof] }),
-    ],
+    ['bigint', payloadInput({ proofs: [{ ...proofA, amount: 1n } as unknown as CashuProof] })],
     [
       'map',
       payloadInput({
-        proofs: [
-          { ...proofA, extra: new Map([['key', 'value']]) } as unknown as CashuProof,
-        ],
+        proofs: [{ ...proofA, extra: new Map([['key', 'value']]) } as unknown as CashuProof],
       }),
     ],
     [
       'typed array',
       payloadInput({
-        proofs: [
-          { ...proofA, extra: Uint8Array.from([1, 2, 3]) } as unknown as CashuProof,
-        ],
+        proofs: [{ ...proofA, extra: Uint8Array.from([1, 2, 3]) } as unknown as CashuProof],
       }),
     ],
     ['fractional amount', payloadInput({ proofs: [{ ...proofA, amount: 1.5 }] })],
