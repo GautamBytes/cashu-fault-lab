@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schema/adapter-capabilities-v1.json",
+  "title": "Cashu Fault Lab Adapter Capabilities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["implementation", "version", "nuts", "transports", "evidenceTier"],
+  "properties": {
+    "implementation": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "nuts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 0 }
+    },
+    "transports": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["http", "nostr"] }
+    },
+    "evidenceTier": { "enum": ["T0", "T1", "T2", "T3"] }
+  }
+}

@@ -118,4 +118,24 @@ describe('delivery payload codec', () => {
       /holes/i,
     );
   });
+
+  it('rejects unknown top-level and delivery fields', () => {
+    expect(() => parseDeliveryPayload(wirePayload({ unexpected: true }), now)).toThrowError(
+      /unknown/i,
+    );
+    expect(() =>
+      parseDeliveryPayload(
+        wirePayload({
+          delivery: {
+            v: 1,
+            id: deliveryId,
+            created_at: now,
+            expires_at: now + 900,
+            unexpected: true,
+          },
+        }),
+        now,
+      ),
+    ).toThrowError(/unknown/i);
+  });
 });

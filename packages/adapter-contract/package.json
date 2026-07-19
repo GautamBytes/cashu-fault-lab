@@ -1,0 +1,26 @@
+{
+  "name": "@cashu-fault-lab/adapter-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "test": "vitest run",
+    "test:consumer": "node test/consumer.mjs",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@cashu-fault-lab/delivery-core": "workspace:*",
+    "ajv": "8.20.0"
+  }
+}

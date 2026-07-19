@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schema/delivery-request-v1.json",
+  "title": "Cashu Delivery V1 Payment Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["i", "a", "u", "s", "t"],
+  "properties": {
+    "i": { "type": "string", "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$" },
+    "a": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "u": { "type": "string", "minLength": 1 },
+    "s": { "type": "boolean" },
+    "m": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "format": "cashu-mint-url" }
+    },
+    "d": { "type": "string" },
+    "t": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/transport" },
+      "contains": {
+        "type": "object",
+        "required": ["g"],
+        "properties": {
+          "g": {
+            "allOf": [
+              {
+                "type": "array",
+                "contains": {
+                  "type": "array",
+                  "prefixItems": [{ "const": "delivery" }, { "const": "1" }],
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              },
+              {
+                "type": "array",
+                "contains": {
+                  "type": "array",
+                  "prefixItems": [
+                    { "const": "expires_at" },
+                    { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "nut10": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["k", "d"],
+      "properties": {
+        "k": { "type": "string", "minLength": 1 },
+        "d": { "type": "string", "minLength": 1 },
+        "t": { "type": "array", "items": { "$ref": "#/$defs/tag" } }
+      }
+    }
+  },
+  "$defs": {
+    "tag": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string" }
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["t", "a"],
+      "properties": {
+        "t": { "enum": ["post", "nostr"] },
+        "a": { "type": "string", "minLength": 1 },
+        "g": { "type": "array", "items": { "$ref": "#/$defs/tag" } }
+      }
+    }
+  }
+}

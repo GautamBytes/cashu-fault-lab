@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "profile": "cashu-delivery-v1",
+  "vectors": [
+    {
+      "name": "http-single-use",
+      "now": 1784399400,
+      "request": {
+        "i": "AAECAwQFBgcICQoLDA0ODw",
+        "a": 8,
+        "u": "sat",
+        "s": true,
+        "m": ["https://mint.example"],
+        "d": "order-42",
+        "t": [
+          {
+            "t": "post",
+            "a": "https://merchant.example/v1/pay",
+            "g": [
+              ["delivery", "1"],
+              ["expires_at", "1784400300"]
+            ]
+          }
+        ]
+      },
+      "payload": {
+        "id": "AAECAwQFBgcICQoLDA0ODw",
+        "memo": "order-42",
+        "mint": "https://mint.example",
+        "unit": "sat",
+        "proofs": [
+          {
+            "amount": 8,
+            "id": "00aa",
+            "secret": "secret-a",
+            "C": "02aa"
+          }
+        ],
+        "delivery": {
+          "v": 1,
+          "id": "EBESExQVFhcYGRobHB0eHw",
+          "created_at": 1784399400,
+          "expires_at": 1784400300
+        }
+      },
+      "receipt": {
+        "profile": "cashu-delivery-v1",
+        "request_id": "AAECAwQFBgcICQoLDA0ODw",
+        "delivery_id": "EBESExQVFhcYGRobHB0eHw",
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "processing",
+        "status_version": 1,
+        "mint": "https://mint.example",
+        "unit": "sat",
+        "amount": 8,
+        "detail_code": "accepted"
+      }
+    },
+    {
+      "name": "nostr-multi-use-extension-proof",
+      "now": 1784399400,
+      "request": {
+        "i": "AAECAwQFBgcICQoLDA0ODw",
+        "a": 2,
+        "u": "sat",
+        "s": false,
+        "t": [
+          {
+            "t": "nostr",
+            "a": "nprofile1qqspseudotarget",
+            "g": [
+              ["n", "17"],
+              ["delivery", "1"],
+              ["expires_at", "1784400300"]
+            ]
+          }
+        ]
+      },
+      "payload": {
+        "id": "AAECAwQFBgcICQoLDA0ODw",
+        "mint": "https://mint.example/path",
+        "unit": "sat",
+        "proofs": [
+          {
+            "amount": 2,
+            "id": "00bb",
+            "secret": "secret-b",
+            "C": "03bb",
+            "witness": "signature",
+            "dleq": { "e": "01", "s": "02", "r": "03" }
+          }
+        ],
+        "delivery": {
+          "v": 1,
+          "id": "EBESExQVFhcYGRobHB0eHw",
+          "created_at": 1784399400,
+          "expires_at": 1784400300
+        }
+      },
+      "receipt": {
+        "profile": "cashu-delivery-v1",
+        "request_id": "AAECAwQFBgcICQoLDA0ODw",
+        "delivery_id": "EBESExQVFhcYGRobHB0eHw",
+        "payload_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "status": "settled",
+        "status_version": 2,
+        "mint": "https://mint.example/path",
+        "unit": "sat",
+        "amount": 2,
+        "detail_code": "settled"
+      }
+    }
+  ]
+}

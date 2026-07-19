@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schema/delivery-receipt-v1.json",
+  "title": "Cashu Delivery V1 Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "request_id",
+    "delivery_id",
+    "payload_hash",
+    "status",
+    "status_version",
+    "mint",
+    "unit",
+    "amount",
+    "detail_code"
+  ],
+  "properties": {
+    "profile": { "const": "cashu-delivery-v1" },
+    "request_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$" },
+    "delivery_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$" },
+    "payload_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "enum": ["processing", "settled", "rejected"] },
+    "status_version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "mint": { "type": "string", "minLength": 1, "format": "cashu-canonical-mint-url" },
+    "unit": { "type": "string", "minLength": 1 },
+    "amount": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "detail_code": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "detail_code": { "enum": ["accepted", "redeeming", "recovery_blocked"] } }
+      },
+      "then": { "properties": { "status": { "const": "processing" } } }
+    },
+    {
+      "if": { "properties": { "detail_code": { "const": "settled" } } },
+      "then": { "properties": { "status": { "const": "settled" } } }
+    },
+    {
+      "if": { "properties": { "detail_code": { "enum": ["invalid", "expired", "conflict"] } } },
+      "then": { "properties": { "status": { "const": "rejected" } } }
+    }
+  ]
+}

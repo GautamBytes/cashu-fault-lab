@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "profile": "cashu-delivery-v1",
+  "vectors": [
+    {
+      "name": "request-missing-id",
+      "kind": "request",
+      "value": {
+        "a": 8,
+        "u": "sat",
+        "s": true,
+        "t": [
+          {
+            "t": "post",
+            "a": "https://merchant.example/v1/pay",
+            "g": [
+              ["delivery", "1"],
+              ["expires_at", "1784400300"]
+            ]
+          }
+        ]
+      },
+      "error_code": "SCHEMA_REQUIRED"
+    },
+    {
+      "name": "request-without-delivery-tag",
+      "kind": "request",
+      "value": {
+        "i": "AAECAwQFBgcICQoLDA0ODw",
+        "a": 8,
+        "u": "sat",
+        "s": true,
+        "t": [{ "t": "post", "a": "https://merchant.example/v1/pay", "g": [] }]
+      },
+      "error_code": "SCHEMA_CONTAINS"
+    },
+    {
+      "name": "payload-invalid-id",
+      "kind": "payload",
+      "value": {
+        "id": "bad",
+        "mint": "https://mint.example",
+        "unit": "sat",
+        "proofs": [{ "amount": 8, "id": "00aa", "secret": "s", "C": "02aa" }],
+        "delivery": {
+          "v": 1,
+          "id": "EBESExQVFhcYGRobHB0eHw",
+          "created_at": 1784399400,
+          "expires_at": 1784400300
+        }
+      },
+      "error_code": "SCHEMA_PATTERN"
+    },
+    {
+      "name": "payload-version-two",
+      "kind": "payload",
+      "value": {
+        "id": "AAECAwQFBgcICQoLDA0ODw",
+        "mint": "https://mint.example",
+        "unit": "sat",
+        "proofs": [{ "amount": 8, "id": "00aa", "secret": "s", "C": "02aa" }],
+        "delivery": {
+          "v": 2,
+          "id": "EBESExQVFhcYGRobHB0eHw",
+          "created_at": 1784399400,
+          "expires_at": 1784400300
+        }
+      },
+      "error_code": "SCHEMA_CONST"
+    },
+    {
+      "name": "payload-insecure-mint-scheme",
+      "kind": "payload",
+      "value": {
+        "id": "AAECAwQFBgcICQoLDA0ODw",
+        "mint": "ftp://mint.example",
+        "unit": "sat",
+        "proofs": [{ "amount": 8, "id": "00aa", "secret": "s", "C": "02aa" }],
+        "delivery": {
+          "v": 1,
+          "id": "EBESExQVFhcYGRobHB0eHw",
+          "created_at": 1784399400,
+          "expires_at": 1784400300
+        }
+      },
+      "error_code": "SCHEMA_FORMAT"
+    },
+    {
+      "name": "payload-noncanonical-id",
+      "kind": "payload",
+      "value": {
+        "id": "AAAAAAAAAAAAAAAAAAAAAB",
+        "mint": "https://mint.example",
+        "unit": "sat",
+        "proofs": [{ "amount": 8, "id": "00aa", "secret": "s", "C": "02aa" }],
+        "delivery": {
+          "v": 1,
+          "id": "EBESExQVFhcYGRobHB0eHw",
+          "created_at": 1784399400,
+          "expires_at": 1784400300
+        }
+      },
+      "error_code": "SCHEMA_PATTERN"
+    },
+    {
+      "name": "payload-extra-top-level-field",
+      "kind": "payload",
+      "value": {
+        "id": "AAECAwQFBgcICQoLDA0ODw",
+        "mint": "https://mint.example",
+        "unit": "sat",
+        "proofs": [{ "amount": 8, "id": "00aa", "secret": "s", "C": "02aa" }],
+        "delivery": {
+          "v": 1,
+          "id": "EBESExQVFhcYGRobHB0eHw",
+          "created_at": 1784399400,
+          "expires_at": 1784400300
+        },
+        "unexpected": true
+      },
+      "error_code": "SCHEMA_ADDITIONAL_PROPERTY"
+    },
+    {
+      "name": "receipt-status-detail-mismatch",
+      "kind": "receipt",
+      "value": {
+        "profile": "cashu-delivery-v1",
+        "request_id": "AAECAwQFBgcICQoLDA0ODw",
+        "delivery_id": "EBESExQVFhcYGRobHB0eHw",
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "settled",
+        "status_version": 2,
+        "mint": "https://mint.example",
+        "unit": "sat",
+        "amount": 8,
+        "detail_code": "accepted"
+      },
+      "error_code": "SCHEMA_IF"
+    },
+    {
+      "name": "receipt-version-zero",
+      "kind": "receipt",
+      "value": {
+        "profile": "cashu-delivery-v1",
+        "request_id": "AAECAwQFBgcICQoLDA0ODw",
+        "delivery_id": "EBESExQVFhcYGRobHB0eHw",
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "processing",
+        "status_version": 0,
+        "mint": "https://mint.example",
+        "unit": "sat",
+        "amount": 8,
+        "detail_code": "accepted"
+      },
+      "error_code": "SCHEMA_MINIMUM"
+    },
+    {
+      "name": "receipt-noncanonical-mint",
+      "kind": "receipt",
+      "value": {
+        "profile": "cashu-delivery-v1",
+        "request_id": "AAECAwQFBgcICQoLDA0ODw",
+        "delivery_id": "EBESExQVFhcYGRobHB0eHw",
+        "payload_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "processing",
+        "status_version": 1,
+        "mint": "HTTPS://Mint.Example:443/",
+        "unit": "sat",
+        "amount": 8,
+        "detail_code": "accepted"
+      },
+      "error_code": "SCHEMA_FORMAT"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schema/scenario-result-v1.json",
+  "title": "Cashu Fault Lab Scenario Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "scenarioId", "seed", "status", "invariants", "timeline"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "scenarioId": { "type": "string", "minLength": 1 },
+    "seed": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["passed", "failed", "skipped"] },
+    "invariants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "passed"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "passed": { "type": "boolean" },
+          "evidence": {}
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence", "at", "actor", "event"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 0 },
+          "at": { "type": "integer", "minimum": 0 },
+          "actor": { "type": "string", "minLength": 1 },
+          "event": { "type": "string", "minLength": 1 },
+          "data": {}
+        }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

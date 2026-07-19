@@ -242,7 +242,7 @@ git commit -m "feat: complete delivery profile semantics"
 
 - Produces: versioned JSON Schema 2020-12 artifacts; `validateAdapterRequest`; `validateAdapterResponse`; adapter endpoint types.
 
-- [ ] **Step 1: Add package and failing schema/vector tests**
+- [x] **Step 1: Add package and failing schema/vector tests**
 
 ```ts
 it.each(validVectors)('accepts $name', ({ payload }) => {
@@ -253,13 +253,13 @@ it.each(invalidVectors)('rejects $name with stable code', ({ payload, error_code
 });
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/adapter-contract test`
 
 Expected: package/schema APIs missing.
 
-- [ ] **Step 3: Implement schemas and contract types**
+- [x] **Step 3: Implement schemas and contract types**
 
 ```ts
 export interface AdapterCapabilities {
@@ -283,13 +283,13 @@ export interface AdapterClient {
 
 Normative adapter HTTP routes: `GET /v1/capabilities`, `POST /v1/reset`, `POST /v1/requests`, `POST /v1/send`, `GET /v1/deliveries/:id`, `GET /v1/ledger`, `GET /v1/proofs`.
 
-- [ ] **Step 4: Cross-check schemas against TypeScript codecs**
+- [x] **Step 4: Cross-check schemas against TypeScript codecs**
 
 Run: `pnpm --filter @cashu-fault-lab/adapter-contract test && pnpm --filter @cashu-fault-lab/delivery-core test`
 
 Expected: every valid vector accepted by schema and codec; every invalid vector rejected with matching stable code.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add spec packages/adapter-contract

@@ -45,6 +45,18 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return prototype === Object.prototype || prototype === null;
 }
 
+function assertOnlyKeys(
+  value: Readonly<Record<string, unknown>>,
+  allowed: ReadonlySet<string>,
+  name: string,
+): void {
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !allowed.has(key)) {
+      invalidPayload(`${name} contains an unknown field`);
+    }
+  }
+}
+
 function assertSafeTime(value: unknown, name: string): asserts value is number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
     invalidPayload(`${name} must be a nonnegative safe integer`);
@@ -54,6 +66,12 @@ function assertSafeTime(value: unknown, name: string): asserts value is number {
 export function parseDeliveryPayload(value: unknown, now: number): DeliveryPayload {
   assertSafeTime(now, 'Current time');
   if (!isRecord(value) || !isRecord(value.delivery)) invalidPayload('Delivery payload is invalid');
+  assertOnlyKeys(value, new Set(['id', 'memo', 'mint', 'unit', 'proofs', 'delivery']), 'Payload');
+  assertOnlyKeys(
+    value.delivery,
+    new Set(['v', 'id', 'created_at', 'expires_at']),
+    'Delivery metadata',
+  );
   if (typeof value.id !== 'string') invalidPayload('Request ID is invalid');
   if (value.memo !== undefined && value.memo !== null && typeof value.memo !== 'string') {
     invalidPayload('Memo must be a string or null');
