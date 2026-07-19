@@ -4,6 +4,9 @@ import type {
   ScenarioRunResult,
   ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
+import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runCli, type CliIo, type LabRuntime } from '../src/index.js';
 
@@ -137,6 +140,30 @@ describe('lab CLI', () => {
     expect(setup.stdout()).toContain('"scenarioId": "request-loss"');
   });
 
+  it('forces private permissions when overwriting an existing artifact', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-fault-lab-cli-'));
+    const scenarioPath = join(directory, 'scenario.json');
+    const artifactPath = join(directory, 'artifact.json');
+    await writeFile(
+      scenarioPath,
+      JSON.stringify({ name: 'request-loss', commands: [{ type: 'assert_quiescent' }] }),
+    );
+    await writeFile(artifactPath, 'previous artifact');
+    await chmod(artifactPath, 0o644);
+
+    try {
+      const outcome = await runCli(
+        ['node', 'cashu-fault-lab', 'run', scenarioPath, '--artifact', artifactPath],
+        { runtime: new FakeRuntime() },
+      );
+
+      expect(outcome.exitCode).toBe(0);
+      expect((await stat(artifactPath)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('resolves scenario shorthand under the packaged scenarios directory', async () => {
     const scenario: ScenarioSpec = {
       name: 'security-malformed-input',
@@ -167,6 +194,17 @@ describe('lab CLI', () => {
 
     expect(outcome.exitCode).toBe(0);
     expect(runtime.replays).toBe(1);
+  });
+
+  it('fails a matrix gate when fewer than the required pairs pass', async () => {
+    const setup = fixture();
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'matrix', '--profile', 'delivery-v1', '--min-passes', '2'],
+      { runtime: new FakeRuntime(), io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(1);
+    expect(setup.stderr()).toMatch(/requires at least 2 passing pairs/i);
   });
 
   it('renders a report file without secret-bearing artifact fields', async () => {

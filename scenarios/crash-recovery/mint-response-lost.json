@@ -1,5 +1,5 @@
 {
-  "name": "crash-recovery-all-failpoints",
+  "name": "crash-recovery-mint-response-lost",
   "commands": [
     {
       "type": "configure_fault",

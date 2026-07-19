@@ -51,6 +51,11 @@ export type Observation =
       readonly state: MintProofState;
     }
   | {
+      readonly type: 'redemption_started';
+      readonly deliveryId: string;
+      readonly proofSetHash: string;
+    }
+  | {
       readonly type: 'receiver_settled';
       readonly deliveryId: string;
       readonly replacementPlanHash: string;

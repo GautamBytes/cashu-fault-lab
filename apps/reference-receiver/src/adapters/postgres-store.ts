@@ -23,6 +23,7 @@ import {
   replacementAuthenticatedData,
   swapPlanAuthenticatedData,
 } from './crypto-envelope.js';
+import { isSameDeliveryBinding, validateRequestBinding } from '../domain/request-binding.js';
 
 interface DeliveryRow extends QueryResultRow {
   readonly delivery_id: string;
@@ -62,6 +63,8 @@ interface CreditRow extends QueryResultRow {
 }
 
 type DatabaseConnection = Pool | PoolClient;
+
+const RECOVERY_WORK_LEASE_SECONDS = 30;
 
 function parseJson<T>(value: T | string): T {
   return typeof value === 'string' ? (JSON.parse(value) as T) : value;
@@ -130,12 +133,14 @@ export class PostgresReceiverStore implements ReceiverStore {
   readonly #pool: Pool;
   readonly #envelope: CryptoEnvelope;
   readonly #tenantId: string;
+  readonly #client: PoolClient | undefined;
 
-  constructor(pool: Pool, envelope: CryptoEnvelope, tenantId = 'default') {
+  constructor(pool: Pool, envelope: CryptoEnvelope, tenantId = 'default', client?: PoolClient) {
     if (tenantId.length === 0) throw new Error('Tenant ID is required');
     this.#pool = pool;
     this.#envelope = envelope;
     this.#tenantId = tenantId;
+    this.#client = client;
   }
 
   async createRequest(input: CreatePaymentRequest): Promise<PaymentRequestRecord> {
@@ -176,85 +181,188 @@ export class PostgresReceiverStore implements ReceiverStore {
     });
   }
 
-  async prepare(input: PrepareDelivery): Promise<PrepareResult> {
-    try {
-      return await this.#serializable(async (client) => {
-        const request = await this.#request(client, input.command.payload.id);
-        if (!request) {
-          throw new ReceiverDomainError('REQUEST_NOT_FOUND', 'Payment request not found');
+  async preflight(
+    command: PrepareDelivery['command'],
+    now: number,
+  ): Promise<DeliveryRecord | undefined> {
+    return this.#serializable(async (client) => {
+      const previous = await this.#delivery(client, command.payload.delivery.id, false);
+      if (previous) {
+        if (!isSameDeliveryBinding(previous, command)) {
+          throw new ReceiverDomainError('DELIVERY_CONFLICT', 'Delivery ID is already bound');
         }
-        this.#validatePrepare(request, input);
-        const previous = await this.#delivery(client, input.command.payload.delivery.id, false);
-        if (previous) {
-          if (!sameDelivery(previous, input)) {
-            throw new ReceiverDomainError('DELIVERY_CONFLICT', 'Delivery ID is already bound');
-          }
-          return { kind: 'duplicate', record: previous };
+        return previous;
+      }
+      const request = await this.#request(client, command.payload.id);
+      if (!request) throw new ReceiverDomainError('REQUEST_NOT_FOUND', 'Payment request not found');
+      validateRequestBinding(request, command, now);
+      if (request.singleUse) {
+        const reservation = await client.query(
+          `SELECT 1 FROM deliveries
+           WHERE request_id = $1 AND single_use AND phase <> 'rejected'
+           LIMIT 1`,
+          [request.id],
+        );
+        if (reservation.rowCount) {
+          throw new ReceiverDomainError(
+            'SINGLE_USE_CONFLICT',
+            'Single-use request is already claimed',
+          );
         }
+      }
+      return undefined;
+    });
+  }
 
-        const receipt: DeliveryReceipt = {
-          profile: 'cashu-delivery-v1',
-          requestId: request.id,
-          deliveryId: input.command.payload.delivery.id,
-          payloadHash: input.command.payloadHash,
-          status: 'processing',
-          statusVersion: 1,
-          mint: input.command.payload.mint,
-          unit: input.command.payload.unit,
-          amount: request.amount,
-          detailCode: 'accepted',
-        };
-        assertReceiptTransition(undefined, receipt);
-        const encrypted = this.#envelope.encrypt(
-          input.plan,
-          swapPlanAuthenticatedData({
+  async withRedemptionLock<T>(
+    deliveryId: string,
+    operation: (lockedStore: ReceiverStore) => Promise<T>,
+  ): Promise<{ readonly acquired: false } | { readonly acquired: true; readonly value: T }> {
+    const client = await this.#pool.connect();
+    let acquired: boolean;
+    try {
+      const selected = await client.query<{ acquired: boolean }>(
+        'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired',
+        [deliveryId],
+      );
+      acquired = selected.rows[0]?.acquired === true;
+    } catch (error) {
+      client.release(error instanceof Error ? error : undefined);
+      throw error;
+    }
+    if (!acquired) {
+      client.release();
+      return { acquired: false };
+    }
+
+    let value!: T;
+    let operationFailed = false;
+    let operationError: unknown;
+    try {
+      value = await operation(
+        new PostgresReceiverStore(this.#pool, this.#envelope, this.#tenantId, client),
+      );
+    } catch (error) {
+      operationFailed = true;
+      operationError = error;
+    }
+
+    let unlockFailed = false;
+    let unlockError: unknown;
+    try {
+      const unlocked = await client.query<{ unlocked: boolean }>(
+        'SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked',
+        [deliveryId],
+      );
+      if (unlocked.rows[0]?.unlocked !== true) {
+        throw new Error('PostgreSQL redemption lock was not held during release');
+      }
+    } catch (error) {
+      unlockFailed = true;
+      unlockError = error;
+    }
+    client.release(unlockFailed && unlockError instanceof Error ? unlockError : undefined);
+
+    if (operationFailed && unlockFailed) {
+      throw new AggregateError(
+        [operationError, unlockError],
+        'Redemption operation and lock release both failed',
+      );
+    }
+    if (operationFailed) throw operationError;
+    if (unlockFailed) throw unlockError;
+    return { acquired: true, value };
+  }
+
+  async prepare(input: PrepareDelivery): Promise<PrepareResult> {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      try {
+        return await this.#serializable(async (client) => {
+          const request = await this.#request(client, input.command.payload.id);
+          if (!request) {
+            throw new ReceiverDomainError('REQUEST_NOT_FOUND', 'Payment request not found');
+          }
+          this.#validatePrepare(request, input);
+          const previous = await this.#delivery(client, input.command.payload.delivery.id, false);
+          if (previous) {
+            if (!sameDelivery(previous, input)) {
+              throw new ReceiverDomainError('DELIVERY_CONFLICT', 'Delivery ID is already bound');
+            }
+            return { kind: 'duplicate', record: previous };
+          }
+
+          const receipt: DeliveryReceipt = {
+            profile: 'cashu-delivery-v1',
             requestId: request.id,
             deliveryId: input.command.payload.delivery.id,
             payloadHash: input.command.payloadHash,
-          }),
-        );
-        await client.query(
-          `INSERT INTO deliveries (
+            status: 'processing',
+            statusVersion: 1,
+            mint: input.command.payload.mint,
+            unit: input.command.payload.unit,
+            amount: request.amount,
+            detailCode: 'accepted',
+          };
+          assertReceiptTransition(undefined, receipt);
+          const encrypted = this.#envelope.encrypt(
+            input.plan,
+            swapPlanAuthenticatedData({
+              requestId: request.id,
+              deliveryId: input.command.payload.delivery.id,
+              payloadHash: input.command.payloadHash,
+            }),
+          );
+          await client.query(
+            `INSERT INTO deliveries (
              delivery_id, request_id, payload_hash, proof_set_hash, mint, unit, amount,
              single_use, phase, receipt, swap_plan_ciphertext, swap_plan_nonce, swap_plan_tag
            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'prepared', $9::jsonb, $10, $11, $12)`,
-          [
-            input.command.payload.delivery.id,
-            request.id,
-            input.command.payloadHash,
-            input.proofSetHash,
-            input.command.payload.mint,
-            input.command.payload.unit,
-            request.amount,
-            request.singleUse,
-            JSON.stringify(receipt),
-            Buffer.from(encrypted.ciphertext),
-            Buffer.from(encrypted.nonce),
-            Buffer.from(encrypted.tag),
-          ],
-        );
-        for (const proofClaimId of input.proofClaimIds) {
-          await client.query(
-            `INSERT INTO proof_claims (tenant_id, mint, unit, proof_y_hmac, delivery_id)
-             VALUES ($1, $2, $3, $4, $5)`,
             [
-              this.#tenantId,
+              input.command.payload.delivery.id,
+              request.id,
+              input.command.payloadHash,
+              input.proofSetHash,
               input.command.payload.mint,
               input.command.payload.unit,
-              proofClaimId,
-              input.command.payload.delivery.id,
+              request.amount,
+              request.singleUse,
+              JSON.stringify(receipt),
+              Buffer.from(encrypted.ciphertext),
+              Buffer.from(encrypted.nonce),
+              Buffer.from(encrypted.tag),
             ],
           );
+          for (const proofClaimId of input.proofClaimIds) {
+            await client.query(
+              `INSERT INTO proof_claims (tenant_id, mint, unit, proof_y_hmac, delivery_id)
+             VALUES ($1, $2, $3, $4, $5)`,
+              [
+                this.#tenantId,
+                input.command.payload.mint,
+                input.command.payload.unit,
+                proofClaimId,
+                input.command.payload.delivery.id,
+              ],
+            );
+          }
+          const record = await this.#delivery(client, input.command.payload.delivery.id, false);
+          if (!record)
+            throw new ReceiverDomainError('INVALID_STATE', 'Prepared delivery disappeared');
+          return { kind: 'prepared', record };
+        });
+      } catch (error) {
+        if (databaseErrorCode(error) !== '23505') throw error;
+        const conflict = await this.#classifyPrepareConflict(input);
+        if (conflict) return conflict;
+        if (attempt === 5) {
+          throw new ReceiverDomainError(
+            'INVALID_STATE',
+            'Database uniqueness conflict remained unclassifiable after retries',
+          );
         }
-        const record = await this.#delivery(client, input.command.payload.delivery.id, false);
-        if (!record)
-          throw new ReceiverDomainError('INVALID_STATE', 'Prepared delivery disappeared');
-        return { kind: 'prepared', record };
-      });
-    } catch (error) {
-      if (databaseErrorCode(error) !== '23505') throw error;
-      return this.#classifyPrepareConflict(input);
+      }
     }
+    throw new ReceiverDomainError('INVALID_STATE', 'Prepare retry exhausted');
   }
 
   async markMintSent(deliveryId: string): Promise<DeliveryReceipt> {
@@ -367,11 +475,11 @@ export class PostgresReceiverStore implements ReceiverStore {
   }
 
   async current(deliveryId: string): Promise<DeliveryRecord | undefined> {
-    return this.#delivery(this.#pool, deliveryId, false);
+    return this.#delivery(this.#connection(), deliveryId, false);
   }
 
   async settlementPlans(): Promise<readonly ExactSwapPlanView[]> {
-    const result = await this.#pool.query<{
+    const result = await this.#connection().query<{
       delivery_id: string;
       mint: string;
       unit: string;
@@ -386,7 +494,7 @@ export class PostgresReceiverStore implements ReceiverStore {
   }
 
   async credits(): Promise<readonly MerchantCredit[]> {
-    const result = await this.#pool.query<CreditRow>(
+    const result = await this.#connection().query<CreditRow>(
       'SELECT credit_id, request_id, delivery_id, amount, unit, created_at FROM merchant_credits ORDER BY delivery_id',
     );
     return result.rows.map((row) => this.#creditFromRow(row));
@@ -396,11 +504,22 @@ export class PostgresReceiverStore implements ReceiverStore {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
       throw new Error('Recovery limit is invalid');
     }
-    const result = await this.#pool.query<{ delivery_id: string }>(
-      `SELECT delivery_id FROM deliveries
-       WHERE phase IN ('mint_sent', 'recovery_blocked')
-       ORDER BY updated_at, delivery_id LIMIT $1`,
-      [limit],
+    const result = await this.#connection().query<{ delivery_id: string }>(
+      `WITH candidates AS (
+         SELECT delivery_id
+         FROM deliveries
+         WHERE phase IN ('prepared', 'mint_sent', 'recovery_blocked')
+           AND updated_at <= now() - ($2 * interval '1 second')
+         ORDER BY updated_at, delivery_id
+         FOR UPDATE SKIP LOCKED
+         LIMIT $1
+       )
+       UPDATE deliveries AS delivery
+       SET updated_at = now()
+       FROM candidates
+       WHERE delivery.delivery_id = candidates.delivery_id
+       RETURNING delivery.delivery_id`,
+      [limit, RECOVERY_WORK_LEASE_SECONDS],
     );
     return result.rows.map((row) => row.delivery_id);
   }
@@ -433,28 +552,7 @@ export class PostgresReceiverStore implements ReceiverStore {
 
   #validatePrepare(request: PaymentRequestRecord, input: PrepareDelivery): void {
     const payload = input.command.payload;
-    assertSafeInteger(input.now, 'Current time');
-    if (request.expiresAt < input.now - 60) {
-      throw new ReceiverDomainError('REQUEST_EXPIRED', 'Payment request has expired');
-    }
-    if (payload.delivery.expiresAt < input.now - 60) {
-      throw new ReceiverDomainError('DELIVERY_EXPIRED', 'Delivery has expired');
-    }
-    if (payload.delivery.createdAt > input.now + 60) {
-      throw new ReceiverDomainError(
-        'DELIVERY_TIME_INVALID',
-        'Delivery creation time is too far in the future',
-      );
-    }
-    if (payload.delivery.expiresAt !== request.expiresAt) {
-      throw new ReceiverDomainError('REQUEST_MISMATCH', 'Delivery expiry does not match request');
-    }
-    if (payload.unit !== request.unit) {
-      throw new ReceiverDomainError('UNIT_MISMATCH', 'Delivery unit does not match request');
-    }
-    if (!request.mints.includes(payload.mint)) {
-      throw new ReceiverDomainError('MINT_MISMATCH', 'Delivery mint is not accepted');
-    }
+    validateRequestBinding(request, input.command, input.now);
     if (input.netAmount !== request.amount) {
       throw new ReceiverDomainError('AMOUNT_MISMATCH', 'Delivery amount does not match request');
     }
@@ -469,13 +567,13 @@ export class PostgresReceiverStore implements ReceiverStore {
     }
   }
 
-  async #classifyPrepareConflict(input: PrepareDelivery): Promise<PrepareResult> {
+  async #classifyPrepareConflict(input: PrepareDelivery): Promise<PrepareResult | undefined> {
     const previous = await this.current(input.command.payload.delivery.id);
     if (previous) {
       if (sameDelivery(previous, input)) return { kind: 'duplicate', record: previous };
       throw new ReceiverDomainError('DELIVERY_CONFLICT', 'Delivery ID is already bound');
     }
-    const proof = await this.#pool.query<{ delivery_id: string }>(
+    const proof = await this.#connection().query<{ delivery_id: string }>(
       `SELECT delivery_id FROM proof_claims
        WHERE tenant_id = $1 AND mint = $2 AND unit = $3 AND proof_y_hmac = ANY($4::text[])
        LIMIT 1`,
@@ -484,7 +582,7 @@ export class PostgresReceiverStore implements ReceiverStore {
     if (proof.rowCount) {
       throw new ReceiverDomainError('PROOF_CONFLICT', 'Proof is already claimed');
     }
-    const request = await this.#pool.query<{ delivery_id: string }>(
+    const request = await this.#connection().query<{ delivery_id: string }>(
       `SELECT delivery_id FROM deliveries
        WHERE request_id = $1 AND single_use AND phase <> 'rejected' LIMIT 1`,
       [input.command.payload.id],
@@ -492,10 +590,7 @@ export class PostgresReceiverStore implements ReceiverStore {
     if (request.rowCount) {
       throw new ReceiverDomainError('SINGLE_USE_CONFLICT', 'Single-use request is already claimed');
     }
-    throw new ReceiverDomainError(
-      'INVALID_STATE',
-      'Database uniqueness conflict was not classifiable',
-    );
+    return undefined;
   }
 
   async #request(
@@ -633,7 +728,7 @@ export class PostgresReceiverStore implements ReceiverStore {
 
   async #serializable<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
     for (let attempt = 0; attempt < 6; attempt += 1) {
-      const client = await this.#pool.connect();
+      const client = this.#client ?? (await this.#pool.connect());
       try {
         await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const result = await operation(client);
@@ -645,9 +740,13 @@ export class PostgresReceiverStore implements ReceiverStore {
         if ((code === '40001' || code === '40P01') && attempt < 5) continue;
         throw error;
       } finally {
-        client.release();
+        if (!this.#client) client.release();
       }
     }
     throw new ReceiverDomainError('INVALID_STATE', 'Serializable transaction retry exhausted');
+  }
+
+  #connection(): DatabaseConnection {
+    return this.#client ?? this.#pool;
   }
 }

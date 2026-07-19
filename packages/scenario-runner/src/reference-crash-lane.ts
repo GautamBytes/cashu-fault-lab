@@ -38,13 +38,10 @@ import {
   type ScenarioRunResult,
   type ScenarioSpec,
 } from './runner.js';
+import { seededProtocolId, seededSecret } from './seeded-fixture.js';
 
 const now = 1_784_399_400;
 const requestId = 'AAECAwQFBgcICQoLDA0ODw';
-const deliveryId = 'EBESExQVFhcYGRobHB0eHw';
-const proofs: readonly CashuProof[] = [
-  { amount: 8, id: '00aa', secret: 'packaged-crash-proof', C: '02aa' },
-];
 
 class CrashVerifier implements ProofVerifier {
   async inspect(input: InspectProofs): Promise<InspectProofsResult> {
@@ -62,6 +59,7 @@ class CrashVerifier implements ProofVerifier {
 
 class CrashMint implements MintGateway {
   mode: 'success' | 'timeout_after_commit' = 'success';
+  swapCalls = 0;
   readonly committed = new Map<string, SwapResult>();
 
   async prepareSwap(draft: SwapPlanDraft): Promise<ExactSwapPlan> {
@@ -83,6 +81,7 @@ class CrashMint implements MintGateway {
   }
 
   async swap(plan: ExactSwapPlan): Promise<SwapResult> {
+    this.swapCalls += 1;
     const result = {
       replacementPlanHash: `replacement:${plan.deliveryId}`,
       replacementProofs: [`replacement-proof:${plan.deliveryId}`],
@@ -106,8 +105,10 @@ class CrashMint implements MintGateway {
 }
 
 class CrashWallet implements SenderWallet {
+  constructor(private readonly proofs: readonly CashuProof[]) {}
+
   async reserveExact(): Promise<ReservedProofSet> {
-    return { mint: 'https://mint.example', unit: 'sat', netAmount: 8, proofs };
+    return { mint: 'https://mint.example', unit: 'sat', netAmount: 8, proofs: this.proofs };
   }
 
   async markSettled(): Promise<void> {}
@@ -125,12 +126,23 @@ class ReceiverTransport implements PaymentTransport {
 }
 
 class ReferenceCrashDriver implements ScenarioDriver {
+  #seed = 'initial';
+  #deliveryId = seededProtocolId(this.#seed, 'crash-delivery');
+  #proofs: readonly CashuProof[] = [
+    {
+      amount: 8,
+      id: '00aa',
+      secret: seededSecret(this.#seed, 'crash-proof'),
+      C: '02aa',
+    },
+  ];
   #store = new MemoryReceiverStore();
   #mint = new CrashMint();
-  #wallet = new CrashWallet();
+  #wallet = new CrashWallet(this.#proofs);
   #state = new InMemorySenderState();
   #transport = this.#newTransport();
   #sendCount = 0;
+  #reportedSwapCalls = 0;
 
   #deps() {
     return {
@@ -145,13 +157,19 @@ class ReferenceCrashDriver implements ScenarioDriver {
     return new ReceiverTransport(this.#deps());
   }
 
-  async reset(): Promise<void> {
+  async reset(seed: string): Promise<void> {
+    this.#seed = seed;
+    this.#deliveryId = seededProtocolId(seed, 'crash-delivery');
+    this.#proofs = [
+      { amount: 8, id: '00aa', secret: seededSecret(seed, 'crash-proof'), C: '02aa' },
+    ];
     this.#store = new MemoryReceiverStore();
     this.#mint = new CrashMint();
-    this.#wallet = new CrashWallet();
+    this.#wallet = new CrashWallet(this.#proofs);
     this.#state = new InMemorySenderState();
     this.#transport = this.#newTransport();
     this.#sendCount = 0;
+    this.#reportedSwapCalls = 0;
     await this.#store.createRequest({
       id: requestId,
       amount: 8,
@@ -168,7 +186,7 @@ class ReferenceCrashDriver implements ScenarioDriver {
       receiver: 'reference-ts',
       transports: ['http'],
       recovery: ['nut09'],
-      evidenceTier: 'T3',
+      evidenceTier: 'T0',
     };
   }
 
@@ -188,7 +206,7 @@ class ReferenceCrashDriver implements ScenarioDriver {
       transport: this.#transport,
       state: this.#state,
       now: () => now,
-      generateDeliveryId: () => deliveryId as ProtocolId,
+      generateDeliveryId: () => this.#deliveryId,
       sleep: async () => {},
     } as const;
     const outcome =
@@ -203,30 +221,40 @@ class ReferenceCrashDriver implements ScenarioDriver {
               transports: [{ type: 'post', target: 'https://merchant.example/pay' }],
             },
             senderDeps,
-            { seed: 'packaged-crash', maxAttempts: 1 },
+            { seed: this.#seed, maxAttempts: 1 },
           )
-        : await resumePayment(deliveryId, senderDeps, {
-            seed: 'packaged-crash-resume',
+        : await resumePayment(this.#deliveryId, senderDeps, {
+            seed: this.#seed,
             maxAttempts: 1,
           });
     this.#sendCount += 1;
-    const senderRecord = await this.#state.get(deliveryId);
-    const receiverRecord = await this.#store.current(deliveryId);
+    const senderRecord = await this.#state.get(this.#deliveryId);
+    const receiverRecord = await this.#store.current(this.#deliveryId);
     if (!senderRecord || !receiverRecord) throw new Error('Crash evidence is incomplete');
     const observations: Observation[] = [];
     if (this.#sendCount === 1)
       observations.push({ type: 'request_observed', requestId, singleUse: true });
-    observations.push(
-      {
-        type: 'delivery_attempted',
-        requestId,
-        deliveryId,
-        payloadHash: senderRecord.payloadHash,
+    observations.push({
+      type: 'delivery_attempted',
+      requestId,
+      deliveryId: this.#deliveryId,
+      payloadHash: senderRecord.payloadHash,
+      proofSetHash: receiverRecord.proofSetHash,
+      transport: 'http',
+    });
+    while (this.#reportedSwapCalls < this.#mint.swapCalls) {
+      observations.push({
+        type: 'redemption_started',
+        deliveryId: this.#deliveryId,
         proofSetHash: receiverRecord.proofSetHash,
-        transport: 'http',
-      },
-      { type: 'mint_proofs_state', proofSetHash: receiverRecord.proofSetHash, state: 'SPENT' },
-    );
+      });
+      this.#reportedSwapCalls += 1;
+    }
+    observations.push({
+      type: 'mint_proofs_state',
+      proofSetHash: receiverRecord.proofSetHash,
+      state: 'SPENT',
+    });
     if (outcome.receipt) {
       const receipt = outcome.receipt;
       if (receipt.status === 'settled') {
@@ -237,7 +265,7 @@ class ReferenceCrashDriver implements ScenarioDriver {
         observations.push(
           {
             type: 'receiver_settled',
-            deliveryId,
+            deliveryId: this.#deliveryId,
             replacementPlanHash: receiverRecord.replacementPlanHash,
           },
           { type: 'merchant_credited', ...credits[0]! },
@@ -255,12 +283,12 @@ class ReferenceCrashDriver implements ScenarioDriver {
         unit: receipt.unit,
       });
     }
-    return { value: { status: outcome.status, deliveryId }, observations };
+    return { value: { status: outcome.status, deliveryId: this.#deliveryId }, observations };
   }
 
   async restart(component: string): Promise<void> {
     if (component !== 'receiver') throw new Error('Unsupported restart component');
-    await recoverDelivery(deliveryId, this.#deps());
+    await recoverDelivery(this.#deliveryId, this.#deps());
     this.#transport = this.#newTransport();
   }
 

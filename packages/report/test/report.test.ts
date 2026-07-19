@@ -54,6 +54,20 @@ const result: ScenarioRunResult = {
           proofs: [{ secret: 'secret-a', C: '02deadbeef' }],
         },
       },
+      {
+        sequence: 2,
+        at: 11,
+        phase: 'observation',
+        actor: 'oracle',
+        event: 'redemption_started',
+        commandIndex: 1,
+        data: {
+          type: 'redemption_started',
+          deliveryId: 'delivery-1',
+          proofSetHash: 'b'.repeat(64),
+          secret: 'secret-a',
+        },
+      },
     ],
   },
 };
@@ -90,6 +104,10 @@ describe('allowlist report rendering', () => {
       },
     });
     expect(validateScenarioResult(report)).toEqual({ ok: true });
+    expect(report.timeline[2]?.data).toEqual({
+      deliveryId: 'delivery-1',
+      proofSetHash: 'b'.repeat(64),
+    });
     expectSecretFree(JSON.stringify(report));
   });
 

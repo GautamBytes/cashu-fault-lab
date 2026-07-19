@@ -40,15 +40,12 @@ import {
   type ScenarioRunResult,
   type ScenarioSpec,
 } from './runner.js';
+import { seededProtocolId, seededSecret } from './seeded-fixture.js';
 
 const now = 1_784_399_400;
 const requestId = 'AAECAwQFBgcICQoLDA0ODw';
-const deliveryId = 'EBESExQVFhcYGRobHB0eHw';
 const senderKey = Uint8Array.from(Buffer.from('11'.repeat(32), 'hex'));
 const receiverKey = Uint8Array.from(Buffer.from('22'.repeat(32), 'hex'));
-const proofs: readonly CashuProof[] = [
-  { amount: 8, id: '00aa', secret: 'packaged-nostr-proof', C: '02aa' },
-];
 const nostrTarget: TransportTarget = {
   type: 'nostr',
   target: nip19.nprofileEncode({
@@ -73,6 +70,8 @@ class ReferenceNostrVerifier implements ProofVerifier {
 }
 
 class ReferenceNostrMint implements MintGateway {
+  swapCalls = 0;
+
   async prepareSwap(draft: SwapPlanDraft): Promise<ExactSwapPlan> {
     return createExactSwapPlan(draft, {
       keysetId: '00aa',
@@ -92,6 +91,7 @@ class ReferenceNostrMint implements MintGateway {
   }
 
   async swap(plan: ExactSwapPlan): Promise<SwapResult> {
+    this.swapCalls += 1;
     return {
       replacementPlanHash: `replacement:${plan.deliveryId}`,
       replacementProofs: [`replacement-proof:${plan.deliveryId}`],
@@ -108,8 +108,10 @@ class ReferenceNostrMint implements MintGateway {
 }
 
 class ReferenceNostrWallet implements SenderWallet {
+  constructor(private readonly proofs: readonly CashuProof[]) {}
+
   async reserveExact(): Promise<ReservedProofSet> {
-    return { mint: 'https://mint.example', unit: 'sat', netAmount: 8, proofs };
+    return { mint: 'https://mint.example', unit: 'sat', netAmount: 8, proofs: this.proofs };
   }
 
   async markSettled(): Promise<void> {}
@@ -184,9 +186,19 @@ class FaultableHybridTransport implements PaymentTransport {
 }
 
 class ReferenceNostrDriver implements ScenarioDriver {
+  #seed = 'initial';
+  #deliveryId = seededProtocolId(this.#seed, 'nostr-delivery');
+  #proofs: readonly CashuProof[] = [
+    {
+      amount: 8,
+      id: '00aa',
+      secret: seededSecret(this.#seed, 'nostr-proof'),
+      C: '02aa',
+    },
+  ];
   #store = new MemoryReceiverStore();
   #mint = new ReferenceNostrMint();
-  #wallet = new ReferenceNostrWallet();
+  #wallet = new ReferenceNostrWallet(this.#proofs);
   #state = new InMemorySenderState();
   #transport = this.#newTransport();
 
@@ -204,10 +216,20 @@ class ReferenceNostrDriver implements ScenarioDriver {
     );
   }
 
-  async reset(): Promise<void> {
+  async reset(seed: string): Promise<void> {
+    this.#seed = seed;
+    this.#deliveryId = seededProtocolId(seed, `nostr-${this.mode}-delivery`);
+    this.#proofs = [
+      {
+        amount: 8,
+        id: '00aa',
+        secret: seededSecret(seed, `nostr-${this.mode}-proof`),
+        C: '02aa',
+      },
+    ];
     this.#store = new MemoryReceiverStore();
     this.#mint = new ReferenceNostrMint();
-    this.#wallet = new ReferenceNostrWallet();
+    this.#wallet = new ReferenceNostrWallet(this.#proofs);
     this.#state = new InMemorySenderState();
     this.#transport = this.#newTransport();
     await this.#store.createRequest({
@@ -225,7 +247,7 @@ class ReferenceNostrDriver implements ScenarioDriver {
       sender: 'reference-ts',
       receiver: 'reference-ts',
       transports: ['http', 'nostr'],
-      evidenceTier: 'T3',
+      evidenceTier: 'T0',
     };
   }
 
@@ -268,23 +290,26 @@ class ReferenceNostrDriver implements ScenarioDriver {
         transport: this.#transport,
         state: this.#state,
         now: () => now,
-        generateDeliveryId: () => deliveryId as ProtocolId,
+        generateDeliveryId: () => this.#deliveryId,
         sleep: async () => {},
       },
-      { seed: `packaged-${this.mode}`, maxAttempts: 3 },
+      { seed: this.#seed, maxAttempts: 3 },
     );
     if (outcome.status !== 'settled') throw new Error(`Payment did not settle: ${outcome.status}`);
-    const senderRecord = await this.#state.get(deliveryId);
-    const receiverRecord = await this.#store.current(deliveryId);
+    const senderRecord = await this.#state.get(this.#deliveryId);
+    const receiverRecord = await this.#store.current(this.#deliveryId);
     const credits = await this.#store.credits();
     if (!senderRecord || !receiverRecord || credits.length !== 1) {
       throw new Error('End-to-end evidence is incomplete');
+    }
+    if (this.#mint.swapCalls !== 1) {
+      throw new Error('Nostr fault lane started mint redemption more than once');
     }
     const attemptedTransports = [...new Set(this.#transport.targetTypes)].map(
       (transport): Observation => ({
         type: 'delivery_attempted',
         requestId,
-        deliveryId,
+        deliveryId: this.#deliveryId,
         payloadHash: senderRecord.payloadHash,
         proofSetHash: receiverRecord.proofSetHash,
         transport: transport === 'post' ? 'http' : 'nostr',
@@ -292,14 +317,19 @@ class ReferenceNostrDriver implements ScenarioDriver {
     );
     const receipt = outcome.receipt;
     return {
-      value: { status: outcome.status, deliveryId },
+      value: { status: outcome.status, deliveryId: this.#deliveryId },
       observations: [
         { type: 'request_observed', requestId, singleUse: true },
         ...attemptedTransports,
+        {
+          type: 'redemption_started',
+          deliveryId: this.#deliveryId,
+          proofSetHash: receiverRecord.proofSetHash,
+        },
         { type: 'mint_proofs_state', proofSetHash: receiverRecord.proofSetHash, state: 'SPENT' },
         {
           type: 'receiver_settled',
-          deliveryId,
+          deliveryId: this.#deliveryId,
           replacementPlanHash: receiverRecord.replacementPlanHash!,
         },
         { type: 'merchant_credited', ...credits[0]! },

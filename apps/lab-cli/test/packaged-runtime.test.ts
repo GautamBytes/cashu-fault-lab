@@ -34,11 +34,37 @@ describe('PackagedLabRuntime', () => {
         (event) => event.phase === 'observation' && event.event === 'merchant_credited',
       ),
     ).toHaveLength(1);
-    expect(first.artifact.capabilities).toMatchObject({ evidenceTier: 'T3' });
+    expect(first.artifact.capabilities).toMatchObject({ evidenceTier: 'T0' });
 
     const replayed = await runtime.replay(first.artifact);
     expect(replayed.status).toBe('passed');
     expect(replayed.artifact.commands).toEqual(first.artifact.commands);
+  });
+
+  it('uses the seed for delivery evidence while preserving deterministic replay', async () => {
+    const runtime = new PackagedLabRuntime();
+    const spec = await scenario('retry/response-lost.json');
+    const first = await runtime.run(spec, 'seed-a');
+    const second = await runtime.run(spec, 'seed-b');
+    const replayed = await runtime.run(spec, 'seed-a');
+    const deliveryEvidence = (result: typeof first) =>
+      result.artifact.history.find(
+        (event) => event.phase === 'observation' && event.event === 'delivery_attempted',
+      )?.data;
+
+    expect(deliveryEvidence(first)).not.toEqual(deliveryEvidence(second));
+    expect(deliveryEvidence(replayed)).toEqual(deliveryEvidence(first));
+  });
+
+  it('uses the matrix seed in reference probe evidence', async () => {
+    const runtime = new PackagedLabRuntime();
+    const evidence = async (seed: string) => {
+      const results = await runtime.matrix('delivery-v1', seed);
+      return results.find((result) => result.status === 'passed')?.evidence;
+    };
+
+    expect(await evidence('seed-a')).not.toEqual(await evidence('seed-b'));
+    expect(await evidence('seed-a')).toEqual(await evidence('seed-a'));
   });
 
   it('fails closed for adapters without a runnable delivery-v1 profile', async () => {
@@ -69,10 +95,29 @@ describe('PackagedLabRuntime', () => {
     },
   );
 
+  it.each([
+    'retry/nostr-response-lost.json',
+    'retry/cross-transport-fallback.json',
+    'crash-recovery/mint-response-lost.json',
+  ])('uses the seed in %s delivery evidence', async (path) => {
+    const runtime = new PackagedLabRuntime();
+    const spec = await scenario(path);
+    const first = await runtime.run(spec, 'seed-a');
+    const second = await runtime.run(spec, 'seed-b');
+    const attempted = (result: typeof first) =>
+      result.artifact.history.find(
+        (event) => event.phase === 'observation' && event.event === 'delivery_attempted',
+      )?.data;
+
+    expect(first.status).toBe('passed');
+    expect(second.status).toBe('passed');
+    expect(attempted(first)).not.toEqual(attempted(second));
+  });
+
   it('recovers mint commit-then-timeout across receiver restart', async () => {
     const runtime = new PackagedLabRuntime();
     const result = await runtime.run(
-      await scenario('crash-recovery/all-failpoints.json'),
+      await scenario('crash-recovery/mint-response-lost.json'),
       'packaged-crash',
     );
 

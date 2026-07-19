@@ -2,7 +2,6 @@ import {
   computePayloadHash,
   serializeDeliveryReceipt,
   type CashuProof,
-  type ProtocolId,
 } from '@cashu-fault-lab/delivery-core';
 import {
   acceptPayloadBytes,
@@ -28,13 +27,9 @@ import {
 } from '@cashu-fault-lab/reference-sender';
 import { createHash } from 'node:crypto';
 import type { MatrixExecutionResult } from './matrix.js';
+import { seededProtocolId, seededSecret } from './seeded-fixture.js';
 
 const now = 1_784_399_400;
-const requestId = 'AAECAwQFBgcICQoLDA0ODw';
-const deliveryId = 'EBESExQVFhcYGRobHB0eHw';
-const proofs: readonly CashuProof[] = [
-  { amount: 8, id: '00aa', secret: 'matrix-probe-secret', C: '02aa' },
-];
 
 class ProbeVerifier implements ProofVerifier {
   async inspect(input: InspectProofs): Promise<InspectProofsResult> {
@@ -91,9 +86,11 @@ class ProbeMint implements MintGateway {
 class ProbeWallet implements SenderWallet {
   reserveCalls = 0;
 
+  constructor(private readonly proofs: readonly CashuProof[]) {}
+
   async reserveExact(): Promise<ReservedProofSet> {
     this.reserveCalls += 1;
-    return { mint: 'https://mint.example', unit: 'sat', netAmount: 8, proofs };
+    return { mint: 'https://mint.example', unit: 'sat', netAmount: 8, proofs: this.proofs };
   }
 
   async markSettled(): Promise<void> {}
@@ -117,10 +114,15 @@ class ProbeTransport implements PaymentTransport {
   }
 }
 
-export async function runReferenceDeliveryProbe(): Promise<MatrixExecutionResult> {
+export async function runReferenceDeliveryProbe(seed: string): Promise<MatrixExecutionResult> {
+  const requestId = seededProtocolId(seed, 'matrix-request');
+  const deliveryId = seededProtocolId(seed, 'matrix-delivery');
+  const proofs: readonly CashuProof[] = [
+    { amount: 8, id: '00aa', secret: seededSecret(seed, 'matrix-proof'), C: '02aa' },
+  ];
   const store = new MemoryReceiverStore();
   const mint = new ProbeMint();
-  const wallet = new ProbeWallet();
+  const wallet = new ProbeWallet(proofs);
   const verifier = new ProbeVerifier();
   await store.createRequest({
     id: requestId,
@@ -133,7 +135,7 @@ export async function runReferenceDeliveryProbe(): Promise<MatrixExecutionResult
   const transport = new ProbeTransport({ store, mint, verifier, now: () => now });
   const outcome = await sendPayment(
     {
-      id: requestId as ProtocolId,
+      id: requestId,
       amount: 8,
       unit: 'sat',
       mints: ['https://mint.example'],
@@ -145,10 +147,10 @@ export async function runReferenceDeliveryProbe(): Promise<MatrixExecutionResult
       transport,
       state: new InMemorySenderState(),
       now: () => now,
-      generateDeliveryId: () => deliveryId as ProtocolId,
+      generateDeliveryId: () => deliveryId,
       sleep: async () => {},
     },
-    { seed: 'matrix-reference-probe', maxAttempts: 2 },
+    { seed, maxAttempts: 2 },
   );
   const credits = await store.credits();
   const plans = await store.settlementPlans();
@@ -168,7 +170,7 @@ export async function runReferenceDeliveryProbe(): Promise<MatrixExecutionResult
     };
   }
   const payloadHash = computePayloadHash({
-    requestId: requestId as ProtocolId,
+    requestId,
     memo: null,
     mint: 'https://mint.example',
     unit: 'sat',
@@ -179,6 +181,7 @@ export async function runReferenceDeliveryProbe(): Promise<MatrixExecutionResult
   return {
     ok: true,
     evidence: {
+      tier: 'T0',
       attempts: 2,
       uniquePayloads: 1,
       proofReservations: 1,

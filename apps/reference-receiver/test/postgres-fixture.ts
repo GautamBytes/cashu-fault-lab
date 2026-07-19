@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Pool } from 'pg';
@@ -15,10 +16,13 @@ export async function startPostgresFixture(): Promise<PostgresFixture> {
     .withPassword('cashu-test-password')
     .start();
   const pool = new Pool({ connectionString: container.getConnectionUri(), max: 30 });
-  const migrationPath = fileURLToPath(
-    new URL('../../../infra/migrations/001_receiver.sql', import.meta.url),
-  );
-  await pool.query(await readFile(migrationPath, 'utf8'));
+  const migrationDirectory = fileURLToPath(new URL('../../../infra/migrations/', import.meta.url));
+  const migrations = (await readdir(migrationDirectory))
+    .filter((name) => /^\d+.*\.sql$/.test(name))
+    .sort();
+  for (const migration of migrations) {
+    await pool.query(await readFile(join(migrationDirectory, migration), 'utf8'));
+  }
   return { container, pool };
 }
 

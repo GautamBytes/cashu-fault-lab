@@ -52,6 +52,8 @@ export function applyObservation(model: OracleModel, observation: Observation): 
     case 'mint_proofs_state':
       proofStates.set(observation.proofSetHash, observation.state);
       break;
+    case 'redemption_started':
+      break;
     case 'receiver_settled': {
       const previous = deliveries.get(observation.deliveryId);
       if (previous && previous.replacementPlanHash === undefined) {

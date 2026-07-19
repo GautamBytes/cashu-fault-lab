@@ -67,6 +67,24 @@ describe('CompatibilityMatrix', () => {
     ]);
   });
 
+  it('reports a supported but unwired pair as not applicable instead of passing it', async () => {
+    const result = await new CompatibilityMatrix(async () => ({
+      ok: null,
+      reason: 'No executable adapter pair is configured',
+    })).run(
+      'delivery-v1',
+      [participant('sender-a', 'sender')],
+      [participant('receiver-a', 'receiver')],
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        status: 'not_applicable',
+        reason: 'No executable adapter pair is configured',
+      }),
+    ]);
+  });
+
   it('isolates the documented NUT-26 Nostr mismatch as an expected failure', async () => {
     const capability = (id: string, role: 'sender' | 'receiver'): MatrixParticipant => ({
       id,

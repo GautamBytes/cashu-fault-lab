@@ -39,7 +39,7 @@ jobs:
           for seed in $(seq 0 99); do
             node apps/lab-cli/dist/bin.js run scenarios/retry/response-lost.json --seed "nightly-http-${seed}"
             node apps/lab-cli/dist/bin.js run scenarios/retry/nostr-response-lost.json --seed "nightly-nostr-${seed}"
-            node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/all-failpoints.json --seed "nightly-crash-${seed}"
+            node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/mint-response-lost.json --seed "nightly-crash-${seed}"
             node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed "nightly-storm-${seed}"
           done
 

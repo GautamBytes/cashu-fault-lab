@@ -95,6 +95,17 @@ describe('independent sequential oracle', () => {
     expect(() => assertSafety(unsafe)).toThrowError(/unique owner/i);
   });
 
+  it('detects more than one mint redemption start for a delivery', () => {
+    const redemption = {
+      type: 'redemption_started',
+      deliveryId: 'delivery-1',
+      proofSetHash: 'proofs-a',
+    } as unknown as Observation;
+    const unsafe = model([request, attempt, redemption, redemption]);
+
+    expect(() => assertSafety(unsafe)).toThrowError(/redemption.*once/i);
+  });
+
   it('detects delivery identity mutation', () => {
     const unsafe = model([request, attempt, { ...attempt, payloadHash: 'payload-b' }]);
     expect(() => assertSafety(unsafe)).toThrowError(/immutable/i);

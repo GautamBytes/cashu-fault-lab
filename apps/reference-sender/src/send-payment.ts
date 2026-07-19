@@ -12,7 +12,7 @@ import {
 import type { PaymentTransport, TransportTarget } from './ports/transport.js';
 import type { SenderWallet } from './ports/wallet.js';
 import { createSeededRandom, retryDelay } from './retry.js';
-import type { SenderDeliveryRecord, SenderState } from './state.js';
+import type { SenderDeliveryRecord, SenderState, SenderStateOperations } from './state.js';
 
 export interface SenderPaymentRequest {
   readonly id: ProtocolId;
@@ -50,6 +50,10 @@ export type SendPaymentOutcome =
       readonly receipt?: DeliveryReceipt;
     };
 
+type SendPaymentOperationDependencies = Omit<SendPaymentDependencies, 'state'> & {
+  readonly state: SenderStateOperations;
+};
+
 function validateMaxAttempts(value: number): void {
   if (!Number.isSafeInteger(value) || value < 1 || value > 100) {
     throw new Error('Maximum attempts must be an integer from 1 to 100');
@@ -69,9 +73,38 @@ function assertReceiptIdentity(record: SenderDeliveryRecord, receipt: DeliveryRe
   }
 }
 
+async function markRecoveryAfterNonterminalFailure(
+  deliveryId: ProtocolId,
+  state: SenderStateOperations,
+  wallet: SenderWallet,
+  error: unknown,
+): Promise<never> {
+  let persisted: SenderDeliveryRecord | undefined;
+  try {
+    persisted = await state.get(deliveryId);
+  } catch (stateError) {
+    throw new AggregateError(
+      [error, stateError],
+      'Sender attempt failed and its terminal state could not be checked',
+    );
+  }
+
+  if (persisted?.status === 'settled' || persisted?.status === 'rejected') throw error;
+
+  try {
+    await wallet.markRecoveryRequired(deliveryId);
+  } catch (markError) {
+    throw new AggregateError(
+      [error, markError],
+      'Sender attempt failed and could not mark recovery required',
+    );
+  }
+  throw error;
+}
+
 async function runAttempts(
   initial: SenderDeliveryRecord,
-  deps: SendPaymentDependencies,
+  deps: SendPaymentOperationDependencies,
   options: SendPaymentOptions,
 ): Promise<SendPaymentOutcome> {
   const maxAttempts = options.maxAttempts ?? 5;
@@ -85,16 +118,23 @@ async function runAttempts(
       record.request.transports[Math.min(record.attempts, record.request.transports.length - 1)]!;
     record = { ...record, target: structuredClone(target), attempts: record.attempts + 1 };
     await deps.state.save(record);
+    let result: Awaited<ReturnType<PaymentTransport['send']>> | undefined;
     try {
-      const result = await deps.transport.send(
+      result = await deps.transport.send(
         Uint8Array.from(record.payloadBytes),
         record.target,
         new AbortController().signal,
       );
-      if (result.kind === 'receipt') {
+    } catch {}
+
+    if (result?.kind === 'receipt') {
+      let receipt: DeliveryReceipt | undefined;
+      try {
         const observed = parseDeliveryReceipt(result.receipt);
         assertReceiptIdentity(record, observed);
-        const receipt = mergeObservedReceipt(record.receipt, observed);
+        receipt = mergeObservedReceipt(record.receipt, observed);
+      } catch {}
+      if (receipt) {
         record = { ...record, receipt };
         if (receipt.status === 'settled') {
           record = { ...record, status: 'settled' };
@@ -110,9 +150,9 @@ async function runAttempts(
         }
         if (receipt.detailCode === 'recovery_blocked') shouldRetry = false;
       }
-      if (result.kind === 'permanent_failure') shouldRetry = false;
-      await deps.state.save(record);
-    } catch {}
+    }
+    if (result?.kind === 'permanent_failure') shouldRetry = false;
+    await deps.state.save(record);
 
     if (!shouldRetry || localAttempt === maxAttempts - 1) break;
     await deps.sleep(retryDelay({ attempt: localAttempt, random }));
@@ -142,65 +182,77 @@ export async function sendPayment(
   if (request.transports.length === 0 || request.mints.length === 0) {
     throw new Error('Payment request has no usable mint or transport');
   }
+  validateMaxAttempts(options.maxAttempts ?? 5);
+  createSeededRandom(options.seed);
   const deliveryId = deps.generateDeliveryId();
   parseProtocolId(deliveryId);
-  const reserved = await deps.wallet.reserveExact({
-    deliveryId,
-    amount: request.amount,
-    unit: request.unit,
-    mints: request.mints,
-  });
-  try {
-    if (!request.mints.includes(reserved.mint) || reserved.unit !== request.unit) {
-      throw new Error('Reserved proofs do not match payment request');
+  return deps.state.withDeliveryLock(deliveryId, async (state) => {
+    if (await state.get(deliveryId)) {
+      throw new Error('Sender delivery ID already exists');
     }
-    assertExactRequestedAmount(reserved.netAmount, request.amount);
-    const payload: DeliveryPayload = {
-      id: request.id,
-      memo: options.memo ?? null,
-      mint: reserved.mint,
-      unit: reserved.unit,
-      proofs: reserved.proofs,
-      delivery: {
-        version: 1,
-        id: deliveryId,
-        createdAt: now,
-        expiresAt: request.expiresAt,
-      },
-    };
-    const payloadBytes = serializeDeliveryPayload(payload);
-    const payloadHash = computePayloadHash({
-      requestId: payload.id,
-      memo: payload.memo,
-      mint: payload.mint,
-      unit: payload.unit,
-      proofs: payload.proofs,
-      createdAt: payload.delivery.createdAt,
-      expiresAt: payload.delivery.expiresAt,
-    });
-    const record: SenderDeliveryRecord = {
+    const reserved = await deps.wallet.reserveExact({
       deliveryId,
-      request: structuredClone(request),
-      payload,
-      payloadBytes,
-      payloadHash,
-      target: structuredClone(request.transports[0]!),
-      status: 'sending',
-      attempts: 0,
-    };
-    await deps.state.create(record);
-    return await runAttempts(record, deps, options);
-  } catch (error) {
+      amount: request.amount,
+      unit: request.unit,
+      mints: request.mints,
+    });
+    let record: SenderDeliveryRecord;
     try {
-      await deps.wallet.markRecoveryRequired(deliveryId);
-    } catch (markError) {
-      throw new AggregateError(
-        [error, markError],
-        'Sender failed after reservation and could not mark recovery required',
-      );
+      if (!request.mints.includes(reserved.mint) || reserved.unit !== request.unit) {
+        throw new Error('Reserved proofs do not match payment request');
+      }
+      assertExactRequestedAmount(reserved.netAmount, request.amount);
+      const payload: DeliveryPayload = {
+        id: request.id,
+        memo: options.memo ?? null,
+        mint: reserved.mint,
+        unit: reserved.unit,
+        proofs: reserved.proofs,
+        delivery: {
+          version: 1,
+          id: deliveryId,
+          createdAt: now,
+          expiresAt: request.expiresAt,
+        },
+      };
+      const payloadBytes = serializeDeliveryPayload(payload);
+      const payloadHash = computePayloadHash({
+        requestId: payload.id,
+        memo: payload.memo,
+        mint: payload.mint,
+        unit: payload.unit,
+        proofs: payload.proofs,
+        createdAt: payload.delivery.createdAt,
+        expiresAt: payload.delivery.expiresAt,
+      });
+      record = {
+        deliveryId,
+        request: structuredClone(request),
+        payload,
+        payloadBytes,
+        payloadHash,
+        target: structuredClone(request.transports[0]!),
+        status: 'sending',
+        attempts: 0,
+      };
+      await state.create(record);
+    } catch (error) {
+      try {
+        await deps.wallet.markRecoveryRequired(deliveryId);
+      } catch (markError) {
+        throw new AggregateError(
+          [error, markError],
+          'Sender failed after reservation and could not mark recovery required',
+        );
+      }
+      throw error;
     }
-    throw error;
-  }
+    try {
+      return await runAttempts(record, { ...deps, state }, options);
+    } catch (error) {
+      return markRecoveryAfterNonterminalFailure(deliveryId, state, deps.wallet, error);
+    }
+  });
 }
 
 export async function resumePayment(
@@ -208,13 +260,17 @@ export async function resumePayment(
   deps: SendPaymentDependencies,
   options: SendPaymentOptions,
 ): Promise<SendPaymentOutcome> {
-  const record = await deps.state.get(deliveryId);
-  if (!record) throw new Error('Sender delivery does not exist');
-  if (record.status === 'settled' && record.receipt) {
-    return { status: 'settled', deliveryId: record.deliveryId, receipt: record.receipt };
-  }
-  if (record.status === 'rejected' && record.receipt) {
-    return { status: 'rejected', deliveryId: record.deliveryId, receipt: record.receipt };
-  }
-  return runAttempts({ ...record, status: 'sending' }, deps, options);
+  return deps.state.withDeliveryLock(deliveryId, async (state) => {
+    const record = await state.get(deliveryId);
+    if (!record) throw new Error('Sender delivery does not exist');
+    if (record.status === 'settled' && record.receipt) {
+      await deps.wallet.markSettled(record.deliveryId);
+      return { status: 'settled', deliveryId: record.deliveryId, receipt: record.receipt };
+    }
+    if (record.status === 'rejected' && record.receipt) {
+      await deps.wallet.releaseRejected(record.deliveryId);
+      return { status: 'rejected', deliveryId: record.deliveryId, receipt: record.receipt };
+    }
+    return runAttempts({ ...record, status: 'sending' }, { ...deps, state }, options);
+  });
 }

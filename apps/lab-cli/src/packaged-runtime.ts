@@ -57,7 +57,7 @@ const referenceCapabilities: AdapterCapabilities = {
   version: '0.0.0',
   nuts: [2, 3, 7, 9, 10, 12, 18, 19],
   transports: ['http', 'nostr'],
-  evidenceTier: 'T3',
+  evidenceTier: 'T0',
   encodings: ['creqA'],
   profiles: [
     profile('legacy-nut18', 'supported'),
@@ -149,7 +149,7 @@ export class PackagedLabRuntime implements LabRuntime {
     ) {
       return runReferenceNostrScenario(scenario, seed, 'cross');
     }
-    if (scenario.name === 'crash-recovery-all-failpoints') {
+    if (scenario.name === 'crash-recovery-mint-response-lost') {
       return runReferenceCrashScenario(scenario, seed);
     }
     if (scenario.name.startsWith('security-')) {
@@ -162,19 +162,21 @@ export class PackagedLabRuntime implements LabRuntime {
     return this.run({ name: artifact.scenario, commands: artifact.commands }, artifact.seed);
   }
 
-  async matrix(profileName: string, _seed: string): Promise<readonly MatrixCaseResult[]> {
+  async matrix(profileName: string, seed: string): Promise<readonly MatrixCaseResult[]> {
     const matrix = new CompatibilityMatrix(async (selected, sender, receiver) => {
-      if (selected === 'delivery-v1') return runReferenceDeliveryProbe();
+      if (selected === 'delivery-v1') {
+        if (sender.id !== 'reference-ts' || receiver.id !== 'reference-ts') {
+          return {
+            ok: null,
+            reason: `${sender.id} -> ${receiver.id}: no executable delivery-v1 adapter pair is configured`,
+          };
+        }
+        return runReferenceDeliveryProbe(seed);
+      }
       if (selected === 'legacy-nut18') {
         return {
-          ok: true,
-          evidence: {
-            tier: 'T0',
-            vectorSet: 'spec/vectors/upstream-payment-requests.json',
-            cashuNutsRef: 'fccb68e9129de5348003f573dc97e1ee380a1076',
-            senderEncodings: sender.capabilities.encodings ?? [],
-            receiverEncodings: receiver.capabilities.encodings ?? [],
-          },
+          ok: null,
+          reason: `${sender.id} -> ${receiver.id}: codec evidence exists only in adapter contract tests; no executable pair is configured`,
         };
       }
       if (selected === 'nut26-nostr') {

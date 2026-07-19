@@ -64,10 +64,13 @@ function parseMetadata(value: unknown): Map<string, KeysetMetadata> {
   return result;
 }
 
-function parseKeys(value: unknown, id: string): HasKeysetKeys {
+function parseKeys(value: unknown, id: string, expectedUnit: string): HasKeysetKeys {
   if (!isRecord(value) || !Array.isArray(value.keysets)) throw new Error('Mint keys are invalid');
   const entry = value.keysets.find((candidate) => isRecord(candidate) && candidate.id === id);
   if (!isRecord(entry) || !isRecord(entry.keys)) throw new Error(`Mint keys for ${id} are missing`);
+  if (entry.unit !== expectedUnit) {
+    throw new Error('Mint keyset unit does not match delivery unit');
+  }
   const keys: Record<string, string> = {};
   for (const [amount, point] of Object.entries(entry.keys)) {
     if (typeof point !== 'string') throw new Error('Mint public key is invalid');
@@ -168,7 +171,11 @@ export class CashuTsProofVerifier implements ProofVerifier {
       ids.map(async (id) => {
         keysets.set(
           id,
-          parseKeys(await this.#get(input.payload.mint, `/v1/keys/${encodeURIComponent(id)}`), id),
+          parseKeys(
+            await this.#get(input.payload.mint, `/v1/keys/${encodeURIComponent(id)}`),
+            id,
+            input.payload.unit,
+          ),
         );
       }),
     );

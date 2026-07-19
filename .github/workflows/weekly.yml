@@ -42,7 +42,7 @@ jobs:
       - name: Long recovery and cross-transport storm
         run: |
           for seed in $(seq 0 199); do
-            node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/all-failpoints.json --seed "weekly-recovery-${seed}"
+            node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/mint-response-lost.json --seed "weekly-recovery-${seed}"
             node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed "weekly-storm-${seed}"
           done
       - run: pnpm audit --prod

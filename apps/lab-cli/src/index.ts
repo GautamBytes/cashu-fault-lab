@@ -7,9 +7,8 @@ import {
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import { Command, CommanderError, Option } from 'commander';
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { mkdir } from 'node:fs/promises';
 import { PackagedLabRuntime } from './packaged-runtime.js';
 
 const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
@@ -47,6 +46,7 @@ const defaultIo: CliIo = {
   writeText: async (path, value) => {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await writeFile(path, value, { encoding: 'utf8', mode: 0o600 });
+    await chmod(path, 0o600);
   },
   stdout: (value) => process.stdout.write(value),
   stderr: (value) => process.stderr.write(value),
@@ -196,7 +196,12 @@ export async function runCli(
     .description('Run the sender/receiver compatibility matrix')
     .option('--profile <profile>', 'matrix profile', 'delivery-v1')
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
-    .action(async (options: { profile: string; seed: string }) => {
+    .option('--min-passes <count>', 'minimum passing pairs required')
+    .action(async (options: { profile: string; seed: string; minPasses?: string }) => {
+      const minimum = options.minPasses === undefined ? 0 : Number(options.minPasses);
+      if (!Number.isSafeInteger(minimum) || minimum < 0 || minimum > 10_000) {
+        throw new Error('Minimum matrix passes must be a nonnegative safe integer');
+      }
       const results = await runtime.matrix(options.profile, options.seed);
       const passed = results.filter((result) => result.status === 'passed').length;
       const failed = results.filter((result) => result.status === 'failed').length;
@@ -206,6 +211,12 @@ export async function runCli(
         `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure\n`,
       );
       if (failed > 0) exitCode = 1;
+      if (passed < minimum) {
+        io.stderr(
+          `matrix ${options.profile} requires at least ${minimum} passing pairs; observed ${passed}\n`,
+        );
+        exitCode = 1;
+      }
     });
 
   program

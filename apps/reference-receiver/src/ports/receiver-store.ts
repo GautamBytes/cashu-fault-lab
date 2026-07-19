@@ -1,5 +1,6 @@
 import type { DeliveryReceipt } from '@cashu-fault-lab/delivery-core';
 import type {
+  AcceptDeliveryCommand,
   CommitSettlement,
   CreatePaymentRequest,
   DeliveryRecord,
@@ -11,6 +12,11 @@ import type {
 
 export interface ReceiverStore {
   createRequest(input: CreatePaymentRequest): Promise<PaymentRequestRecord>;
+  preflight(command: AcceptDeliveryCommand, now: number): Promise<DeliveryRecord | undefined>;
+  withRedemptionLock<T>(
+    deliveryId: string,
+    operation: (lockedStore: ReceiverStore) => Promise<T>,
+  ): Promise<{ readonly acquired: false } | { readonly acquired: true; readonly value: T }>;
   prepare(input: PrepareDelivery): Promise<PrepareResult>;
   markMintSent(deliveryId: string): Promise<DeliveryReceipt>;
   settle(input: CommitSettlement): Promise<DeliveryReceipt>;

@@ -16,6 +16,7 @@ import {
   type PrepareResult,
 } from '../domain/types.js';
 import type { ExactSwapPlanView, ReceiverStore } from '../ports/receiver-store.js';
+import { isSameDeliveryBinding, validateRequestBinding } from '../domain/request-binding.js';
 
 interface StoreState {
   readonly requests: Map<string, PaymentRequestRecord>;
@@ -83,6 +84,7 @@ function sameDelivery(left: DeliveryRecord, input: PrepareDelivery): boolean {
 export class MemoryReceiverStore implements ReceiverStore {
   #state = emptyState();
   #tail: Promise<void> = Promise.resolve();
+  readonly #redemptionLocks = new Set<string>();
 
   async createRequest(input: CreatePaymentRequest): Promise<PaymentRequestRecord> {
     const id = parseProtocolId(input.id);
@@ -91,7 +93,7 @@ export class MemoryReceiverStore implements ReceiverStore {
     if (typeof input.unit !== 'string' || input.unit.length === 0 || input.mints.length === 0) {
       throw new ReceiverDomainError('INVALID_REQUEST', 'Request unit and mint set are required');
     }
-    const mints = [...new Set(input.mints.map(normalizeMintUrl))];
+    const mints = [...new Set(input.mints.map(normalizeMintUrl))].sort();
     const record: PaymentRequestRecord = {
       id,
       amount: input.amount,
@@ -110,33 +112,51 @@ export class MemoryReceiverStore implements ReceiverStore {
     });
   }
 
+  async preflight(
+    command: PrepareDelivery['command'],
+    now: number,
+  ): Promise<DeliveryRecord | undefined> {
+    return this.#transaction((draft) => {
+      const previous = draft.deliveries.get(command.payload.delivery.id);
+      if (previous) {
+        if (!isSameDeliveryBinding(previous, command)) {
+          throw new ReceiverDomainError('DELIVERY_CONFLICT', 'Delivery ID is already bound');
+        }
+        return structuredClone(previous);
+      }
+      const request = draft.requests.get(command.payload.id);
+      if (!request) throw new ReceiverDomainError('REQUEST_NOT_FOUND', 'Payment request not found');
+      validateRequestBinding(request, command, now);
+      const reservation = draft.requestReservations.get(request.id);
+      if (request.singleUse && reservation && reservation !== command.payload.delivery.id) {
+        throw new ReceiverDomainError(
+          'SINGLE_USE_CONFLICT',
+          'Single-use request is already claimed',
+        );
+      }
+      return undefined;
+    });
+  }
+
+  async withRedemptionLock<T>(
+    deliveryId: string,
+    operation: (lockedStore: ReceiverStore) => Promise<T>,
+  ): Promise<{ readonly acquired: false } | { readonly acquired: true; readonly value: T }> {
+    if (this.#redemptionLocks.has(deliveryId)) return { acquired: false };
+    this.#redemptionLocks.add(deliveryId);
+    try {
+      return { acquired: true, value: await operation(this) };
+    } finally {
+      this.#redemptionLocks.delete(deliveryId);
+    }
+  }
+
   async prepare(input: PrepareDelivery): Promise<PrepareResult> {
     return this.#transaction((draft) => {
       const payload = input.command.payload;
       const request = draft.requests.get(payload.id);
       if (!request) throw new ReceiverDomainError('REQUEST_NOT_FOUND', 'Payment request not found');
-      assertSafeInteger(input.now, 'Current time');
-      if (request.expiresAt < input.now - 60) {
-        throw new ReceiverDomainError('REQUEST_EXPIRED', 'Payment request has expired');
-      }
-      if (payload.delivery.expiresAt < input.now - 60) {
-        throw new ReceiverDomainError('DELIVERY_EXPIRED', 'Delivery has expired');
-      }
-      if (payload.delivery.createdAt > input.now + 60) {
-        throw new ReceiverDomainError(
-          'DELIVERY_TIME_INVALID',
-          'Delivery creation time is too far in the future',
-        );
-      }
-      if (payload.delivery.expiresAt !== request.expiresAt) {
-        throw new ReceiverDomainError('REQUEST_MISMATCH', 'Delivery expiry does not match request');
-      }
-      if (payload.unit !== request.unit) {
-        throw new ReceiverDomainError('UNIT_MISMATCH', 'Delivery unit does not match request');
-      }
-      if (!request.mints.includes(payload.mint)) {
-        throw new ReceiverDomainError('MINT_MISMATCH', 'Delivery mint is not accepted');
-      }
+      validateRequestBinding(request, input.command, input.now);
       if (input.netAmount !== request.amount) {
         throw new ReceiverDomainError('AMOUNT_MISMATCH', 'Delivery amount does not match request');
       }

@@ -99,6 +99,7 @@ function commandView(
 const OBSERVATION_FIELDS: Readonly<Record<string, readonly string[]>> = {
   request_observed: ['requestId', 'singleUse'],
   delivery_attempted: ['requestId', 'deliveryId', 'payloadHash', 'proofSetHash', 'transport'],
+  redemption_started: ['deliveryId', 'proofSetHash'],
   mint_proofs_state: ['proofSetHash', 'state'],
   receiver_settled: ['deliveryId', 'replacementPlanHash'],
   merchant_credited: ['creditId', 'requestId', 'deliveryId', 'amount', 'unit'],

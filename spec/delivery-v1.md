@@ -104,6 +104,8 @@ Before a swap, the receiver MUST durably store deterministic output derivation s
 2. NUT-09 restore using the persisted derivation state;
 3. NUT-07 proof-state evidence to distinguish unspent, pending, and spent inputs.
 
+NUT-07 is snapshot evidence, not an idempotency fence. After an ambiguous swap, even an all-`UNSPENT` response MUST NOT authorize a new swap request. The receiver may replay only the exact request under an active NUT-19 cache guarantee; otherwise it remains recovery-blocked until NUT-09 or NUT-19 recovers the intended outputs.
+
 If inputs may have been consumed but outputs are not yet recovered, the receipt stays `processing/recovery_blocked`. It MUST NOT become rejected and MUST NOT create a merchant credit.
 
 ## Receipts

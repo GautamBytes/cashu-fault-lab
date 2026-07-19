@@ -52,6 +52,7 @@ export class MockMintServer {
       readonly nut09: boolean;
       readonly nut19Ttl: number | null;
       readonly inputFeePpk?: number;
+      readonly keysUnit?: string;
     },
   ) {
     this.#server = createServer((request, response) => {
@@ -127,7 +128,9 @@ export class MockMintServer {
         return;
       }
       json(response, {
-        keysets: [{ id: mockKeysetId, unit: 'sat', keys: { '8': publicKey } }],
+        keysets: [
+          { id: mockKeysetId, unit: this.options.keysUnit ?? 'sat', keys: { '8': publicKey } },
+        ],
       });
       return;
     }

@@ -7,7 +7,10 @@ import {
   sendPayment,
   type PaymentTransport,
   type ReservedProofSet,
+  type SenderDeliveryRecord,
   type SenderPaymentRequest,
+  type SenderState,
+  type SenderStateOperations,
   type SenderWallet,
   type TransportResult,
 } from '../src/index.js';
@@ -59,7 +62,9 @@ function receipt(
 
 class FakeWallet implements SenderWallet {
   createdProofSets = 0;
+  recoveryRequiredCalls = 0;
   readonly statuses = new Map<string, string>();
+  terminalFailure: Error | undefined;
 
   async reserveExact(): Promise<ReservedProofSet> {
     this.createdProofSets += 1;
@@ -67,14 +72,17 @@ class FakeWallet implements SenderWallet {
   }
 
   async markSettled(selectedDeliveryId: string): Promise<void> {
+    if (this.terminalFailure) throw this.terminalFailure;
     this.statuses.set(selectedDeliveryId, 'released-settled');
   }
 
   async releaseRejected(selectedDeliveryId: string): Promise<void> {
+    if (this.terminalFailure) throw this.terminalFailure;
     this.statuses.set(selectedDeliveryId, 'released-rejected');
   }
 
   async markRecoveryRequired(selectedDeliveryId: string): Promise<void> {
+    this.recoveryRequiredCalls += 1;
     this.statuses.set(selectedDeliveryId, 'recovery-required');
   }
 
@@ -86,23 +94,41 @@ class FakeWallet implements SenderWallet {
 class FakeTransport implements PaymentTransport {
   readonly payloads: Uint8Array[] = [];
   readonly targets: string[] = [];
-  readonly results: Array<TransportResult | Error> = [];
+  readonly results: Array<TransportResult | Error | Promise<TransportResult>> = [];
+  onSend: (() => void) | undefined;
 
   async send(payload: Uint8Array, target: { readonly target: string }): Promise<TransportResult> {
     this.payloads.push(Uint8Array.from(payload));
     this.targets.push(target.target);
-    const result = this.results.shift();
+    this.onSend?.();
+    const result = await this.results.shift();
     if (result instanceof Error) throw result;
     return result ?? { kind: 'no_response' };
   }
 }
 
-function deps(wallet = new FakeWallet(), transport = new FakeTransport()) {
+function stateView(state: SenderState): SenderState {
+  return {
+    withDeliveryLock: <T>(
+      selectedDeliveryId: string,
+      operation: (lockedState: SenderStateOperations) => Promise<T>,
+    ) => state.withDeliveryLock(selectedDeliveryId, operation),
+    create: (record: SenderDeliveryRecord) => state.create(record),
+    get: (selectedDeliveryId: string) => state.get(selectedDeliveryId),
+    save: (record: SenderDeliveryRecord) => state.save(record),
+  };
+}
+
+function deps(
+  wallet = new FakeWallet(),
+  transport = new FakeTransport(),
+  state: SenderState = new InMemorySenderState(),
+) {
   const delays: number[] = [];
   return {
     wallet,
     transport,
-    state: new InMemorySenderState(),
+    state,
     now: () => now,
     generateDeliveryId: () => deliveryId as ProtocolId,
     sleep: async (milliseconds: number) => {
@@ -239,6 +265,154 @@ describe('sendPayment', () => {
     expect(Buffer.from(setup.transport.payloads[0]!).equals(setup.transport.payloads[1]!)).toBe(
       true,
     );
+  });
+
+  it.each([
+    ['settled', 'released-settled'],
+    ['rejected', 'released-rejected'],
+  ] as const)(
+    'reconciles a persisted %s state with the wallet on resume',
+    async (status, walletStatus) => {
+      const setup = deps();
+      setup.transport.results.push({
+        kind: 'receipt',
+        receipt: receipt(status, 1, status),
+      });
+      await sendPayment(request(), setup, { seed: `terminal-${status}`, maxAttempts: 1 });
+      setup.wallet.statuses.delete(deliveryId);
+
+      const outcome = await resumePayment(deliveryId, setup, {
+        seed: `terminal-${status}`,
+        maxAttempts: 1,
+      });
+
+      expect(outcome.status).toBe(status);
+      expect(setup.wallet.reservation(deliveryId)).toBe(walletStatus);
+      expect(setup.transport.payloads).toHaveLength(1);
+      expect(setup.wallet.createdProofSets).toBe(1);
+    },
+  );
+
+  it('serializes concurrent resumes so a no-response cannot regress settlement', async () => {
+    const wallet = new FakeWallet();
+    const transport = new FakeTransport();
+    const sharedState = new InMemorySenderState();
+    const setup = deps(wallet, transport, stateView(sharedState));
+    transport.results.push({ kind: 'no_response' });
+    await sendPayment(request(), setup, { seed: 'concurrent-resume', maxAttempts: 1 });
+    transport.results.push(
+      { kind: 'receipt', receipt: receipt('settled', 1, 'settled') },
+      { kind: 'no_response' },
+    );
+    const otherProcess = deps(wallet, transport, stateView(sharedState));
+
+    const outcomes = await Promise.all([
+      resumePayment(deliveryId, setup, { seed: 'concurrent-resume-a', maxAttempts: 1 }),
+      resumePayment(deliveryId, otherProcess, { seed: 'concurrent-resume-b', maxAttempts: 1 }),
+    ]);
+
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['settled', 'settled']);
+    expect((await setup.state.get(deliveryId))?.status).toBe('settled');
+    expect(setup.wallet.reservation(deliveryId)).toBe('released-settled');
+    expect(transport.payloads).toHaveLength(2);
+  });
+
+  it('serializes an initial send and a concurrent resume through shared sender state', async () => {
+    const wallet = new FakeWallet();
+    const sharedState = new InMemorySenderState();
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let releaseFirst!: (result: TransportResult) => void;
+    const firstBlocked = new Promise<TransportResult>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const transport = new FakeTransport();
+    transport.onSend = markStarted;
+    transport.results.push(firstBlocked, { kind: 'no_response' });
+    const sender = deps(wallet, transport, stateView(sharedState));
+    const recoveringProcess = deps(wallet, transport, stateView(sharedState));
+
+    const sending = sendPayment(request(), sender, { seed: 'concurrent-send', maxAttempts: 1 });
+    await started;
+    const resuming = resumePayment(deliveryId, recoveringProcess, {
+      seed: 'concurrent-resume',
+      maxAttempts: 1,
+    });
+    await Promise.resolve();
+    releaseFirst({ kind: 'receipt', receipt: receipt('settled', 1, 'settled') });
+
+    const outcomes = await Promise.all([sending, resuming]);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['settled', 'settled']);
+    expect((await sharedState.get(deliveryId))?.status).toBe('settled');
+    expect(wallet.reservation(deliveryId)).toBe('released-settled');
+    expect(transport.payloads).toHaveLength(1);
+  });
+
+  it('rejects a generated delivery-ID collision before reserving another proof set', async () => {
+    const setup = deps();
+    setup.transport.results.push({
+      kind: 'receipt',
+      receipt: receipt('settled', 1, 'settled'),
+    });
+    await sendPayment(request(), setup, { seed: 'first-delivery', maxAttempts: 1 });
+
+    await expect(
+      sendPayment(request(), setup, { seed: 'colliding-delivery', maxAttempts: 1 }),
+    ).rejects.toThrowError(/delivery ID already exists/i);
+
+    expect(setup.wallet.createdProofSets).toBe(1);
+    expect(setup.wallet.recoveryRequiredCalls).toBe(0);
+    expect(setup.wallet.reservation(deliveryId)).toBe('released-settled');
+    expect(setup.transport.payloads).toHaveLength(1);
+  });
+
+  it.each(['settled', 'rejected'] as const)(
+    'keeps a persisted %s receipt terminal when wallet reconciliation fails',
+    async (status) => {
+      const wallet = new FakeWallet();
+      wallet.terminalFailure = new Error('wallet transition failed');
+      const transport = new FakeTransport();
+      transport.results.push({ kind: 'receipt', receipt: receipt(status, 1, status) });
+      const setup = deps(wallet, transport);
+
+      await expect(
+        sendPayment(request(), setup, { seed: `wallet-failure-${status}`, maxAttempts: 1 }),
+      ).rejects.toThrowError(/wallet transition failed/i);
+
+      const persisted = await setup.state.get(deliveryId);
+      expect(persisted?.status).toBe(status);
+      expect(persisted?.receipt?.status).toBe(status);
+      expect(wallet.recoveryRequiredCalls).toBe(0);
+
+      wallet.terminalFailure = undefined;
+      const outcome = await resumePayment(deliveryId, setup, {
+        seed: `wallet-reconcile-${status}`,
+        maxAttempts: 1,
+      });
+      expect(outcome.status).toBe(status);
+      expect(transport.payloads).toHaveLength(1);
+      expect(wallet.reservation(deliveryId)).toBe(
+        status === 'settled' ? 'released-settled' : 'released-rejected',
+      );
+    },
+  );
+
+  it('marks the wallet recovery-required when a nonterminal attempt fails unexpectedly', async () => {
+    const setup = deps();
+    setup.transport.results.push({ kind: 'no_response' });
+    setup.sleep = async () => {
+      throw new Error('retry scheduler failed');
+    };
+
+    await expect(
+      sendPayment(request(), setup, { seed: 'retry-failure', maxAttempts: 2 }),
+    ).rejects.toThrowError(/retry scheduler failed/i);
+
+    expect((await setup.state.get(deliveryId))?.status).toBe('sending');
+    expect(setup.wallet.recoveryRequiredCalls).toBe(1);
+    expect(setup.wallet.reservation(deliveryId)).toBe('recovery-required');
   });
 
   it('counts a malformed receipt transport invocation exactly once', async () => {

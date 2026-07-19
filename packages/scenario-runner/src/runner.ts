@@ -63,6 +63,14 @@ export interface ScenarioError {
   readonly message: string;
 }
 
+function sameFailure(left: ScenarioError, right: ScenarioRunResult): boolean {
+  return (
+    right.status === 'failed' &&
+    right.error.name === left.name &&
+    right.error.message === left.message
+  );
+}
+
 export type ScenarioRunResult =
   | { readonly status: 'passed'; readonly artifact: FailureArtifact }
   | {
@@ -179,14 +187,25 @@ export class ScenarioRunner {
 
   async shrink(artifact: FailureArtifact, runLimit = 100): Promise<FailureArtifact> {
     assertReplayableArtifact(artifact);
+    const baseline = await this.replay(artifact);
+    if (baseline.status !== 'failed') {
+      throw new Error('Artifact does not reproduce a failure and cannot be minimized');
+    }
     const commands = await minimizeFailingCommands(
       artifact.commands,
-      async (candidate) =>
-        (await this.run({ name: artifact.scenario, commands: candidate }, artifact.seed)).status ===
-        'failed',
+      async (candidate) => {
+        const result = await this.run(
+          { name: artifact.scenario, commands: candidate },
+          artifact.seed,
+        );
+        return sameFailure(baseline.error, result);
+      },
       runLimit,
     );
     const result = await this.run({ name: artifact.scenario, commands }, artifact.seed);
+    if (!sameFailure(baseline.error, result)) {
+      throw new Error('Minimized trace did not preserve the original failure');
+    }
     return result.artifact;
   }
 

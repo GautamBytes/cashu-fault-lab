@@ -1,6 +1,6 @@
 # Cashu Fault Lab Invariants
 
-These invariants are evaluated from durable adapter, mint, and runner evidence. A scenario cannot pass from an HTTP status alone.
+These are release-conformance invariants. A scenario may claim only applicable invariants backed by durable adapter, mint, and runner evidence; an HTTP status alone is insufficient. Current developer-preview coverage and release gaps are listed in the README.
 
 ## Safety
 

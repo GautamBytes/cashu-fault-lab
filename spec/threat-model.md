@@ -27,7 +27,9 @@ The mint is authoritative for proof state and signatures, but its network can fa
 
 ## Fault and attacker capabilities
 
-The harness can duplicate, drop, delay, reorder, truncate, and replay delivery messages and responses. It can close connections before or after receiver persistence, mint request transmission, mint response receipt, output storage, and ledger credit. It can restart sender, receiver, gateway, and adapter processes at named crash points.
+The release target covers duplicate, drop, delay, reorder, truncate, and replay of delivery messages and responses. It also covers connection loss around receiver persistence, mint request transmission, mint response receipt, output storage, and ledger credit, plus sender, receiver, gateway, and adapter process restarts at named crash points.
+
+Current developer-preview coverage is narrower. Packaged reference lanes cover request/response loss, duplication, cross-transport retries, and an in-memory mint-response-loss recovery flow. PostgreSQL integration tests cover durable prepared-state recovery, ambiguous mint response recovery, atomic credit, and concurrent-worker leasing. Delay/reorder exist as gateway and relay component tests. Full named process restarts, packaged delay/reorder, sender restart, and a real Nostr relay remain release-gated.
 
 Inputs may include:
 
@@ -64,6 +66,7 @@ Inputs may include:
 ## Residual risks
 
 - A mint that consumes inputs but supports neither usable NUT-19 caching nor recoverable NUT-09 state may leave a payment recovery-blocked indefinitely.
+- Without active NUT-19 replay, a crash after durable `mint_sent` but before network dispatch is indistinguishable from an in-flight request. The receiver chooses safety and stays recovery-blocked even if a NUT-07 snapshot reports every input unspent.
 - Incorrect wallet proof-`Y` derivation can weaken cross-delivery duplicate evidence; real-mint checks remain authoritative.
 - Clock skew beyond the bounded allowance can reject otherwise valid attempts.
 - Database loss or rollback can defeat local idempotency unless deployment-level durability and backups are sound.

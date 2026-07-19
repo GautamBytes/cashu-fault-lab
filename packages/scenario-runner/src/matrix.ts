@@ -7,6 +7,7 @@ export interface MatrixParticipant {
 
 export type MatrixExecutionResult =
   | { readonly ok: true; readonly evidence?: Readonly<Record<string, unknown>> }
+  | { readonly ok: null; readonly reason: string }
   | { readonly ok: false; readonly code: string; readonly reason: string };
 
 export type MatrixExecutor = (
@@ -92,6 +93,10 @@ export class CompatibilityMatrix {
             code: 'MATRIX_EXECUTION_ERROR',
             reason: 'Matrix executor failed',
           });
+          continue;
+        }
+        if (execution.ok === null) {
+          results.push({ ...identity, status: 'not_applicable', reason: execution.reason });
           continue;
         }
         if (execution.ok) {

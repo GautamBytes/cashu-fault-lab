@@ -27,6 +27,29 @@ async function fixture(singleUse = true) {
 }
 
 describe('acceptDelivery', () => {
+  it('treats a request mint set as order-independent', async () => {
+    const store = new MemoryReceiverStore();
+    const first = await store.createRequest({
+      id: requestId,
+      amount: 8,
+      unit: 'sat',
+      mints: ['https://mint-b.example', 'https://mint-a.example'],
+      singleUse: true,
+      expiresAt: now + 900,
+    });
+
+    await expect(
+      store.createRequest({
+        id: requestId,
+        amount: 8,
+        unit: 'sat',
+        mints: ['https://mint-a.example', 'https://mint-b.example'],
+        singleUse: true,
+        expiresAt: now + 900,
+      }),
+    ).resolves.toEqual(first);
+  });
+
   it('persists a plan before mint use and atomically settles one credit', async () => {
     const deps = await fixture();
     const receipt = await acceptDelivery(
@@ -59,6 +82,43 @@ describe('acceptDelivery', () => {
     expect(await deps.store.credits()).toHaveLength(1);
   });
 
+  it('returns a settled duplicate without contacting proof or mint services again', async () => {
+    const deps = await fixture();
+    const command = { payload: payload(requestId, deliveryId, now), payloadHash: 'a'.repeat(64) };
+    const first = await acceptDelivery(command, { ...deps, now: () => now });
+    deps.verifier.inspect = async () => {
+      throw new Error('proof service is offline');
+    };
+    deps.mint.prepareSwap = async () => {
+      throw new Error('mint metadata is offline');
+    };
+
+    await expect(acceptDelivery(command, { ...deps, now: () => now })).resolves.toEqual(first);
+    expect(deps.mint.swapCalls).toBe(1);
+    expect(await deps.store.credits()).toHaveLength(1);
+  });
+
+  it('rejects a request mint mismatch before proof or mint network access', async () => {
+    const deps = await fixture();
+    deps.verifier.inspect = async () => {
+      throw new Error('proof service must not be called');
+    };
+    deps.mint.prepareSwap = async () => {
+      throw new Error('mint service must not be called');
+    };
+    const hostile = payload(requestId, deliveryId, now, {
+      mint: 'http://127.0.0.1:7777',
+    });
+
+    await expect(
+      acceptDelivery(
+        { payload: hostile, payloadHash: 'b'.repeat(64) },
+        { ...deps, now: () => now },
+      ),
+    ).rejects.toMatchObject({ code: 'MINT_MISMATCH' });
+    expect(await deps.store.settlementPlans()).toHaveLength(0);
+  });
+
   it('rejects delivery ID mutation and proof reuse under another delivery', async () => {
     const deps = await fixture(false);
     await acceptDelivery(
@@ -86,6 +146,12 @@ describe('acceptDelivery', () => {
       { payload: payload(requestId, deliveryId, now), payloadHash: 'a'.repeat(64) },
       { ...deps, now: () => now },
     );
+    deps.verifier.inspect = async () => {
+      throw new Error('proof service must not be called for a claimed single-use request');
+    };
+    deps.mint.prepareSwap = async () => {
+      throw new Error('mint service must not be called for a claimed single-use request');
+    };
     const other = payload(requestId, otherDeliveryId, now, {
       proofs: [{ amount: 8, id: '00aa', secret: 'secret-b', C: '03bb' }],
     });
@@ -168,6 +234,26 @@ describe('acceptDelivery', () => {
     ).rejects.toMatchObject({ code: 'DELIVERY_TIME_INVALID' });
   });
 
+  it('rechecks expiry after proof and mint preparation before durable acceptance', async () => {
+    const deps = await fixture(false);
+    let clock = now;
+    const prepareSwap = deps.mint.prepareSwap.bind(deps.mint);
+    deps.mint.prepareSwap = async (draft) => {
+      const plan = await prepareSwap(draft);
+      clock = now + 961;
+      return plan;
+    };
+
+    await expect(
+      acceptDelivery(
+        { payload: payload(requestId, deliveryId, now), payloadHash: 'a'.repeat(64) },
+        { ...deps, now: () => clock },
+      ),
+    ).rejects.toMatchObject({ code: 'REQUEST_EXPIRED' });
+    expect(deps.mint.swapCalls).toBe(0);
+    expect(await deps.store.settlementPlans()).toHaveLength(0);
+  });
+
   it('keeps ambiguous consumption recovery-blocked, then restores and settles', async () => {
     const deps = await fixture();
     deps.mint.mode = 'timeout_after_commit';
@@ -204,6 +290,27 @@ describe('acceptDelivery', () => {
     await expect(
       acceptDelivery({ payload: other, payloadHash: 'b'.repeat(64) }, { ...deps, now: () => now }),
     ).rejects.toMatchObject({ code: 'PROOF_CONFLICT' });
+  });
+
+  it('does not redispatch an ambiguous swap from an unspent state snapshot', async () => {
+    const deps = await fixture(false);
+    deps.mint.swap = async () => {
+      deps.mint.swapCalls += 1;
+      throw new MintGatewayError('MINT_TIMEOUT', 'mint request outcome is unknown', true);
+    };
+    const command = { payload: payload(requestId, deliveryId, now), payloadHash: 'a'.repeat(64) };
+
+    await expect(acceptDelivery(command, { ...deps, now: () => now })).resolves.toMatchObject({
+      status: 'processing',
+      detailCode: 'recovery_blocked',
+    });
+    await expect(recoverDelivery(deliveryId, { ...deps, now: () => now })).resolves.toMatchObject({
+      status: 'processing',
+      detailCode: 'recovery_blocked',
+    });
+
+    expect(deps.mint.swapCalls).toBe(1);
+    expect(await deps.store.credits()).toHaveLength(0);
   });
 
   it('safely rejects pre-commit timeouts and releases claims', async () => {

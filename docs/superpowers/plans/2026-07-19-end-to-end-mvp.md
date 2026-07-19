@@ -1029,7 +1029,7 @@ git commit -m "feat: add cross-language Cashu adapter matrix"
 - Create: `scenarios/security/ssrf.json`
 - Create: `scenarios/security/cors.json`
 - Create: `scenarios/security/malformed-input.json`
-- Create: `scenarios/crash-recovery/all-failpoints.json`
+- Create: `scenarios/crash-recovery/mint-response-lost.json`
 - Create: `scenarios/concurrency/cross-transport-storm.json`
 - Create: `.github/workflows/nightly.yml`
 - Create: `.github/workflows/weekly.yml`
@@ -1061,11 +1061,11 @@ Run: `pnpm lab run security/malformed-input && pnpm lab run security/redirect-le
 
 Expected: scenarios/CLI coverage missing.
 
-- [x] **Step 3: Implement complete scenario lanes**
+- [ ] **Step 3: Implement complete scenario lanes**
 
 PR: schemas/vectors/unit, one PostgreSQL, one real mint, HTTP/Nostr golden paths, response-loss, ten fixed seeds. Nightly: all supported pairs, two mints, every crash point, concurrent duplicate storms, 100 seeds. Weekly: pairwise faults, long recovery, malformed CBOR/Bech32m/JSON, SSRF/DNS rebinding, DLEQ/NUT-10 failures, browser CORS, real relay.
 
-- [x] **Step 4: Run complete local gate**
+- [ ] **Step 4: Run complete local gate**
 
 Run:
 
@@ -1080,7 +1080,7 @@ cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
 cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path adapters/cdk/Cargo.toml
 pnpm lab run retry/response-lost --sender reference-ts --receiver reference-ts
-pnpm lab run crash-recovery/all-failpoints --sender reference-ts --receiver reference-ts
+pnpm lab run crash-recovery/mint-response-lost --sender reference-ts --receiver reference-ts
 pnpm lab matrix --profile delivery-v1
 pnpm lab report
 ```
@@ -1106,7 +1106,7 @@ git commit -m "ci: enforce end-to-end Cashu fault lab gate"
 - [x] Lost mint response plus restart recovers exact outputs through NUT-19 or NUT-09.
 - [x] NUT-07 `SPENT` alone never creates credit.
 - [x] HTTP and NIP-17 delivery of same logical payment have one effect.
-- [x] cashu-ts and CDK adapters pass supported T0-T3 evidence.
+- [ ] cashu-ts and CDK adapters pass supported T0-T3 evidence.
 - [x] JSON/JUnit/HTML reports replay and contain no bearer material.
-- [x] PR/nightly/weekly/release gates match design.
+- [ ] PR/nightly/weekly/release gates match design.
 - [x] No new NUT required for harness operation; experimental receipt profile remains versioned until interoperability evidence supports standardization.

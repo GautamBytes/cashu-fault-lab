@@ -80,6 +80,17 @@ describe('CashuTsProofVerifier', () => {
     ).rejects.toThrowError(/denomination/i);
   });
 
+  it('rejects contradictory units for the same keyset ID', async () => {
+    const mint = new MockMintServer({ nut09: true, nut19Ttl: null, keysUnit: 'usd' });
+    servers.push(mint);
+    await mint.start();
+    const verifier = new CashuTsProofVerifier({ proofClaimKey: Buffer.alloc(32, 7) });
+
+    await expect(verifier.inspect({ payload: deliveryPayload(mint.url) })).rejects.toThrowError(
+      /keyset unit/i,
+    );
+  });
+
   it('rejects an unsigned NUT-10 P2PK proof', async () => {
     const mint = new MockMintServer({ nut09: true, nut19Ttl: null });
     servers.push(mint);

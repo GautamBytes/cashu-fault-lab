@@ -157,7 +157,6 @@ class SecurityDriver implements ScenarioDriver {
     return {
       sender: 'reference-ts',
       receiver: 'reference-ts',
-      evidenceTier: 'T3',
       securityProbe: this.mode,
     };
   }

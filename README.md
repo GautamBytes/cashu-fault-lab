@@ -1,6 +1,8 @@
 # Cashu Fault Lab
 
-Cashu Fault Lab checks payment delivery across retries, duplicates, transport loss, and receiver restart. It proves one logical payment creates one receiver settlement plan and one merchant credit.
+Cashu Fault Lab checks payment delivery across retries, duplicates, transport loss, and receiver recovery. Packaged synthetic lanes exercise one logical redemption and one merchant credit but claim only T0 preview evidence. PostgreSQL integration tests verify durable receiver recovery at implemented crash boundaries.
+
+This is not yet broad wallet certification. Independent funded adapter pairs and the full named crash-boundary suite remain release-gated.
 
 The lab implements an experimental `cashu-delivery-v1` application profile on existing Cashu and Nostr protocols. Harness operation does not require a new NUT. See [ADR 001](docs/adrs/001-delivery-semantics.md) for the standardization boundary.
 
@@ -38,7 +40,7 @@ pnpm lab run scenarios/retry/response-lost.json \
   --receiver reference-ts \
   --seed demo
 
-pnpm lab run scenarios/crash-recovery/all-failpoints.json --seed crash-demo
+pnpm lab run scenarios/crash-recovery/mint-response-lost.json --seed crash-demo
 pnpm lab run scenarios/concurrency/cross-transport-storm.json --seed storm-demo
 ```
 
@@ -61,9 +63,22 @@ pnpm lab matrix --profile legacy-nut18
 pnpm lab matrix --profile nut26-nostr
 ```
 
-`delivery-v1` runs supported receipt and idempotency pairs. `legacy-nut18` checks pinned `creqA` codec vectors. `nut26-nostr` reports the pinned NIP-04/raw-key versus NIP-17/`nprofile` mismatch as an expected failure.
+`delivery-v1` runs configured receipt and idempotency pairs. `legacy-nut18` reports `N/A` until executable pair adapters are wired; pinned `creqA` vectors remain covered by adapter contract tests. `nut26-nostr` reports the pinned NIP-04/raw-key versus NIP-17/`nprofile` mismatch as an expected failure.
 
-The bundled cashu-ts and CDK adapters claim T0 codec evidence. They return `N/A` for funded operations until you inject wallet or receiver implementations. The reference TypeScript pair provides T3 fault and settlement evidence.
+Bundled cashu-ts and CDK adapters claim T0 codec evidence. They return `N/A` for funded operations until wallet or receiver implementations are injected. Packaged reference lanes also remain T0 because their mint and wallet evidence is synthetic. Release requires at least two passing, real-mint `delivery-v1` pairs, so it remains blocked until an independent implementation is executable.
+
+## Current coverage
+
+| Area                                                                  | Developer-preview evidence                                                                                      | Release gap                                                |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/NIP-17 retry, loss, duplication, and cross-transport convergence | Packaged synthetic T0 lanes                                                                                     | Independent funded adapter pair, real mint, and real relay |
+| Receiver persistence and recovery                                     | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, and concurrent-worker leasing | Every named process-crash boundary                         |
+| Delay and reorder                                                     | HTTP gateway and Nostr relay component tests                                                                    | Packaged end-to-end lanes with injected clock              |
+| Sender restart                                                        | Durable state/reservation ports and terminal-state reconciliation                                               | Bundled durable sender-store adapter and restart lane      |
+
+The packaged `mint-response-lost` scenario exercises recovery orchestration with in-memory fakes. Durable restart claims come only from PostgreSQL integration tests. Scenario artifacts are preview evidence; release-grade adapter/version/protocol-lock metadata remains part of the closed release gate.
+
+`SenderState.withDeliveryLock` is a correctness boundary for sender adapters. Durable implementations must serialize one delivery across processes and bind the callback's `get`/`create`/`save` operations to the same lock or database session; nested lock acquisition is forbidden. The bundled in-memory state provides only process-local serialization.
 
 ## Security lanes
 
@@ -90,7 +105,7 @@ Run one real-mint recovery test by setting `CFL_REAL_MINT_URL` to `http://127.0.
 ## Repository map
 
 - `packages/delivery-core`: pure delivery codecs, hashes, receipts, and conflict rules
-- `apps/reference-sender`: durable reservation and retry state
+- `apps/reference-sender`: sender state and retry interfaces; bundled stores are in-memory, so production adapters must provide durable reservation, receipt state, and cross-process delivery locking
 - `apps/reference-receiver`: transactional settlement, PostgreSQL, and recovery
 - `packages/scenario-runner`: virtual scheduler, oracle feed, fault lanes, and replay
 - `apps/http-fault-gateway` and `apps/nostr-fault-relay`: semantic transport faults

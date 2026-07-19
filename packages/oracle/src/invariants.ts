@@ -57,6 +57,7 @@ export function assertSafety(model: OracleModel): void {
   const requests = new Map<string, boolean>();
   const deliveries = new Map<string, DeliveryIdentity>();
   const proofOwners = new Map<string, string>();
+  const redemptionStarts = new Map<string, number>();
   const mayBeConsumed = new Set<string>();
   const settlementPlans = new Map<string, string>();
   const credits = new Map<string, OracleCredit>();
@@ -95,6 +96,18 @@ export function assertSafety(model: OracleModel): void {
           mayBeConsumed.add(observation.proofSetHash);
         }
         break;
+      case 'redemption_started': {
+        const identity = deliveries.get(observation.deliveryId);
+        if (!identity || identity.proofSetHash !== observation.proofSetHash) {
+          fail(`redemption for ${observation.deliveryId} does not match delivery identity`);
+        }
+        const count = (redemptionStarts.get(observation.deliveryId) ?? 0) + 1;
+        if (count > 1) {
+          fail(`redemption for ${observation.deliveryId} must start at most once`);
+        }
+        redemptionStarts.set(observation.deliveryId, count);
+        break;
+      }
       case 'receiver_settled': {
         const previous = settlementPlans.get(observation.deliveryId);
         if (previous !== undefined && previous !== observation.replacementPlanHash) {

@@ -77,6 +77,24 @@ class FakeDriver implements ScenarioDriver {
   }
 }
 
+class FailureSignatureDriver extends FakeDriver {
+  #configured = false;
+
+  override async reset(seed: string): Promise<void> {
+    await super.reset(seed);
+    this.#configured = false;
+  }
+
+  override async configureFault(target: string, rule: FaultRule): Promise<void> {
+    await super.configureFault(target, rule);
+    this.#configured = true;
+  }
+
+  override async send(): Promise<DriverSendResult> {
+    throw new Error(this.#configured ? 'target invariant failure' : 'unrelated setup failure');
+  }
+}
+
 const scenario: ScenarioSpec = {
   name: 'http-response-loss',
   commands: [
@@ -178,5 +196,46 @@ describe('ScenarioRunner', () => {
       /sensitive/i,
     );
     expect(driver.calls).toEqual([]);
+  });
+
+  it('redacts bearer material embedded inside error messages', async () => {
+    const driver = new FakeDriver();
+    driver.reset = async () => {
+      throw new Error('mint rejected embedded cashuAsecret-token material');
+    };
+
+    const result = await new ScenarioRunner(driver).run(scenario, 'seed-redaction');
+
+    expect(result.status).toBe('failed');
+    expect(JSON.stringify(result)).not.toContain('cashuAsecret-token');
+    if (result.status === 'failed') expect(result.error.message).toContain('[REDACTED]');
+  });
+
+  it('shrinks only traces that preserve the original failure signature', async () => {
+    const runner = new ScenarioRunner(new FailureSignatureDriver());
+    const original = await runner.run(
+      {
+        name: 'signature-preserving-shrink',
+        commands: [
+          {
+            type: 'configure_fault',
+            target: 'http',
+            rule: { kind: 'drop_response', occurrence: 1 },
+          },
+          { type: 'send', sender: 'sender-a', requestId: 'request-1' },
+        ],
+      },
+      'shrink-signature',
+    );
+    expect(original.status).toBe('failed');
+
+    const minimized = await runner.shrink(original.artifact);
+
+    expect(minimized.commands).toHaveLength(2);
+    const replayed = await runner.replay(minimized);
+    expect(replayed).toMatchObject({
+      status: 'failed',
+      error: { message: 'target invariant failure' },
+    });
   });
 });

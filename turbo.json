@@ -6,6 +6,7 @@
       "outputs": ["dist/**"]
     },
     "test": {
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "test:consumer": {
@@ -13,6 +14,7 @@
       "outputs": []
     },
     "typecheck": {
+      "dependsOn": ["^build"],
       "outputs": []
     }
   }

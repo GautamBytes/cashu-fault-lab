@@ -20,12 +20,14 @@ Use `spec/schemas/adapter-capabilities.schema.json` and the request and response
 
 ## Evidence tiers
 
-| Tier | Required evidence                                                           |
-| ---- | --------------------------------------------------------------------------- |
-| T0   | Decode and encode pinned public vectors                                     |
-| T1   | Send and receive through one declared transport                             |
-| T2   | Converge after request loss, response loss, delay, duplication, and restart |
-| T3   | Pass ledger and proof invariants against a real supported mint              |
+| Tier | Required evidence                                   |
+| ---- | --------------------------------------------------- |
+| T0   | Decode and encode pinned public vectors             |
+| T1   | Send and receive through one declared transport     |
+| T2   | Prove acquisition or recovery of replacement proofs |
+| T3   | Prove one durable merchant-ledger credit            |
+
+These tiers follow the canonical definitions in the [design](superpowers/specs/2026-07-19-cashu-fault-lab-design.md#34-evidence-tiers). Fault classes and real-mint execution are scenario requirements, not alternate meanings for an evidence tier.
 
 Declare each profile by role. Return HTTP `501` with `{ "status": "N/A", "reason": "..." }` when the adapter lacks funded wallet state or a profile. A matrix skips that pair. Do not return synthetic success.
 
@@ -34,6 +36,10 @@ Declare each profile by role. Return HTTP `501` with `{ "status": "N/A", "reason
 Create one delivery ID and reserve one proof set. Persist both before transport. Retries reuse the exact inner payload bytes. HTTP redirects stay disabled. HTTP relay or Nostr relay acceptance does not settle a payment; only a verified receiver receipt can settle sender state.
 
 A receiver binds a delivery ID to one payload hash. It rejects another payload under that ID before proof consumption. It also rejects the same proof set under another delivery ID without returning proof ownership details.
+
+### Sender state locking
+
+Treat `SenderState.withDeliveryLock` as a durable, per-delivery correctness boundary. Its lock must serialize every client and process that shares sender state for the callback's full lifetime, and the callback's scoped `get`, `create`, and `save` operations must use that same lock or database session. Reject nested lock acquisition. A process-local mutex, including `InMemorySenderState`, is suitable only for tests and single-process development.
 
 ## Nostr
 

@@ -31,8 +31,7 @@ function normalizedKey(value: string): string {
 }
 
 function redactString(value: string): string {
-  if (/^(cashu[AB]|nsec1)/i.test(value)) return REDACTED;
-  return value;
+  return value.replace(/(?:cashu[AB]|nsec1)[A-Za-z0-9_-]+/gi, REDACTED);
 }
 
 export function containsSensitiveData(value: unknown, seen = new WeakSet<object>()): boolean {

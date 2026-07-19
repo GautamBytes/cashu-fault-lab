@@ -39,8 +39,8 @@ jobs:
       - run: cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
       - run: cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path adapters/cdk/Cargo.toml
-      - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1
+      - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1 --min-passes 2
       - run: node apps/lab-cli/dist/bin.js matrix --profile legacy-nut18
       - run: node apps/lab-cli/dist/bin.js matrix --profile nut26-nostr
-      - run: node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/all-failpoints.json --seed release
+      - run: node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/mint-response-lost.json --seed release
       - run: node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed release
