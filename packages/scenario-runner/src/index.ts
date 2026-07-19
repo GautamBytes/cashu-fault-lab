@@ -14,6 +14,17 @@ export { runReferenceCrashScenario } from './reference-crash-lane.js';
 export { runReferenceSecurityScenario } from './reference-security-lane.js';
 export { runExternalDeliveryPair, type ExternalDeliveryPairInput } from './external-pair.js';
 export {
+  DirectExternalFaultController,
+  ExternalAdapterScenarioDriver,
+  type ExternalAdapterScenarioDriverOptions,
+  type ExternalFaultController,
+  type ExternalFaultEvidence,
+} from './external-adapter-driver.js';
+export {
+  HttpExternalFaultController,
+  type HttpExternalFaultControllerOptions,
+} from './external-http-fault-controller.js';
+export {
   CompatibilityMatrix,
   type MatrixCaseResult,
   type MatrixExecutionResult,

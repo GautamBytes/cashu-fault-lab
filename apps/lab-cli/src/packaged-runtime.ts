@@ -1,6 +1,10 @@
 import type { AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
 import {
   CompatibilityMatrix,
+  DirectExternalFaultController,
+  ExternalAdapterScenarioDriver,
+  HttpExternalFaultController,
+  ScenarioRunner,
   runExternalDeliveryPair,
   runReferenceDeliveryProbe,
   runReferenceHttpScenario,
@@ -8,6 +12,7 @@ import {
   runReferenceCrashScenario,
   runReferenceSecurityScenario,
   type FailureArtifact,
+  type ExternalFaultController,
   type MatrixCaseResult,
   type MatrixParticipant,
   type ScenarioRunResult,
@@ -30,6 +35,7 @@ export interface PackagedLabRuntimeOptions {
   readonly services?: LabServiceController;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly fetch?: typeof fetch;
+  readonly externalFaults?: ExternalFaultController;
 }
 
 class DockerComposeServiceController implements LabServiceController {
@@ -119,11 +125,28 @@ export class PackagedLabRuntime implements LabRuntime {
   readonly #services: LabServiceController;
   readonly #env: Readonly<Record<string, string | undefined>>;
   readonly #fetch: typeof fetch | undefined;
+  readonly #externalFaults: ExternalFaultController;
 
   constructor(options: PackagedLabRuntimeOptions = {}) {
     this.#services = options.services ?? new DockerComposeServiceController();
     this.#env = options.env ?? process.env;
     this.#fetch = options.fetch;
+    const faultUrl = this.#env.CFL_HTTP_FAULT_GATEWAY_URL;
+    const faultToken = this.#env.CFL_HTTP_FAULT_GATEWAY_TOKEN;
+    if ((faultUrl === undefined) !== (faultToken === undefined)) {
+      throw new Error(
+        'CFL_HTTP_FAULT_GATEWAY_URL and CFL_HTTP_FAULT_GATEWAY_TOKEN must be configured together',
+      );
+    }
+    this.#externalFaults =
+      options.externalFaults ??
+      (faultUrl !== undefined && faultToken !== undefined
+        ? new HttpExternalFaultController({
+            baseUrl: faultUrl,
+            token: faultToken,
+            ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
+          })
+        : new DirectExternalFaultController());
   }
 
   async up(profile: string): Promise<void> {
@@ -135,6 +158,46 @@ export class PackagedLabRuntime implements LabRuntime {
     seed: string,
     selection: LabSelection = { sender: 'reference-ts', receiver: 'reference-ts' },
   ): Promise<ScenarioRunResult> {
+    if (selection.adapterManifest !== undefined) {
+      let registry: ExternalAdapterRegistry;
+      try {
+        registry = await ExternalAdapterRegistry.load(selection.adapterManifest, this.#env, {
+          ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
+        });
+      } catch {
+        return failedScenario(scenario, seed, 'External adapter discovery failed');
+      }
+      const sender = registry.client(selection.sender);
+      const receiver = registry.client(selection.receiver);
+      if (sender === undefined || receiver === undefined) {
+        return failedScenario(
+          scenario,
+          seed,
+          `External adapter pair is not registered: ${selection.sender} -> ${selection.receiver}`,
+        );
+      }
+      const sends = scenario.commands.filter((command) => command.type === 'send');
+      const senderAliases = [...new Set(sends.map((command) => command.sender))];
+      const requestAliases = [...new Set(sends.map((command) => command.requestId))];
+      if (senderAliases.length !== 1 || requestAliases.length !== 1) {
+        return failedScenario(
+          scenario,
+          seed,
+          'External scenarios require one logical sender and one logical request',
+        );
+      }
+      const driver = new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: this.#externalFaults,
+        amount: 8,
+        unit: 'sat',
+        senderAlias: senderAliases[0]!,
+        requestAlias: requestAliases[0]!,
+      });
+      return new ScenarioRunner(driver).run(scenario, seed);
+    }
+
     if (selection.sender !== 'reference-ts' || selection.receiver !== 'reference-ts') {
       return failedScenario(
         scenario,

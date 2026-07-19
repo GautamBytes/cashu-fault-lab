@@ -71,18 +71,20 @@ describe('PackagedLabRuntime', () => {
   it('executes discovered external sender and receiver adapters', async () => {
     const requestId = 'AAECAwQFBgcICQoLDA0ODw';
     const deliveryId = 'EBESExQVFhcYGRobHB0eHw';
-    const receipt = {
-      profile: 'cashu-delivery-v1',
-      request_id: requestId,
-      delivery_id: deliveryId,
-      payload_hash: 'a'.repeat(64),
-      status: 'settled',
-      status_version: 2,
-      mint: 'https://mint.example',
-      unit: 'sat',
-      amount: 8,
-      detail_code: 'settled',
-    } as const;
+    let activeDeliveryId = deliveryId;
+    const receipt = () =>
+      ({
+        profile: 'cashu-delivery-v1',
+        request_id: requestId,
+        delivery_id: activeDeliveryId,
+        payload_hash: 'a'.repeat(64),
+        status: 'settled',
+        status_version: 2,
+        mint: 'https://mint.example',
+        unit: 'sat',
+        amount: 8,
+        detail_code: 'settled',
+      }) as const;
     const manifest: AdapterManifest = {
       schemaVersion: 1,
       adapters: [
@@ -125,13 +127,17 @@ describe('PackagedLabRuntime', () => {
             transports: [{ type: 'post', target: 'http://127.0.0.1:4102/pay' }],
           };
         }
-        if (url.pathname === '/v1/send') return receipt;
-        if (url.pathname === `/v1/deliveries/${deliveryId}`) return receipt;
+        if (url.pathname === '/v1/send') {
+          const input = JSON.parse(String(init?.body)) as { readonly deliveryId?: string };
+          activeDeliveryId = input.deliveryId ?? activeDeliveryId;
+          return receipt();
+        }
+        if (url.pathname.startsWith('/v1/deliveries/')) return receipt();
         if (url.pathname === '/v1/ledger') {
           return [
             {
               requestId,
-              deliveryId,
+              deliveryId: activeDeliveryId,
               amount: 8,
               unit: 'sat',
               creditCount: 1,
@@ -142,7 +148,7 @@ describe('PackagedLabRuntime', () => {
         if (url.pathname === '/v1/proofs') {
           return [
             {
-              deliveryId,
+              deliveryId: activeDeliveryId,
               proofSetHash: 'b'.repeat(64),
               inputYs: [`02${'01'.repeat(32)}`],
               state: 'spent',
@@ -172,6 +178,24 @@ describe('PackagedLabRuntime', () => {
     });
     expect(fetchCalls).toContain('4101/v1/send');
     expect(fetchCalls).toContain(`4102/v1/deliveries/${deliveryId}`);
+
+    const scenarioResult = await runtime.run(
+      {
+        name: 'external-direct',
+        commands: [
+          { type: 'send', sender: 'logical-sender', requestId: 'logical-request' },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-scenario-seed',
+      {
+        sender: 'wallet-sender',
+        receiver: 'wallet-receiver',
+        adapterManifest: manifest,
+      },
+    );
+    expect(scenarioResult.status).toBe('passed');
+    expect(scenarioResult.artifact.capabilities).toMatchObject({ evidenceTier: 'T1' });
   });
 
   it('fails closed for adapters without a runnable delivery-v1 profile', async () => {
