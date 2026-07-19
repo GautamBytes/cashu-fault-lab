@@ -462,7 +462,7 @@ git commit -m "feat: add deterministic fault scenario runner"
 - Consumes: delivery-core payload/receipt/classification APIs.
 - Produces: `acceptDelivery(command, deps)`; transaction-shaped `ReceiverStore`; `MintGateway`.
 
-- [ ] **Step 1: Write failing idempotency/conflict/concurrency tests**
+- [x] **Step 1: Write failing idempotency/conflict/concurrency tests**
 
 ```ts
 const results = await Promise.all(Array.from({ length: 100 }, () => acceptDelivery(command, deps)));
@@ -475,13 +475,13 @@ await expect(acceptDelivery({ ...command, payloadHash: otherHash }, deps)).rejec
 });
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-receiver test`
 
 Expected: app missing.
 
-- [ ] **Step 3: Implement explicit receiver ports**
+- [x] **Step 3: Implement explicit receiver ports**
 
 ```ts
 export interface ReceiverStore {
@@ -512,17 +512,17 @@ export interface MintGateway {
 
 `prepare` atomically claims delivery ID, proof-set hash, every proof-Y HMAC, and single-use request reservation. It persists immutable payload binding and exact encrypted swap plan before mint call. `settle` atomically stores recovered result, inserts unique credit, advances receipt, and enqueues outbox row.
 
-- [ ] **Step 4: Implement in-memory transactional adapter**
+- [x] **Step 4: Implement in-memory transactional adapter**
 
 Use one async mutex around state clone/validate/commit. Enforce same unique constraints planned for PostgreSQL. Injected mint fake records exact swap plan and supports success, spent, pending, timeout-before-commit, timeout-after-commit, and restore.
 
-- [ ] **Step 5: Run receiver tests**
+- [x] **Step 5: Run receiver tests**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-receiver test`
 
 Expected: 100 duplicates → one swap plan, one credit, same terminal receipt.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/reference-receiver

@@ -24,6 +24,12 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1))
 
+  apps/reference-receiver:
+    dependencies:
+      '@cashu-fault-lab/delivery-core':
+        specifier: workspace:*
+        version: link:../../packages/delivery-core
+
   packages/adapter-contract:
     dependencies:
       '@cashu-fault-lab/delivery-core':
