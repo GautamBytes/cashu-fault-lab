@@ -14,6 +14,12 @@ export {
   validateDeliveryRequest,
   validateScenarioResult,
 } from './validation.js';
+export {
+  AdapterClientError,
+  AdapterNotApplicableError,
+  HttpAdapterClient,
+  type HttpAdapterClientOptions,
+} from './http-client.js';
 export type {
   AdapterCapabilities,
   AdapterClient,
