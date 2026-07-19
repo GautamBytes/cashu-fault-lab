@@ -24,10 +24,28 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1)(yaml@2.9.0))
 
+  adapters/cashu-ts:
+    dependencies:
+      '@cashu-fault-lab/adapter-contract':
+        specifier: workspace:*
+        version: link:../../packages/adapter-contract
+      '@cashu-fault-lab/delivery-core':
+        specifier: workspace:*
+        version: link:../../packages/delivery-core
+      '@cashu/cashu-ts':
+        specifier: 4.7.2
+        version: 4.7.2
+      fastify:
+        specifier: 5.10.0
+        version: 5.10.0
+
   apps/http-fault-gateway: {}
 
   apps/lab-cli:
     dependencies:
+      '@cashu-fault-lab/adapter-contract':
+        specifier: workspace:*
+        version: link:../../packages/adapter-contract
       '@cashu-fault-lab/report':
         specifier: workspace:*
         version: link:../../packages/report

@@ -108,6 +108,20 @@ describe('adapter HTTP contract', () => {
         nuts: [2, 3, 7, 9, 18, 19],
         transports: ['http', 'nostr'],
         evidenceTier: 'T3',
+        encodings: ['creqA'],
+        profiles: [
+          {
+            name: 'delivery-v1',
+            roles: ['sender', 'receiver'],
+            status: 'supported',
+          },
+          {
+            name: 'nut26-nostr',
+            roles: ['sender'],
+            status: 'unsupported',
+            reason: 'NIP-04 and NIP-17 mappings differ',
+          },
+        ],
       }),
     ).toEqual({ ok: true });
     expect(validateAdapterResponse('reset', { ok: true })).toEqual({ ok: true });

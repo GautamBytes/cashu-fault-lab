@@ -1,5 +1,6 @@
 import type {
   FailureArtifact,
+  MatrixCaseResult,
   ScenarioRunResult,
   ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
@@ -32,8 +33,15 @@ class FakeRuntime implements LabRuntime {
     return passed;
   }
 
-  async matrix(): Promise<readonly ScenarioRunResult[]> {
-    return [passed];
+  async matrix(): Promise<readonly MatrixCaseResult[]> {
+    return [
+      {
+        profile: 'delivery-v1',
+        sender: 'fake',
+        receiver: 'fake',
+        status: 'passed',
+      },
+    ];
   }
 }
 

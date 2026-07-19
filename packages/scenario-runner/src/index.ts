@@ -7,6 +7,14 @@ export {
   type HistoryPhase,
 } from './history.js';
 export { assertReplayableArtifact, minimizeFailingCommands } from './replay.js';
+export { runReferenceDeliveryProbe } from './reference-probe.js';
+export {
+  CompatibilityMatrix,
+  type MatrixCaseResult,
+  type MatrixExecutionResult,
+  type MatrixExecutor,
+  type MatrixParticipant,
+} from './matrix.js';
 export {
   ScenarioRunner,
   type DriverSendResult,

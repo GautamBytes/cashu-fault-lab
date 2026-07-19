@@ -1,0 +1,4 @@
+{
+  "name": "legacy-nut18-codec",
+  "commands": [{ "type": "assert_quiescent" }]
+}

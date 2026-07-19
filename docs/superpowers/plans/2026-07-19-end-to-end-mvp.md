@@ -981,7 +981,7 @@ git commit -m "feat: add faultable NIP-17 payment delivery"
 
 - Produces: two independent implementation adapters; sender/receiver matrix; explicit NUT-26 mismatch evidence.
 
-- [ ] **Step 1: Write failing adapter contract and matrix tests**
+- [x] **Step 1: Write failing adapter contract and matrix tests**
 
 ```ts
 for (const adapter of [cashuTsAdapter, cdkAdapter]) {
@@ -994,21 +994,21 @@ for (const sender of adapters) {
 }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/scenario-runner test -- matrix.test.ts && cargo test --manifest-path adapters/cdk/Cargo.toml`
 
 Expected: adapters missing.
 
-- [ ] **Step 3: Implement thin adapters**
+- [x] **Step 3: Implement thin adapters**
 
 cashu-ts adapter uses `@cashu/cashu-ts@4.7.2`; Rust adapter uses `cdk = "=0.17.3"`. Both expose exact adapter contract; neither hides transport order, retry semantics, proof state, receipt interpretation, or implementation errors. Unsupported capabilities return `N/A` with reason.
 
-- [ ] **Step 4: Add NUT-18/NUT-26 codec evidence**
+- [x] **Step 4: Add NUT-18/NUT-26 codec evidence**
 
 Pin encoded vectors to upstream lock. NUT-18 `creqA` Nostr uses `nprofile` plus `[["n","17"]]`. Current NUT-26 NIP-04/raw-x-only transport mapping is a known-failure scenario until upstream resolution; do not silently reinterpret it as passing NIP-17 conformance.
 
-- [ ] **Step 5: Run matrix**
+- [x] **Step 5: Run matrix**
 
 Run: `pnpm lab matrix --profile delivery-v1 && pnpm lab matrix --profile legacy-nut18`
 

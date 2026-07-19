@@ -2,6 +2,15 @@ import type { DeliveryReceiptWire } from '@cashu-fault-lab/delivery-core';
 
 export type EvidenceTier = 'T0' | 'T1' | 'T2' | 'T3';
 export type AdapterTransport = 'http' | 'nostr';
+export type AdapterEncoding = 'creqA' | 'creqB';
+export type AdapterRole = 'sender' | 'receiver';
+
+export interface AdapterProfileCapability {
+  readonly name: string;
+  readonly roles: readonly AdapterRole[];
+  readonly status: 'supported' | 'unsupported';
+  readonly reason?: string;
+}
 
 export interface AdapterCapabilities {
   readonly implementation: string;
@@ -9,6 +18,8 @@ export interface AdapterCapabilities {
   readonly nuts: readonly number[];
   readonly transports: readonly AdapterTransport[];
   readonly evidenceTier: EvidenceTier;
+  readonly encodings?: readonly AdapterEncoding[];
+  readonly profiles?: readonly AdapterProfileCapability[];
 }
 
 export interface ResetInput {

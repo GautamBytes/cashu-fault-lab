@@ -1,0 +1,4 @@
+{
+  "name": "nut26-nostr-known-mismatch",
+  "commands": [{ "type": "assert_quiescent" }]
+}

@@ -17,8 +17,11 @@ export {
 export type {
   AdapterCapabilities,
   AdapterClient,
+  AdapterEncoding,
+  AdapterProfileCapability,
   AdapterRequestOperation,
   AdapterResponseOperation,
+  AdapterRole,
   AdapterTransport,
   CreateRequestInput,
   DeliveryReceiptView,

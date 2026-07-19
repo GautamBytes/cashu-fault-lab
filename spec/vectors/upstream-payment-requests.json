@@ -1,0 +1,32 @@
+{
+  "profile": "upstream-payment-request-codecs",
+  "cashu_nuts_ref": "fccb68e9129de5348003f573dc97e1ee380a1076",
+  "vectors": [
+    {
+      "name": "nut18-creqA-nip17",
+      "nut": 18,
+      "encoding": "creqA",
+      "encoded": "creqApWF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5ZGFxeTdjdXJrNDM5eWtwdGt5c3Y3dWRoZGh1NjhzdWNtMjk1YWtxZWZkZWhrZjBkNDk1Y3d1bmw1YWeBgmFuYjE3YWloYjdhOTAxNzZhYQphdWNzYXRhbYF4Imh0dHBzOi8vbm9mZWVzLnRlc3RudXQuY2FzaHUuc3BhY2U=",
+      "expected_id": "b7a90176",
+      "nostr_mapping": {
+        "target": "nprofile",
+        "nip": 17
+      }
+    },
+    {
+      "name": "nut26-creqB-basic",
+      "nut": 26,
+      "encoding": "creqB",
+      "encoded": "CREQB1QYQQWER9D4HNZV3NQGQQSQQQQQQQQQQRAQPSQQGQQSQQZQG9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5RQQRJRDANXVET9YPCXZ7TDV4H8GXHR3TQ",
+      "expected_id": "demo123"
+    }
+  ],
+  "known_incompatibilities": [
+    {
+      "code": "NUT26_NIP_MAPPING_MISMATCH",
+      "expected": true,
+      "nut18": "NIP-17 with nprofile target and n=17 tag",
+      "nut26": "NIP-04 with raw 32-byte X-only public-key target"
+    }
+  ]
+}

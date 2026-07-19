@@ -2,6 +2,7 @@ node_modules/
 .turbo/
 coverage/
 dist/
+adapters/cdk/target/
 artifacts/
 graphify-out/
 .env

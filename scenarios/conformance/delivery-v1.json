@@ -1,0 +1,4 @@
+{
+  "name": "delivery-v1-conformance",
+  "commands": [{ "type": "assert_quiescent" }]
+}

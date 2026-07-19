@@ -2,17 +2,19 @@ import { renderHtml, renderJson, renderJunit } from '@cashu-fault-lab/report';
 import {
   assertReplayableArtifact,
   type FailureArtifact,
+  type MatrixCaseResult,
   type ScenarioRunResult,
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import { Command, CommanderError, Option } from 'commander';
 import { readFile, writeFile } from 'node:fs/promises';
+import { PackagedLabRuntime } from './packaged-runtime.js';
 
 export interface LabRuntime {
   up(profile: string): Promise<void>;
   run(scenario: ScenarioSpec, seed: string): Promise<ScenarioRunResult>;
   replay(artifact: FailureArtifact): Promise<ScenarioRunResult>;
-  matrix(profile: string, seed: string): Promise<readonly ScenarioRunResult[]>;
+  matrix(profile: string, seed: string): Promise<readonly MatrixCaseResult[]>;
 }
 
 export interface CliIo {
@@ -37,28 +39,6 @@ const defaultIo: CliIo = {
   stdout: (value) => process.stdout.write(value),
   stderr: (value) => process.stderr.write(value),
 };
-
-class UnconfiguredRuntime implements LabRuntime {
-  async #missing(): Promise<never> {
-    throw new Error('No lab runtime is configured; use the packaged lab environment');
-  }
-
-  async up(): Promise<void> {
-    return this.#missing();
-  }
-
-  async run(): Promise<ScenarioRunResult> {
-    return this.#missing();
-  }
-
-  async replay(): Promise<ScenarioRunResult> {
-    return this.#missing();
-  }
-
-  async matrix(): Promise<readonly ScenarioRunResult[]> {
-    return this.#missing();
-  }
-}
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -128,7 +108,7 @@ export async function runCli(
   dependencies: RunCliDependencies = {},
 ): Promise<CliOutcome> {
   const io = dependencies.io ?? defaultIo;
-  const runtime = dependencies.runtime ?? new UnconfiguredRuntime();
+  const runtime = dependencies.runtime ?? new PackagedLabRuntime();
   let exitCode: CliOutcome['exitCode'] = 0;
   const program = new Command()
     .name('cashu-fault-lab')
@@ -184,8 +164,13 @@ export async function runCli(
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .action(async (options: { profile: string; seed: string }) => {
       const results = await runtime.matrix(options.profile, options.seed);
+      const passed = results.filter((result) => result.status === 'passed').length;
       const failed = results.filter((result) => result.status === 'failed').length;
-      io.stdout(`matrix ${options.profile}: ${results.length - failed} passed, ${failed} failed\n`);
+      const notApplicable = results.filter((result) => result.status === 'not_applicable').length;
+      const expected = results.filter((result) => result.status === 'expected_failure').length;
+      io.stdout(
+        `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure\n`,
+      );
       if (failed > 0) exitCode = 1;
     });
 
