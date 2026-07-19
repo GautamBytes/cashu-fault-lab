@@ -1,0 +1,28 @@
+name: cashu-fault-lab
+
+services:
+  nutshell-redis:
+    extends:
+      file: nutshell.compose.yml
+      service: nutshell-redis
+
+  nutshell:
+    extends:
+      file: nutshell.compose.yml
+      service: nutshell
+    depends_on:
+      nutshell-redis:
+        condition: service_healthy
+
+  cdk-mint:
+    extends:
+      file: cdk-mint.compose.yml
+      service: cdk-mint
+
+networks:
+  cashu-fault-lab-mints:
+
+volumes:
+  cashu-fault-lab-nutshell:
+  cashu-fault-lab-redis:
+  cashu-fault-lab-cdk:

@@ -1,5 +1,5 @@
 import type { DeliveryReceipt } from '@cashu-fault-lab/delivery-core';
-import type { AcceptDeliveryCommand, ExactSwapPlan } from './types.js';
+import type { AcceptDeliveryCommand, SwapPlanDraft } from './types.js';
 import { ReceiverDomainError } from './types.js';
 import { isMintGatewayError, type MintGateway } from '../ports/mint-gateway.js';
 import type { ProofVerifier } from '../ports/proof-verifier.js';
@@ -14,11 +14,11 @@ export interface AcceptDeliveryDependencies {
   readonly now: () => number;
 }
 
-function createPlan(
+function createPlanDraft(
   command: AcceptDeliveryCommand,
   proofYs: readonly string[],
   netAmount: number,
-): ExactSwapPlan {
+): SwapPlanDraft {
   return {
     version: 1,
     deliveryId: command.payload.delivery.id,
@@ -27,7 +27,6 @@ function createPlan(
     expectedAmount: netAmount,
     inputProofs: command.payload.proofs,
     proofYs,
-    outputDerivation: { strategy: 'delivery-id-v1', counter: 0 },
   };
 }
 
@@ -39,7 +38,9 @@ export async function acceptDelivery(
     throw new ReceiverDomainError('REQUEST_MISMATCH', 'Payload hash must be lowercase SHA-256');
   }
   const inspected = await deps.verifier.inspect({ payload: command.payload });
-  const plan = createPlan(command, inspected.ys, inspected.netAmount);
+  const plan = await deps.mint.prepareSwap(
+    createPlanDraft(command, inspected.ys, inspected.netAmount),
+  );
   const prepared = await deps.store.prepare({
     command,
     proofSetHash: inspected.proofSetHash,

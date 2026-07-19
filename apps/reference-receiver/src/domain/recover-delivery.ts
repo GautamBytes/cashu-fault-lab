@@ -1,7 +1,6 @@
 import type { DeliveryReceipt } from '@cashu-fault-lab/delivery-core';
 import type { AcceptDeliveryDependencies } from './accept-delivery.js';
 import { ReceiverDomainError } from './types.js';
-import { isMintGatewayError } from '../ports/mint-gateway.js';
 
 export async function recoverDelivery(
   deliveryId: string,
@@ -41,9 +40,6 @@ export async function recoverDelivery(
     }
     return deps.store.blockRecovery(deliveryId);
   } catch (error) {
-    if (isMintGatewayError(error) && !error.mayHaveConsumedInputs) {
-      return deps.store.reject(deliveryId, 'mint_unavailable', true);
-    }
     if (error instanceof ReceiverDomainError) throw error;
     return deps.store.blockRecovery(deliveryId);
   }

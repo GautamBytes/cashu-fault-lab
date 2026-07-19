@@ -818,7 +818,7 @@ git commit -m "feat: prove HTTP retry idempotency under faults"
 
 - Produces: cashu-ts 4.7.2-backed `MintGateway`; exact NUT-03 request replay; capability-conditioned NUT-09/19 recovery; real-mint CI lane.
 
-- [ ] **Step 1: Write failing exact-swap and recovery tests**
+- [x] **Step 1: Write failing exact-swap and recovery tests**
 
 ```ts
 const firstBytes = gateway.serializedSwapRequests[0];
@@ -830,23 +830,23 @@ expect((await store.current(command.deliveryId))?.receipt.status).toBe('settled'
 expect(await store.creditCount(command.deliveryId)).toBe(1);
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-receiver test -- real-mint.test.ts nut09-recovery.test.ts nut19-replay.test.ts`
 
 Expected: real gateway/infra missing.
 
-- [ ] **Step 3: Implement exact swap plan**
+- [x] **Step 3: Implement exact swap plan**
 
 Plan persists keyset IDs, fee snapshot, every blinded message `B_`, output amount, output secret, blinding factor, and serialized request bytes before send. cashu-ts stays behind adapters; domain sees DTOs only. Proof verifier derives every `Y = hash_to_curve(secret)`, validates keyset/mint/unit, verifies available NUT-12 DLEQ, enforces requested NUT-10 locks, and calculates NUT-02 exact net amount before `prepare`. Sender wallet durably reserves one proof set per delivery. Mint capability discovery reads NUT-06. Replay exact bytes only when NUT-19 advertises `/v1/swap` and TTL remains valid. Otherwise NUT-09 restores same outputs. NUT-07 `SPENT` without own signatures yields `processing/recovery_blocked`, never credit. Compose profiles run both Nutshell and CDK mints in scheduled lanes.
 
-- [ ] **Step 4: Run real mint response-loss/restart lane**
+- [x] **Step 4: Run real mint response-loss/restart lane**
 
 Run: `pnpm --filter @cashu-fault-lab/reference-receiver test -- real-mint.test.ts nut09-recovery.test.ts nut19-replay.test.ts`
 
 Expected: one recovered output set and credit after process restart.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/reference-receiver infra/compose

@@ -1,0 +1,9 @@
+name: cashu-fault-lab-mints
+
+networks:
+  cashu-fault-lab-mints:
+
+volumes:
+  cashu-fault-lab-nutshell:
+  cashu-fault-lab-redis:
+  cashu-fault-lab-cdk:

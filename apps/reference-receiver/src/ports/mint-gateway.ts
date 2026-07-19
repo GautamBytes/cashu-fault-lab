@@ -1,4 +1,4 @@
-import type { ExactSwapPlan } from '../domain/types.js';
+import type { ExactSwapPlan, SwapPlanDraft } from '../domain/types.js';
 
 export type MintProofState = 'UNSPENT' | 'PENDING' | 'SPENT' | 'UNKNOWN';
 
@@ -23,6 +23,7 @@ export class MintGatewayError extends Error {
 }
 
 export interface MintGateway {
+  prepareSwap(draft: SwapPlanDraft): Promise<ExactSwapPlan>;
   swap(plan: ExactSwapPlan): Promise<SwapResult>;
   restore(plan: ExactSwapPlan): Promise<RestoreResult>;
   proofStates(plan: ExactSwapPlan): Promise<readonly MintProofState[]>;

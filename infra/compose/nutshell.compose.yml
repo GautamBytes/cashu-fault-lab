@@ -1,0 +1,46 @@
+name: cashu-fault-lab-nutshell
+
+services:
+  nutshell-redis:
+    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 1s
+      timeout: 1s
+      retries: 30
+    networks: [cashu-fault-lab-mints]
+    volumes:
+      - cashu-fault-lab-redis:/data
+
+  nutshell:
+    image: cashubtc/nutshell:0.20.2@sha256:65e9cbe23aaa1aeb27ce7206fa854a80f39ce8db1c9121eaecfc053a22506574
+    command: ['poetry', 'run', 'mint']
+    environment:
+      MINT_BACKEND_BOLT11_SAT: FakeWallet
+      MINT_LISTEN_HOST: 0.0.0.0
+      MINT_LISTEN_PORT: 3338
+      MINT_PRIVATE_KEY: cashu-fault-lab-nutshell-test-only
+      MINT_REDIS_CACHE_ENABLED: 'TRUE'
+      MINT_REDIS_CACHE_URL: redis://nutshell-redis:6379
+      MINT_URL: http://nutshell:3338
+    depends_on:
+      nutshell-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:3338/v1/info']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    ports:
+      - '127.0.0.1:${CFL_NUTSHELL_PORT:-3338}:3338'
+    networks: [cashu-fault-lab-mints]
+    volumes:
+      - cashu-fault-lab-nutshell:/app/data
+
+networks:
+  cashu-fault-lab-mints:
+
+volumes:
+  cashu-fault-lab-nutshell:
+  cashu-fault-lab-redis:

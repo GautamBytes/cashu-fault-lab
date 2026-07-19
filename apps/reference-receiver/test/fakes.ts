@@ -9,7 +9,9 @@ import type {
   ProofVerifier,
   RestoreResult,
   SwapResult,
+  SwapPlanDraft,
 } from '../src/index.js';
+import { createExactSwapPlan } from '../src/index.js';
 
 export class FakeProofVerifier implements ProofVerifier {
   async inspect(input: InspectProofs): Promise<InspectProofsResult> {
@@ -31,6 +33,24 @@ export class FakeMint implements MintGateway {
   mode: FakeMintMode = 'success';
   swapCalls = 0;
   readonly committed = new Map<string, SwapResult>();
+
+  async prepareSwap(draft: SwapPlanDraft): Promise<ExactSwapPlan> {
+    return createExactSwapPlan(draft, {
+      keysetId: draft.inputProofs[0]?.id ?? '00aa',
+      inputFeePpk: 0,
+      preparedAt: 0,
+      outputs: [
+        {
+          amount: draft.expectedAmount,
+          id: draft.inputProofs[0]?.id ?? '00aa',
+          B_: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+          secret: 'dGVzdC1vdXRwdXQ',
+          blindingFactor: '11'.repeat(32),
+        },
+      ],
+      recovery: { nut09: true, nut19Replay: false, nut19ReplayUntil: null },
+    });
+  }
 
   async swap(plan: ExactSwapPlan): Promise<SwapResult> {
     this.swapCalls += 1;

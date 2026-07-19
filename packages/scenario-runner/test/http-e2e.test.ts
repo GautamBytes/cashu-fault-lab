@@ -3,6 +3,7 @@ import { HttpFaultGateway } from '@cashu-fault-lab/http-fault-gateway';
 import type { Observation } from '@cashu-fault-lab/oracle';
 import {
   buildReceiverHttpServer,
+  createExactSwapPlan,
   MemoryReceiverStore,
   type ExactSwapPlan,
   type InspectProofs,
@@ -12,6 +13,7 @@ import {
   type ProofVerifier,
   type RestoreResult,
   type SwapResult,
+  type SwapPlanDraft,
 } from '@cashu-fault-lab/reference-receiver';
 import {
   HttpPaymentTransport,
@@ -54,6 +56,24 @@ class E2eVerifier implements ProofVerifier {
 
 class E2eMint implements MintGateway {
   swapCalls = 0;
+
+  async prepareSwap(draft: SwapPlanDraft): Promise<ExactSwapPlan> {
+    return createExactSwapPlan(draft, {
+      keysetId: draft.inputProofs[0]?.id ?? '00aa',
+      inputFeePpk: 0,
+      preparedAt: now,
+      outputs: [
+        {
+          amount: draft.expectedAmount,
+          id: draft.inputProofs[0]?.id ?? '00aa',
+          B_: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+          secret: 'e2e-replacement-secret',
+          blindingFactor: '11'.repeat(32),
+        },
+      ],
+      recovery: { nut09: true, nut19Replay: false, nut19ReplayUntil: null },
+    });
+  }
 
   async swap(plan: ExactSwapPlan): Promise<SwapResult> {
     this.swapCalls += 1;

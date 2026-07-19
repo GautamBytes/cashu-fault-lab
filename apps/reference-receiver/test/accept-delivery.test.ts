@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   acceptDelivery,
   MemoryReceiverStore,
+  MintGatewayError,
   ReceiverDomainError,
   recoverDelivery,
 } from '../src/index.js';
@@ -181,6 +182,30 @@ describe('acceptDelivery', () => {
     expect(await deps.store.credits()).toHaveLength(1);
   });
 
+  it('does not reject or release claims when recovery evidence is temporarily unavailable', async () => {
+    const deps = await fixture(false);
+    deps.mint.mode = 'timeout_after_commit';
+    const command = { payload: payload(requestId, deliveryId, now), payloadHash: 'a'.repeat(64) };
+    await acceptDelivery(command, { ...deps, now: () => now });
+    deps.mint.restore = async () => {
+      throw new MintGatewayError('MINT_HTTP_503', 'recovery endpoint unavailable', false);
+    };
+
+    await expect(recoverDelivery(deliveryId, { ...deps, now: () => now })).resolves.toMatchObject({
+      status: 'processing',
+      detailCode: 'recovery_blocked',
+    });
+    expect((await deps.store.current(deliveryId))?.phase).toBe('recovery_blocked');
+    expect(await deps.store.credits()).toHaveLength(0);
+
+    const other = payload(requestId, otherDeliveryId, now, {
+      proofs: [{ amount: 8, id: '00aa', secret: 'secret-a', C: '02aa' }],
+    });
+    await expect(
+      acceptDelivery({ payload: other, payloadHash: 'b'.repeat(64) }, { ...deps, now: () => now }),
+    ).rejects.toMatchObject({ code: 'PROOF_CONFLICT' });
+  });
+
   it('safely rejects pre-commit timeouts and releases claims', async () => {
     const deps = await fixture(false);
     deps.mint.mode = 'timeout_before_commit';
@@ -208,7 +233,7 @@ describe('acceptDelivery', () => {
       proofClaimIds: inspected.proofClaimIds,
       proofYs: inspected.ys,
       netAmount: inspected.netAmount,
-      plan: {
+      plan: await deps.mint.prepareSwap({
         version: 1,
         deliveryId: candidate.delivery.id,
         mint: candidate.mint,
@@ -216,8 +241,7 @@ describe('acceptDelivery', () => {
         expectedAmount: inspected.netAmount,
         inputProofs: candidate.proofs,
         proofYs: inspected.ys,
-        outputDerivation: { strategy: 'delivery-id-v1', counter: 0 },
-      },
+      }),
       now,
     });
 

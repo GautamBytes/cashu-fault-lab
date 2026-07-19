@@ -54,7 +54,7 @@ export interface AcceptDeliveryCommand {
   readonly payloadHash: string;
 }
 
-export interface ExactSwapPlan {
+export interface SwapPlanDraft {
   readonly version: 1;
   readonly deliveryId: ProtocolId;
   readonly mint: string;
@@ -62,9 +62,26 @@ export interface ExactSwapPlan {
   readonly expectedAmount: number;
   readonly inputProofs: readonly CashuProof[];
   readonly proofYs: readonly string[];
-  readonly outputDerivation: {
-    readonly strategy: 'delivery-id-v1';
-    readonly counter: 0;
+}
+
+export interface SwapOutputPlan {
+  readonly amount: number;
+  readonly id: string;
+  readonly B_: string;
+  readonly secret: string;
+  readonly blindingFactor: string;
+}
+
+export interface ExactSwapPlan extends SwapPlanDraft {
+  readonly keysetId: string;
+  readonly inputFeePpk: number;
+  readonly outputs: readonly SwapOutputPlan[];
+  readonly serializedRequest: string;
+  readonly preparedAt: number;
+  readonly recovery: {
+    readonly nut09: boolean;
+    readonly nut19Replay: boolean;
+    readonly nut19ReplayUntil: number | null;
   };
 }
 

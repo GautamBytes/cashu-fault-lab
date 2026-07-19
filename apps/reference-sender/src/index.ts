@@ -25,3 +25,13 @@ export {
   type SenderAdapterControl,
   type SenderAdapterServerOptions,
 } from './http/adapter-server.js';
+export {
+  CashuTsSenderWallet,
+  InMemorySenderReservationStore,
+  type CashuTsOfflineSendBuilder,
+  type CashuTsOfflineWallet,
+  type CashuTsSenderWalletOptions,
+  type CashuTsWalletAccount,
+  type SenderReservationStatus,
+  type SenderReservationStore,
+} from './adapters/cashu-ts-wallet.js';

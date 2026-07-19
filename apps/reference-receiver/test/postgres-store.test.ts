@@ -6,7 +6,7 @@ import {
   type ExactSwapPlan,
   type PrepareDelivery,
 } from '../src/index.js';
-import { FakeProofVerifier, payload } from './fakes.js';
+import { FakeMint, FakeProofVerifier, payload } from './fakes.js';
 import {
   resetPostgres,
   startPostgresFixture,
@@ -29,7 +29,7 @@ async function prepareInput(
     proofs: [{ amount: 8, id: '00aa', secret, C: '02aa' }],
   });
   const inspected = await new FakeProofVerifier().inspect({ payload: candidate });
-  const plan: ExactSwapPlan = {
+  const plan: ExactSwapPlan = await new FakeMint().prepareSwap({
     version: 1,
     deliveryId: candidate.delivery.id,
     mint: candidate.mint,
@@ -37,8 +37,7 @@ async function prepareInput(
     expectedAmount: inspected.netAmount,
     inputProofs: candidate.proofs,
     proofYs: inspected.ys,
-    outputDerivation: { strategy: 'delivery-id-v1', counter: 0 },
-  };
+  });
   return {
     command: { payload: candidate, payloadHash: 'a'.repeat(64) },
     proofSetHash: inspected.proofSetHash,

@@ -13,7 +13,14 @@ export {
   type PrepareDelivery,
   type PrepareResult,
   type ReceiverErrorCode,
+  type SwapOutputPlan,
+  type SwapPlanDraft,
 } from './domain/types.js';
+export {
+  createExactSwapPlan,
+  replacementPlanHash,
+  type ExactSwapPlanMaterial,
+} from './adapters/swap-plan.js';
 export { MemoryReceiverStore } from './adapters/memory-store.js';
 export {
   CryptoEnvelope,
@@ -23,6 +30,15 @@ export {
   type EnvelopeRandomBytes,
 } from './adapters/crypto-envelope.js';
 export { PostgresReceiverStore } from './adapters/postgres-store.js';
+export {
+  CashuTsMintGateway,
+  type CashuTsMintGatewayOptions,
+  type MintFetch,
+} from './adapters/cashu-ts-mint.js';
+export {
+  CashuTsProofVerifier,
+  type CashuTsProofVerifierOptions,
+} from './adapters/cashu-ts-proof-verifier.js';
 export { OutboxPublisher, type ReceiptPublisher } from './outbox-publisher.js';
 export { RecoveryWorker, type RecoveryWorkerDependencies } from './worker.js';
 export {
