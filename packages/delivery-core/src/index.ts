@@ -1,6 +1,6 @@
-export { DeliveryValidationError, type DeliveryErrorCode } from './errors';
-export { generateProtocolId, parseProtocolId, type ProtocolId, type RandomBytes } from './ids';
-export { normalizeMintUrl } from './mint-url';
+export { DeliveryValidationError, type DeliveryErrorCode } from './errors.js';
+export { generateProtocolId, parseProtocolId, type ProtocolId, type RandomBytes } from './ids.js';
+export { normalizeMintUrl } from './mint-url.js';
 export {
   assertReceiptTransition,
   mergeObservedReceipt,
@@ -11,7 +11,7 @@ export {
   type DeliveryStatus,
   type KnownReceiptDetailCode,
   type ReceiptDetailCode,
-} from './receipt';
+} from './receipt.js';
 export {
   computePayloadHash,
   computeProofSetHash,
@@ -24,4 +24,4 @@ export {
   type JsonValue,
   type PayloadFingerprintInput,
   type ProofSetFingerprintInput,
-} from './fingerprint';
+} from './fingerprint.js';

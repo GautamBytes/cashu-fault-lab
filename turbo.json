@@ -1,8 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
+    "build": {
+      "outputs": ["dist/**"]
+    },
     "test": {
-      "outputs": ["coverage/**"]
+      "outputs": []
+    },
+    "test:consumer": {
+      "dependsOn": ["build"],
+      "outputs": []
     },
     "typecheck": {
       "outputs": []

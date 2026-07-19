@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { DeliveryValidationError } from './errors';
+import { DeliveryValidationError } from './errors.js';
 
 export type ProtocolId = string & { readonly ProtocolId: unique symbol };
 export type RandomBytes = (size: number) => Uint8Array;

@@ -8,7 +8,9 @@
     "node": ">=24.0.0 <25"
   },
   "scripts": {
+    "build": "turbo run build",
     "test": "turbo run test",
+    "test:consumer": "turbo run test:consumer",
     "typecheck": "turbo run typecheck",
     "format:check": "prettier --check ."
   },

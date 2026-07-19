@@ -1,6 +1,6 @@
-import { DeliveryValidationError } from './errors';
-import { parseProtocolId, type ProtocolId } from './ids';
-import { normalizeMintUrl } from './mint-url';
+import { DeliveryValidationError } from './errors.js';
+import { parseProtocolId, type ProtocolId } from './ids.js';
+import { normalizeMintUrl } from './mint-url.js';
 
 export type DeliveryStatus = 'processing' | 'settled' | 'rejected';
 export type KnownReceiptDetailCode =

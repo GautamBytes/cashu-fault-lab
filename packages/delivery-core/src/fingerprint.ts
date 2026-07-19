@@ -1,8 +1,8 @@
 import { createHash, ECDH } from 'node:crypto';
 import { encode, rfc8949EncodeOptions } from 'cborg';
-import { DeliveryValidationError } from './errors';
-import { parseProtocolId, type ProtocolId } from './ids';
-import { normalizeMintUrl } from './mint-url';
+import { DeliveryValidationError } from './errors.js';
+import { parseProtocolId, type ProtocolId } from './ids.js';
+import { normalizeMintUrl } from './mint-url.js';
 
 export type JsonPrimitive = null | boolean | string | number;
 export type JsonValue =
