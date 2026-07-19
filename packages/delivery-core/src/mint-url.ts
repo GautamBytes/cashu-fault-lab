@@ -3,6 +3,27 @@ import { DeliveryValidationError } from './errors';
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 export function normalizeMintUrl(value: string): string {
+  const schemeSeparator = value.indexOf('://');
+  const authorityStart = schemeSeparator + 3;
+  const pathStart = value.indexOf('/', authorityStart);
+  const authority =
+    schemeSeparator === -1
+      ? ''
+      : value.slice(authorityStart, pathStart === -1 ? value.length : pathStart);
+
+  if (
+    value !== value.trim() ||
+    value.includes('\\') ||
+    value.includes('?') ||
+    value.includes('#') ||
+    authority.includes('@')
+  ) {
+    throw new DeliveryValidationError(
+      'INVALID_MINT_URL',
+      'Mint URL cannot contain whitespace, backslashes, credentials, query, or fragment',
+    );
+  }
+
   let url: URL;
   try {
     url = new URL(value);

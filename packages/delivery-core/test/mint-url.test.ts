@@ -8,6 +8,8 @@ describe('normalizeMintUrl', () => {
     ['http://localhost:3338/', 'http://localhost:3338'],
     ['http://127.0.0.1:3338/', 'http://127.0.0.1:3338'],
     ['http://[::1]:3338/', 'http://[::1]:3338'],
+    ['https://BÜCHER.example:443/cashu/', 'https://xn--bcher-kva.example/cashu'],
+    ['https://mint.example/a%20b/', 'https://mint.example/a%20b'],
   ])('normalizes %s', (input, expected) => {
     expect(normalizeMintUrl(input)).toBe(expected);
   });
@@ -18,6 +20,12 @@ describe('normalizeMintUrl', () => {
     ['https://user:password@mint.example', 'INVALID_MINT_URL'],
     ['https://mint.example?tenant=one', 'INVALID_MINT_URL'],
     ['https://mint.example/#fragment', 'INVALID_MINT_URL'],
+    ['https://mint.example?', 'INVALID_MINT_URL'],
+    ['https://mint.example#', 'INVALID_MINT_URL'],
+    ['https://@mint.example', 'INVALID_MINT_URL'],
+    [' https://mint.example', 'INVALID_MINT_URL'],
+    ['https://mint.example ', 'INVALID_MINT_URL'],
+    ['https://mint.example\\cashu', 'INVALID_MINT_URL'],
     ['not a URL', 'INVALID_MINT_URL'],
   ] as const)('rejects an unsafe mint URL: %s', (input, expectedCode) => {
     try {
