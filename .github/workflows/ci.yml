@@ -70,6 +70,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build receiver and workspace dependencies
+        run: pnpm exec turbo run build --filter=@cashu-fault-lab/reference-receiver
       - name: Start Nutshell fake-wallet mint
         run: docker compose -f infra/compose/nutshell.compose.yml up -d --wait
       - name: Real mint response-loss recovery
