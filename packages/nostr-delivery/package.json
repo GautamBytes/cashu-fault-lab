@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "nostr-tools": "2.23.12",
-    "ws": "8.18.3"
+    "ws": "8.21.1"
   },
   "devDependencies": {
     "@types/ws": "8.18.1"

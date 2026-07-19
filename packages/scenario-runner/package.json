@@ -25,9 +25,10 @@
     "@cashu-fault-lab/nostr-delivery": "workspace:*",
     "@cashu-fault-lab/oracle": "workspace:*",
     "@cashu-fault-lab/reference-receiver": "workspace:*",
-    "@cashu-fault-lab/reference-sender": "workspace:*"
+    "@cashu-fault-lab/reference-sender": "workspace:*",
+    "nostr-tools": "2.23.12"
   },
   "devDependencies": {
-    "nostr-tools": "2.23.12"
+    "fast-check": "4.9.0"
   }
 }

@@ -20,11 +20,17 @@ const passed: ScenarioRunResult = { status: 'passed', artifact };
 class FakeRuntime implements LabRuntime {
   runs = 0;
   replays = 0;
+  selection: { sender: string; receiver: string } | undefined;
 
   async up(): Promise<void> {}
 
-  async run(_scenario: ScenarioSpec, _seed: string): Promise<ScenarioRunResult> {
+  async run(
+    _scenario: ScenarioSpec,
+    _seed: string,
+    selection?: { sender: string; receiver: string },
+  ): Promise<ScenarioRunResult> {
     this.runs += 1;
+    this.selection = selection;
     return passed;
   }
 
@@ -87,14 +93,67 @@ describe('lab CLI', () => {
         'seed-1',
         '--artifact',
         'run.json',
+        '--sender',
+        'reference-ts',
+        '--receiver',
+        'reference-ts',
       ],
       { runtime, io: setup.io },
     );
 
     expect(outcome.exitCode).toBe(0);
     expect(runtime.runs).toBe(1);
+    expect(runtime.selection).toEqual({ sender: 'reference-ts', receiver: 'reference-ts' });
     expect(JSON.parse(setup.stored.get('run.json')!)).toMatchObject({ status: 'passed' });
     expect(setup.stdout()).toMatch(/passed/i);
+  });
+
+  it('stores a default latest artifact and reports it when no path is given', async () => {
+    const scenario: ScenarioSpec = {
+      name: 'request-loss',
+      commands: [{ type: 'assert_quiescent' }],
+    };
+    const setup = fixture({ 'scenario.json': JSON.stringify(scenario) });
+    const runtime = new FakeRuntime();
+
+    expect(
+      (
+        await runCli(['node', 'cashu-fault-lab', 'run', 'scenario.json'], {
+          runtime,
+          io: setup.io,
+        })
+      ).exitCode,
+    ).toBe(0);
+    expect(setup.stored.get('artifacts/latest.json')).toContain('"status": "passed"');
+
+    expect(
+      (
+        await runCli(['node', 'cashu-fault-lab', 'report'], {
+          runtime,
+          io: setup.io,
+        })
+      ).exitCode,
+    ).toBe(0);
+    expect(setup.stdout()).toContain('"scenarioId": "request-loss"');
+  });
+
+  it('resolves scenario shorthand under the packaged scenarios directory', async () => {
+    const scenario: ScenarioSpec = {
+      name: 'security-malformed-input',
+      commands: [{ type: 'assert_quiescent' }],
+    };
+    const setup = fixture({
+      'scenarios/security/malformed-input.json': JSON.stringify(scenario),
+    });
+    const runtime = new FakeRuntime();
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'run', 'security/malformed-input'], {
+      runtime,
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(runtime.runs).toBe(1);
   });
 
   it('replays an artifact through the selected runtime', async () => {

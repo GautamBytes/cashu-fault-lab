@@ -3,6 +3,7 @@ import { HttpPaymentTransport } from '../src/http/payment-transport.js';
 
 const target = { type: 'post', target: 'https://merchant.example/pay' } as const;
 const payload = new TextEncoder().encode('{"delivery":"same-bytes"}');
+const publicResolution = async () => ['8.8.8.8'];
 const receipt = {
   profile: 'cashu-delivery-v1',
   request_id: 'AAECAwQFBgcICQoLDA0ODw',
@@ -19,7 +20,11 @@ const receipt = {
 describe('HttpPaymentTransport', () => {
   it.each([200, 202, 409, 410, 413, 422])('parses receipts from HTTP %i', async (status) => {
     const fetch = vi.fn(async () => Response.json(receipt, { status }));
-    const transport = new HttpPaymentTransport({ fetch, timeoutMs: 1_000 });
+    const transport = new HttpPaymentTransport({
+      fetch,
+      timeoutMs: 1_000,
+      resolveHost: publicResolution,
+    });
 
     await expect(transport.send(payload, target, new AbortController().signal)).resolves.toEqual({
       kind: 'receipt',
@@ -40,6 +45,7 @@ describe('HttpPaymentTransport', () => {
     const transport = new HttpPaymentTransport({
       fetch: async () => new Response(null, { status }),
       timeoutMs: 1_000,
+      resolveHost: publicResolution,
     });
     await expect(transport.send(payload, target, new AbortController().signal)).resolves.toEqual({
       kind: 'no_response',
@@ -50,7 +56,11 @@ describe('HttpPaymentTransport', () => {
     const fetch = vi.fn(async () =>
       Response.json({ code: 'DELIVERY_CONFLICT', message: 'conflict' }, { status: 409 }),
     );
-    const transport = new HttpPaymentTransport({ fetch, timeoutMs: 1_000 });
+    const transport = new HttpPaymentTransport({
+      fetch,
+      timeoutMs: 1_000,
+      resolveHost: publicResolution,
+    });
 
     await expect(transport.send(payload, target, new AbortController().signal)).resolves.toEqual({
       kind: 'permanent_failure',
@@ -67,6 +77,7 @@ describe('HttpPaymentTransport', () => {
     const transport = new HttpPaymentTransport({
       fetch: async () => new Response('x'.repeat(65_537), { status: 200 }),
       timeoutMs: 1_000,
+      resolveHost: publicResolution,
     });
     await expect(
       transport.send(payload, target, new AbortController().signal),
@@ -78,5 +89,44 @@ describe('HttpPaymentTransport', () => {
         new AbortController().signal,
       ),
     ).rejects.toThrowError(/HTTP transport.*post/i);
+  });
+
+  it('blocks private-network and DNS-rebinding targets before proof bytes reach fetch', async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 500 }));
+    const loopback = new HttpPaymentTransport({ fetch, timeoutMs: 1_000 });
+    await expect(
+      loopback.send(
+        payload,
+        { type: 'post', target: 'http://127.0.0.1:8080/pay' },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrowError(/private network/i);
+
+    const rebound = new HttpPaymentTransport({
+      fetch,
+      timeoutMs: 1_000,
+      resolveHost: async () => ['127.0.0.1'],
+    });
+    await expect(rebound.send(payload, target, new AbortController().signal)).rejects.toThrowError(
+      /private network/i,
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('allows explicit loopback only for local lab services', async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 503 }));
+    const transport = new HttpPaymentTransport({
+      fetch,
+      timeoutMs: 1_000,
+      allowPrivateNetwork: true,
+    });
+
+    await expect(
+      transport.send(
+        payload,
+        { type: 'post', target: 'http://127.0.0.1:8080/pay' },
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ kind: 'no_response' });
   });
 });

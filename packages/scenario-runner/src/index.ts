@@ -8,6 +8,10 @@ export {
 } from './history.js';
 export { assertReplayableArtifact, minimizeFailingCommands } from './replay.js';
 export { runReferenceDeliveryProbe } from './reference-probe.js';
+export { runReferenceHttpScenario } from './reference-http-lane.js';
+export { runReferenceNostrScenario } from './reference-nostr-lane.js';
+export { runReferenceCrashScenario } from './reference-crash-lane.js';
+export { runReferenceSecurityScenario } from './reference-security-lane.js';
 export {
   CompatibilityMatrix,
   type MatrixCaseResult,

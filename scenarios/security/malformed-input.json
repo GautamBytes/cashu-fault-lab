@@ -1,0 +1,12 @@
+{
+  "name": "security-malformed-input",
+  "commands": [
+    {
+      "type": "configure_fault",
+      "target": "receiver",
+      "rule": { "kind": "malformed_payload_corpus", "occurrence": 1 }
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

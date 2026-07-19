@@ -2,13 +2,42 @@ import type { AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
 import {
   CompatibilityMatrix,
   runReferenceDeliveryProbe,
+  runReferenceHttpScenario,
+  runReferenceNostrScenario,
+  runReferenceCrashScenario,
+  runReferenceSecurityScenario,
   type FailureArtifact,
   type MatrixCaseResult,
   type MatrixParticipant,
   type ScenarioRunResult,
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
-import type { LabRuntime } from './index.js';
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import type { LabRuntime, LabSelection } from './index.js';
+
+const execFileAsync = promisify(execFile);
+
+export interface LabServiceController {
+  up(profile: string): Promise<void>;
+}
+
+export interface PackagedLabRuntimeOptions {
+  readonly services?: LabServiceController;
+}
+
+class DockerComposeServiceController implements LabServiceController {
+  async up(profile: string): Promise<void> {
+    if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(profile)) {
+      throw new Error('Compose profile is invalid');
+    }
+    const composeFile = fileURLToPath(
+      new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
+    );
+    await execFileAsync('docker', ['compose', '-f', composeFile, '--profile', profile, 'up', '-d']);
+  }
+}
 
 function profile(
   name: string,
@@ -66,21 +95,71 @@ const participants: readonly MatrixParticipant[] = [
   { id: 'cdk', capabilities: upstreamCapabilities('cdk', '0.17.3') },
 ];
 
-function missing(): never {
-  throw new Error('This command requires the packaged lab service environment');
+function failedScenario(scenario: ScenarioSpec, seed: string, message: string): ScenarioRunResult {
+  return {
+    status: 'failed',
+    error: { name: 'Error', message },
+    artifact: {
+      schemaVersion: 1,
+      seed,
+      scenario: scenario.name,
+      commands: scenario.commands,
+      history: [],
+      capabilities: {},
+    },
+  };
 }
 
 export class PackagedLabRuntime implements LabRuntime {
-  async up(): Promise<void> {
-    return missing();
+  readonly #services: LabServiceController;
+
+  constructor(options: PackagedLabRuntimeOptions = {}) {
+    this.#services = options.services ?? new DockerComposeServiceController();
   }
 
-  async run(_scenario: ScenarioSpec, _seed: string): Promise<ScenarioRunResult> {
-    return missing();
+  async up(profile: string): Promise<void> {
+    await this.#services.up(profile);
   }
 
-  async replay(_artifact: FailureArtifact): Promise<ScenarioRunResult> {
-    return missing();
+  async run(
+    scenario: ScenarioSpec,
+    seed: string,
+    selection: LabSelection = { sender: 'reference-ts', receiver: 'reference-ts' },
+  ): Promise<ScenarioRunResult> {
+    if (selection.sender !== 'reference-ts' || selection.receiver !== 'reference-ts') {
+      return failedScenario(
+        scenario,
+        seed,
+        `Unsupported adapter pair: ${selection.sender} -> ${selection.receiver}`,
+      );
+    }
+    if (
+      scenario.name === 'http-response-lost' ||
+      scenario.name === 'http-request-lost' ||
+      scenario.name === 'http-duplicate-storm'
+    ) {
+      return runReferenceHttpScenario(scenario, seed);
+    }
+    if (scenario.name === 'nostr-response-lost') {
+      return runReferenceNostrScenario(scenario, seed, 'nostr');
+    }
+    if (
+      scenario.name === 'http-nostr-fallback' ||
+      scenario.name === 'cross-transport-duplicate-storm'
+    ) {
+      return runReferenceNostrScenario(scenario, seed, 'cross');
+    }
+    if (scenario.name === 'crash-recovery-all-failpoints') {
+      return runReferenceCrashScenario(scenario, seed);
+    }
+    if (scenario.name.startsWith('security-')) {
+      return runReferenceSecurityScenario(scenario, seed);
+    }
+    return failedScenario(scenario, seed, `Unsupported packaged scenario: ${scenario.name}`);
+  }
+
+  async replay(artifact: FailureArtifact): Promise<ScenarioRunResult> {
+    return this.run({ name: artifact.scenario, commands: artifact.commands }, artifact.seed);
   }
 
   async matrix(profileName: string, _seed: string): Promise<readonly MatrixCaseResult[]> {

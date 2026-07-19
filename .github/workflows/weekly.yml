@@ -1,0 +1,63 @@
+name: Weekly security and recovery
+
+on:
+  schedule:
+    - cron: '43 2 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-cashu-fault-lab
+  cancel-in-progress: false
+
+jobs:
+  security-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm test:browser
+      - name: Security scenarios
+        run: |
+          node apps/lab-cli/dist/bin.js run scenarios/security/redirect-leak.json --seed weekly-redirect
+          node apps/lab-cli/dist/bin.js run scenarios/security/ssrf.json --seed weekly-ssrf
+          node apps/lab-cli/dist/bin.js run scenarios/security/cors.json --seed weekly-cors
+          node apps/lab-cli/dist/bin.js run scenarios/security/malformed-input.json --seed weekly-malformed
+      - name: Long recovery and cross-transport storm
+        run: |
+          for seed in $(seq 0 199); do
+            node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/all-failpoints.json --seed "weekly-recovery-${seed}"
+            node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed "weekly-storm-${seed}"
+          done
+      - run: pnpm audit --prod
+
+  rust-adapter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Pin Rust toolchain
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
+          rustup override set 1.97.0
+      - run: cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
+      - run: cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path adapters/cdk/Cargo.toml

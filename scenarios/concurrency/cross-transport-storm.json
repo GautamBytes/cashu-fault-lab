@@ -1,0 +1,22 @@
+{
+  "name": "cross-transport-duplicate-storm",
+  "commands": [
+    {
+      "type": "configure_fault",
+      "target": "http",
+      "rule": { "kind": "drop_response", "occurrence": 1 }
+    },
+    {
+      "type": "configure_fault",
+      "target": "http",
+      "rule": { "kind": "duplicate", "occurrence": 1, "duplicateCount": 49 }
+    },
+    {
+      "type": "configure_fault",
+      "target": "nostr",
+      "rule": { "kind": "duplicate", "occurrence": 1, "duplicateCount": 50 }
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

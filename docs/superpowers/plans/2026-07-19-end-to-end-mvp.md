@@ -1014,7 +1014,7 @@ Run: `pnpm lab matrix --profile delivery-v1 && pnpm lab matrix --profile legacy-
 
 Expected: mandatory supported pairs pass; unsupported optional capabilities show `N/A`; known NUT-26 mismatch reported separately.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add adapters scenarios packages/scenario-runner
@@ -1042,7 +1042,7 @@ git commit -m "feat: add cross-language Cashu adapter matrix"
 
 - Produces: full MVP acceptance gate; scheduled stress/security lanes; integration guide.
 
-- [ ] **Step 1: Add failing security/property scenarios**
+- [x] **Step 1: Add failing security/property scenarios**
 
 ```ts
 fc.assert(
@@ -1055,17 +1055,17 @@ expect(reportFiles).not.toContainBearerMaterial();
 expect(await redirectScenario()).toMatchObject({ followedRedirect: false, proofLeak: false });
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `pnpm lab run security/malformed-input && pnpm lab run security/redirect-leak`
 
 Expected: scenarios/CLI coverage missing.
 
-- [ ] **Step 3: Implement complete scenario lanes**
+- [x] **Step 3: Implement complete scenario lanes**
 
 PR: schemas/vectors/unit, one PostgreSQL, one real mint, HTTP/Nostr golden paths, response-loss, ten fixed seeds. Nightly: all supported pairs, two mints, every crash point, concurrent duplicate storms, 100 seeds. Weekly: pairwise faults, long recovery, malformed CBOR/Bech32m/JSON, SSRF/DNS rebinding, DLEQ/NUT-10 failures, browser CORS, real relay.
 
-- [ ] **Step 4: Run complete local gate**
+- [x] **Step 4: Run complete local gate**
 
 Run:
 
@@ -1087,7 +1087,7 @@ pnpm lab report
 
 Expected: every supported mandatory scenario passes; artifacts contain no bearer material; known upstream mismatches isolated as expected/linked evidence.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scenarios .github docs adapters/template
@@ -1096,17 +1096,17 @@ git commit -m "ci: enforce end-to-end Cashu fault lab gate"
 
 ## Completion Gate
 
-- [ ] Sparse arrays and invalid initial receipt versions fail with stable errors.
-- [ ] Public schemas/vectors allow independent implementation without private guidance.
-- [ ] Independent oracle imports no implementation under test.
-- [ ] Same delivery repeated 100 times produces one swap plan and one credit.
-- [ ] Same delivery ID plus different payload rejects before proof consumption.
-- [ ] Same proofs under another delivery ID conflict without ownership disclosure.
-- [ ] Lost receiver response retries same payload and converges to stored receipt.
-- [ ] Lost mint response plus restart recovers exact outputs through NUT-19 or NUT-09.
-- [ ] NUT-07 `SPENT` alone never creates credit.
+- [x] Sparse arrays and invalid initial receipt versions fail with stable errors.
+- [x] Public schemas/vectors allow independent implementation without private guidance.
+- [x] Independent oracle imports no implementation under test.
+- [x] Same delivery repeated 100 times produces one swap plan and one credit.
+- [x] Same delivery ID plus different payload rejects before proof consumption.
+- [x] Same proofs under another delivery ID conflict without ownership disclosure.
+- [x] Lost receiver response retries same payload and converges to stored receipt.
+- [x] Lost mint response plus restart recovers exact outputs through NUT-19 or NUT-09.
+- [x] NUT-07 `SPENT` alone never creates credit.
 - [x] HTTP and NIP-17 delivery of same logical payment have one effect.
-- [ ] cashu-ts and CDK adapters pass supported T0-T3 evidence.
-- [ ] JSON/JUnit/HTML reports replay and contain no bearer material.
-- [ ] PR/nightly/weekly/release gates match design.
-- [ ] No new NUT required for harness operation; experimental receipt profile remains versioned until interoperability evidence supports standardization.
+- [x] cashu-ts and CDK adapters pass supported T0-T3 evidence.
+- [x] JSON/JUnit/HTML reports replay and contain no bearer material.
+- [x] PR/nightly/weekly/release gates match design.
+- [x] No new NUT required for harness operation; experimental receipt profile remains versioned until interoperability evidence supports standardization.

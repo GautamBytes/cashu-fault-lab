@@ -1,0 +1,77 @@
+name: Nightly fault matrix
+
+on:
+  schedule:
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-cashu-fault-lab
+  cancel-in-progress: false
+
+jobs:
+  fault-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Run mandatory matrices
+        run: |
+          node apps/lab-cli/dist/bin.js matrix --profile delivery-v1
+          node apps/lab-cli/dist/bin.js matrix --profile legacy-nut18
+          node apps/lab-cli/dist/bin.js matrix --profile nut26-nostr
+      - name: Run 100 deterministic seeds
+        run: |
+          for seed in $(seq 0 99); do
+            node apps/lab-cli/dist/bin.js run scenarios/retry/response-lost.json --seed "nightly-http-${seed}"
+            node apps/lab-cli/dist/bin.js run scenarios/retry/nostr-response-lost.json --seed "nightly-nostr-${seed}"
+            node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/all-failpoints.json --seed "nightly-crash-${seed}"
+            node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed "nightly-storm-${seed}"
+          done
+
+  real-mints:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: nutshell
+            compose: infra/compose/nutshell.compose.yml
+            url: http://127.0.0.1:3338
+          - name: cdk
+            compose: infra/compose/cdk-mint.compose.yml
+            url: http://127.0.0.1:8085
+    name: Real mint ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: docker compose -f "${{ matrix.compose }}" up -d --wait
+      - env:
+          CFL_REAL_MINT_URL: ${{ matrix.url }}
+        run: pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/docker-mint-e2e.test.ts
+      - if: always()
+        run: docker compose -f "${{ matrix.compose }}" down -v

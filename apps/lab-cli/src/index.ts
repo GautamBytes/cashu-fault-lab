@@ -8,11 +8,20 @@ import {
 } from '@cashu-fault-lab/scenario-runner';
 import { Command, CommanderError, Option } from 'commander';
 import { readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import { PackagedLabRuntime } from './packaged-runtime.js';
+
+const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
+
+export interface LabSelection {
+  readonly sender: string;
+  readonly receiver: string;
+}
 
 export interface LabRuntime {
   up(profile: string): Promise<void>;
-  run(scenario: ScenarioSpec, seed: string): Promise<ScenarioRunResult>;
+  run(scenario: ScenarioSpec, seed: string, selection?: LabSelection): Promise<ScenarioRunResult>;
   replay(artifact: FailureArtifact): Promise<ScenarioRunResult>;
   matrix(profile: string, seed: string): Promise<readonly MatrixCaseResult[]>;
 }
@@ -35,7 +44,10 @@ export interface CliOutcome {
 
 const defaultIo: CliIo = {
   readText: async (path) => readFile(path, 'utf8'),
-  writeText: async (path, value) => writeFile(path, value, { encoding: 'utf8', mode: 0o600 }),
+  writeText: async (path, value) => {
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await writeFile(path, value, { encoding: 'utf8', mode: 0o600 });
+  },
   stdout: (value) => process.stdout.write(value),
   stderr: (value) => process.stderr.write(value),
 };
@@ -103,6 +115,18 @@ async function maybeWrite(io: CliIo, path: string | undefined, value: string): P
   if (path) await io.writeText(path, value);
 }
 
+async function readScenario(io: CliIo, path: string): Promise<string> {
+  const candidates = [path, ...(!path.endsWith('.json') ? [`scenarios/${path}.json`] : [])];
+  for (const candidate of candidates) {
+    try {
+      return await io.readText(candidate);
+    } catch {
+      // Try the packaged shorthand path before returning a stable error.
+    }
+  }
+  throw new Error(`Scenario file was not found: ${path}`);
+}
+
 export async function runCli(
   argv: readonly string[],
   dependencies: RunCliDependencies = {},
@@ -132,13 +156,23 @@ export async function runCli(
     .argument('<scenario>', 'scenario JSON file')
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .option('--artifact <path>', 'write replayable result artifact')
-    .action(async (path: string, options: { seed: string; artifact?: string }) => {
-      const spec = scenario(json(await io.readText(path)));
-      const result = await runtime.run(spec, options.seed);
-      await maybeWrite(io, options.artifact, resultArtifact(result));
-      io.stdout(`${result.status} ${result.artifact.scenario} seed=${result.artifact.seed}\n`);
-      if (result.status === 'failed') exitCode = 1;
-    });
+    .option('--sender <adapter>', 'sender adapter', 'reference-ts')
+    .option('--receiver <adapter>', 'receiver adapter', 'reference-ts')
+    .action(
+      async (
+        path: string,
+        options: { seed: string; artifact?: string; sender: string; receiver: string },
+      ) => {
+        const spec = scenario(json(await readScenario(io, path)));
+        const result = await runtime.run(spec, options.seed, {
+          sender: options.sender,
+          receiver: options.receiver,
+        });
+        await io.writeText(options.artifact ?? DEFAULT_ARTIFACT_PATH, resultArtifact(result));
+        io.stdout(`${result.status} ${result.artifact.scenario} seed=${result.artifact.seed}\n`);
+        if (result.status === 'failed') exitCode = 1;
+      },
+    );
 
   program
     .command('replay')
@@ -177,7 +211,7 @@ export async function runCli(
   program
     .command('report')
     .description('Render a redacted scenario report')
-    .argument('<artifact>', 'scenario result JSON file')
+    .argument('[artifact]', 'scenario result JSON file', DEFAULT_ARTIFACT_PATH)
     .addOption(
       new Option('--format <format>', 'report format')
         .choices(['json', 'junit', 'html'])

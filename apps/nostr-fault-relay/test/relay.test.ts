@@ -31,8 +31,16 @@ function messages(socket: WebSocket): unknown[][] {
   return received;
 }
 
-async function settle(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 30));
+async function waitFor(
+  condition: () => boolean,
+  description: string,
+  timeoutMs = 2_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 describe('NostrFaultRelay', () => {
@@ -63,13 +71,16 @@ describe('NostrFaultRelay', () => {
     const publisherMessages = messages(publisher);
 
     publisher.send(JSON.stringify(['EVENT', event]));
-    await settle();
+    await waitFor(() => relay.snapshot().storedEvents === 1, 'stored event');
 
     expect(publisherMessages).toEqual([]);
     const reader = await socket();
     const readerMessages = messages(reader);
     reader.send(JSON.stringify(['REQ', 'backfill', { kinds: [1059], '#p': [receiverPublicKey] }]));
-    await settle();
+    await waitFor(
+      () => readerMessages.some(([type, id]) => type === 'EOSE' && id === 'backfill'),
+      'backfill EOSE',
+    );
     expect(readerMessages.map((message) => [message[0], message[1]])).toEqual([
       ['EVENT', 'backfill'],
       ['EOSE', 'backfill'],
@@ -83,12 +94,18 @@ describe('NostrFaultRelay', () => {
     const reader = await socket();
     const readerMessages = messages(reader);
     reader.send(JSON.stringify(['REQ', 'live', { kinds: [1059] }]));
-    await settle();
+    await waitFor(
+      () => readerMessages.some(([type, id]) => type === 'EOSE' && id === 'live'),
+      'live EOSE',
+    );
     readerMessages.length = 0;
 
     const publisher = await socket();
     publisher.send(JSON.stringify(['EVENT', wrappedEvent('44', 2_000_001)]));
-    await settle();
+    await waitFor(
+      () => readerMessages.filter(([type]) => type === 'EVENT').length === 3,
+      'three duplicate deliveries',
+    );
 
     expect(readerMessages.filter(([type]) => type === 'EVENT')).toHaveLength(3);
     expect(relay.snapshot().storedEvents).toBe(1);
@@ -100,17 +117,20 @@ describe('NostrFaultRelay', () => {
     const second = wrappedEvent('66', 2_000_003);
     publisher.send(JSON.stringify(['EVENT', first]));
     publisher.send(JSON.stringify(['EVENT', second]));
-    await settle();
-    relay.control.setRule({ action: 'delay_history', count: 1, delayMs: 20 });
+    await waitFor(() => relay.snapshot().storedEvents === 2, 'two stored events');
+    relay.control.setRule({ action: 'delay_history', count: 1, delayMs: 100 });
     relay.control.setRule({ action: 'reorder_history', count: 1 });
 
     const reader = await socket();
     const readerMessages = messages(reader);
     const started = Date.now();
     reader.send(JSON.stringify(['REQ', 'history', { kinds: [1059] }]));
-    await settle();
+    await waitFor(
+      () => readerMessages.some(([type, id]) => type === 'EOSE' && id === 'history'),
+      'delayed history EOSE',
+    );
 
-    expect(Date.now() - started).toBeGreaterThanOrEqual(20);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(100);
     expect(
       readerMessages
         .filter(([type]) => type === 'EVENT')
@@ -129,7 +149,10 @@ describe('NostrFaultRelay', () => {
     const reader = await socket();
     const readerMessages = messages(reader);
     reader.send(JSON.stringify(['REQ', 'recover', { ids: [event.id] }]));
-    await settle();
+    await waitFor(
+      () => readerMessages.some(([type, id]) => type === 'EOSE' && id === 'recover'),
+      'recovery EOSE',
+    );
     expect(readerMessages.map((message) => [message[0], message[1]])).toEqual([
       ['EVENT', 'recover'],
       ['EOSE', 'recover'],

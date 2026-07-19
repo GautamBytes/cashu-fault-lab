@@ -1,0 +1,12 @@
+{
+  "name": "security-redirect-leak",
+  "commands": [
+    {
+      "type": "configure_fault",
+      "target": "http",
+      "rule": { "kind": "redirect_to_attacker", "occurrence": 1, "statusCode": 302 }
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}
