@@ -36,6 +36,8 @@ export interface ExternalAdapterScenarioDriverOptions {
   readonly amount: number;
   readonly unit: string;
   readonly maxAttempts?: number;
+  readonly retryDelayMs?: number;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly senderAlias?: string;
   readonly requestAlias?: string;
 }
@@ -131,6 +133,8 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   readonly #amount: number;
   readonly #unit: string;
   readonly #maxAttempts: number;
+  readonly #retryDelayMs: number;
+  readonly #sleep: (milliseconds: number) => Promise<void>;
   readonly #senderAlias: string | undefined;
   readonly #requestAlias: string | undefined;
   #seed = '';
@@ -146,6 +150,10 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     if (options.unit.length === 0) throw new Error('unit is required');
     this.#unit = options.unit;
     this.#maxAttempts = positiveSafeInteger(options.maxAttempts ?? 3, 'maxAttempts');
+    this.#retryDelayMs = positiveSafeInteger(options.retryDelayMs ?? 100, 'retryDelayMs');
+    this.#sleep =
+      options.sleep ??
+      ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     this.#senderAlias = options.senderAlias;
     this.#requestAlias = options.requestAlias;
   }
@@ -236,6 +244,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
         if (sendAttempts + 1 === this.#maxAttempts) {
           throw new Error('External sender did not return a receipt after retry attempts');
         }
+        await this.#sleep(Math.min(this.#retryDelayMs * 2 ** sendAttempts, 5_000));
       }
     }
     if (sent === undefined) throw new Error('External sender did not return a receipt');

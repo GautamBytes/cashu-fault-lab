@@ -69,6 +69,7 @@ class PaymentFaultProxy implements ExternalFaultController {
   #rule: FaultRule | undefined;
   #inbound = 0;
   #forwarded = 0;
+  readonly #statuses: number[] = [];
 
   constructor(target: string) {
     this.#target = target;
@@ -94,6 +95,7 @@ class PaymentFaultProxy implements ExternalFaultController {
     this.#rule = undefined;
     this.#inbound = 0;
     this.#forwarded = 0;
+    this.#statuses.splice(0);
   }
 
   async configure(target: string, rule: FaultRule): Promise<void> {
@@ -109,6 +111,14 @@ class PaymentFaultProxy implements ExternalFaultController {
     return { inbound: this.#inbound, forwarded: this.#forwarded };
   }
 
+  diagnostics(): Readonly<Record<string, unknown>> {
+    return {
+      inbound: this.#inbound,
+      forwarded: this.#forwarded,
+      statuses: [...this.#statuses],
+    };
+  }
+
   async #forward(body: Uint8Array): Promise<ForwardedResponse> {
     this.#forwarded += 1;
     const response = await fetch(this.#target, {
@@ -117,6 +127,7 @@ class PaymentFaultProxy implements ExternalFaultController {
       headers: { accept: 'application/json', 'content-type': 'application/json' },
       body,
     });
+    this.#statuses.push(response.status);
     const responseBody = new Uint8Array(await response.arrayBuffer());
     return {
       status: response.status,
@@ -297,9 +308,12 @@ describe.skipIf(!mintUrl)('real funded cross-language delivery', () => {
           scenario,
           `cross-language-${scenario.name}-${index}`,
         );
-        expect(result.status, result.status === 'failed' ? result.error.message : '').toBe(
-          'passed',
-        );
+        expect(
+          result.status,
+          result.status === 'failed'
+            ? `sender=${index} scenario=${scenario.name}: ${result.error.message}; proxy=${JSON.stringify(proxy.diagnostics())}`
+            : '',
+        ).toBe('passed');
         expect(observations(result, 'redemption_started')).toBe(1);
         expect(observations(result, 'merchant_credited')).toBe(1);
       }

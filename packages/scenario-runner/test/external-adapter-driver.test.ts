@@ -128,7 +128,7 @@ class Receiver implements AdapterClient {
 
 class Sender implements AdapterClient {
   calls = 0;
-  failFirst = false;
+  failures = 0;
   readonly deliveryIds: string[] = [];
 
   constructor(private readonly receiver: Receiver) {}
@@ -150,7 +150,7 @@ class Sender implements AdapterClient {
     this.calls += 1;
     this.receiver.deliveryId = input.deliveryId ?? '';
     this.deliveryIds.push(this.receiver.deliveryId);
-    if (this.failFirst && this.calls === 1) throw new Error('response disappeared');
+    if (this.calls <= this.failures) throw new Error('response disappeared');
     return this.receiver.receipt();
   }
 
@@ -190,7 +190,7 @@ describe('ExternalAdapterScenarioDriver', () => {
   it('reuses one logical delivery after a lost response and produces one credit', async () => {
     const receiver = new Receiver();
     const sender = new Sender(receiver);
-    sender.failFirst = true;
+    sender.failures = 1;
     const faults = new Faults();
     const result = await new ScenarioRunner(
       new ExternalAdapterScenarioDriver({ sender, receiver, faults, amount: 8, unit: 'sat' }),
@@ -209,6 +209,29 @@ describe('ExternalAdapterScenarioDriver', () => {
     );
     expect(attempts).toHaveLength(2);
     expect(new Set(attempts.map((attempt) => JSON.stringify(attempt.data))).size).toBe(1);
+  });
+
+  it('backs off deterministically between transient delivery failures', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    sender.failures = 2;
+    const waits: number[] = [];
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new Faults(),
+        amount: 8,
+        unit: 'sat',
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(scenario('drop_response'), 'external-backoff');
+
+    expect(result.status).toBe('passed');
+    expect(sender.calls).toBe(3);
+    expect(waits).toEqual([100, 200]);
   });
 
   it('records gateway duplicates as one delivery and one merchant credit', async () => {

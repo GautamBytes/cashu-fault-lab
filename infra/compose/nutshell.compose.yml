@@ -21,6 +21,9 @@ services:
       MINT_LISTEN_HOST: 0.0.0.0
       MINT_LISTEN_PORT: 3338
       MINT_PRIVATE_KEY: cashu-fault-lab-nutshell-test-only
+      MINT_RATE_LIMIT: 'FALSE'
+      # Nutshell 0.20.2's WebSocket quote limiter bypasses MINT_RATE_LIMIT.
+      MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE: '10000'
       MINT_REDIS_CACHE_ENABLED: 'TRUE'
       MINT_REDIS_CACHE_URL: redis://nutshell-redis:6379
       MINT_URL: http://nutshell:3338
