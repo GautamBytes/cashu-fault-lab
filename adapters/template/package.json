@@ -1,0 +1,20 @@
+{
+  "name": "@cashu-fault-lab/adapter-template",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cashu-fault-lab-template-adapter": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "start": "node dist/bin.js",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@cashu-fault-lab/adapter-contract": "workspace:*",
+    "@cashu-fault-lab/delivery-core": "workspace:*",
+    "fastify": "5.10.0"
+  }
+}

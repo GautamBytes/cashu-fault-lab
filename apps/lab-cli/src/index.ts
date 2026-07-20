@@ -8,7 +8,8 @@ import {
 } from '@cashu-fault-lab/scenario-runner';
 import { Command, CommanderError, Option } from 'commander';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { readdir } from 'node:fs/promises';
+import { dirname, join, relative } from 'node:path';
 import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
 import { PackagedLabRuntime } from './packaged-runtime.js';
 
@@ -141,6 +142,16 @@ async function readAdapterManifest(
   return parseAdapterManifest(json(await io.readText(path)));
 }
 
+function elapsed(start: number): string {
+  const ms = Date.now() - start;
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function verboseLine(verbose: boolean, io: CliIo, value: string): void {
+  if (verbose) io.stdout(`${value}\n`);
+}
+
 export async function runCli(
   argv: readonly string[],
   dependencies: RunCliDependencies = {},
@@ -167,12 +178,13 @@ export async function runCli(
   program
     .command('run')
     .description('Run one scenario')
-    .argument('<scenario>', 'scenario JSON file')
+    .argument('<scenario>', 'scenario JSON file path (e.g. retry/response-lost)')
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .option('--artifact <path>', 'write replayable result artifact')
     .option('--sender <adapter>', 'sender adapter', 'reference-ts')
     .option('--receiver <adapter>', 'receiver adapter', 'reference-ts')
     .option('--adapters <path>', 'external adapter manifest')
+    .option('--verbose', 'print progress for each command', false)
     .action(
       async (
         path: string,
@@ -182,17 +194,47 @@ export async function runCli(
           sender: string;
           receiver: string;
           adapters?: string;
+          verbose: boolean;
         },
       ) => {
         const spec = scenario(json(await readScenario(io, path)));
         const adapterManifest = await readAdapterManifest(io, options.adapters);
+        const start = Date.now();
+
+        if (options.verbose) {
+          io.stdout(`scenario: ${spec.name}\n`);
+          io.stdout(`seed: ${options.seed}\n`);
+          io.stdout(`sender: ${options.sender}  receiver: ${options.receiver}\n`);
+        }
+
+        for (let i = 0; i < spec.commands.length; i++) {
+          const cmd = spec.commands[i]!;
+          const label =
+            cmd.type === 'configure_fault'
+              ? `configure_fault: ${cmd.target} ${cmd.rule.kind}${cmd.rule.occurrence !== undefined ? ` (occurrence: ${cmd.rule.occurrence})` : ''}`
+              : cmd.type === 'send'
+                ? `send: ${cmd.sender} request ${cmd.requestId}`
+                : cmd.type === 'restart'
+                  ? `restart: ${cmd.component}`
+                  : cmd.type === 'clear_faults'
+                    ? `clear_faults${cmd.target !== undefined ? ` (${cmd.target})` : ''}`
+                    : cmd.type === 'advance_time'
+                      ? `advance_time: ${cmd.milliseconds}ms`
+                      : cmd.type === 'assert_quiescent'
+                        ? 'assert_quiescent'
+                        : `unknown: ${JSON.stringify(cmd)}`;
+          verboseLine(options.verbose, io, `[${i + 1}/${spec.commands.length}] ${label}`);
+        }
+
         const result = await runtime.run(spec, options.seed, {
           sender: options.sender,
           receiver: options.receiver,
           ...(adapterManifest === undefined ? {} : { adapterManifest }),
         });
         await io.writeText(options.artifact ?? DEFAULT_ARTIFACT_PATH, resultArtifact(result));
-        io.stdout(`${result.status} ${result.artifact.scenario} seed=${result.artifact.seed}\n`);
+        io.stdout(
+          `${result.status} ${result.artifact.scenario} seed=${result.artifact.seed} (${elapsed(start)})\n`,
+        );
         if (result.status === 'failed') exitCode = 1;
       },
     );
@@ -202,39 +244,69 @@ export async function runCli(
     .description('Replay a deterministic failure artifact')
     .argument('<artifact>', 'artifact JSON file')
     .option('--artifact <path>', 'write the new result artifact')
-    .action(async (path: string, options: { artifact?: string }) => {
+    .option('--verbose', 'print progress for each command', false)
+    .action(async (path: string, options: { artifact?: string; verbose: boolean }) => {
       const decoded = json(await io.readText(path));
       const source =
         isRecord(decoded) && 'artifact' in decoded
           ? runResult(decoded).artifact
           : artifact(decoded);
+      verboseLine(options.verbose, io, `replay: ${source.scenario} seed=${source.seed}`);
+      verboseLine(options.verbose, io, `commands: ${source.commands.length}`);
+      const start = Date.now();
       const result = await runtime.replay(source);
       await maybeWrite(io, options.artifact, resultArtifact(result));
-      io.stdout(`${result.status} ${result.artifact.scenario} seed=${result.artifact.seed}\n`);
+      io.stdout(
+        `${result.status} ${result.artifact.scenario} seed=${result.artifact.seed} (${elapsed(start)})\n`,
+      );
       if (result.status === 'failed') exitCode = 1;
     });
 
   program
     .command('matrix')
     .description('Run the sender/receiver compatibility matrix')
-    .option('--profile <profile>', 'matrix profile', 'delivery-v1')
+    .option(
+      '--profile <profile>',
+      'matrix profile (delivery-v1, legacy-nut18, nut26-nostr)',
+      'delivery-v1',
+    )
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .option('--min-passes <count>', 'minimum passing pairs required')
     .option('--adapters <path>', 'external adapter manifest')
+    .option('--verbose', 'print per-pair results', false)
     .action(
-      async (options: { profile: string; seed: string; minPasses?: string; adapters?: string }) => {
+      async (options: {
+        profile: string;
+        seed: string;
+        minPasses?: string;
+        adapters?: string;
+        verbose: boolean;
+      }) => {
         const minimum = options.minPasses === undefined ? 0 : Number(options.minPasses);
         if (!Number.isSafeInteger(minimum) || minimum < 0 || minimum > 10_000) {
           throw new Error('Minimum matrix passes must be a nonnegative safe integer');
         }
+        verboseLine(options.verbose, io, `profile: ${options.profile}`);
+        verboseLine(options.verbose, io, `seed: ${options.seed}`);
+        const start = Date.now();
         const adapterManifest = await readAdapterManifest(io, options.adapters);
         const results = await runtime.matrix(options.profile, options.seed, adapterManifest);
+
+        if (options.verbose) {
+          for (const result of results) {
+            const icon = result.status === 'passed' ? '✓' : result.status === 'failed' ? '✗' : '—';
+            io.stdout(
+              `  ${icon} ${result.sender} → ${result.receiver}: ${result.status}${result.status === 'failed' && result.reason ? ` (${result.reason})` : ''}\n`,
+            );
+          }
+        }
+
         const passed = results.filter((result) => result.status === 'passed').length;
         const failed = results.filter((result) => result.status === 'failed').length;
         const notApplicable = results.filter((result) => result.status === 'not_applicable').length;
         const expected = results.filter((result) => result.status === 'expected_failure').length;
         io.stdout(
-          `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure\n`,
+          `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure (${elapsed(start)})\n`,
         );
         if (failed > 0) exitCode = 1;
         if (passed < minimum) {
@@ -269,6 +341,86 @@ export async function runCli(
         else io.stdout(rendered);
       },
     );
+
+  program
+    .command('ls')
+    .description('List all available scenarios')
+    .option('--json', 'output JSON', false)
+    .action(async (options: { json: boolean }) => {
+      const root = 'scenarios';
+      const entries: { path: string; name: string; description?: string }[] = [];
+
+      let dirExists = false;
+      try {
+        await readdir(root);
+        dirExists = true;
+      } catch {
+        // scenarios/ directory not found
+      }
+
+      if (dirExists) {
+        const walk = async (dir: string) => {
+          const items = await readdir(dir, { withFileTypes: true });
+          for (const item of items) {
+            const full = join(dir, item.name);
+            if (item.isDirectory()) {
+              await walk(full);
+            } else if (item.name.endsWith('.json')) {
+              try {
+                const raw = await readFile(full, 'utf8');
+                const spec = JSON.parse(raw) as { name: string; description?: string };
+                if (typeof spec.name === 'string') {
+                  entries.push({
+                    path: relative(root, full).replace(/\\/g, '/'),
+                    name: spec.name,
+                    ...(typeof spec.description === 'string'
+                      ? { description: spec.description }
+                      : {}),
+                  });
+                }
+              } catch {
+                // Skip unparseable files
+              }
+            }
+          }
+        };
+        await walk(root);
+      }
+
+      if (options.json) {
+        io.stdout(`${JSON.stringify(entries, null, 2)}\n`);
+      } else {
+        if (entries.length === 0) {
+          io.stdout('no scenarios found — run from the repository root\n');
+        } else {
+          for (const entry of entries) {
+            const desc = entry.description ? `  — ${entry.description}` : '';
+            io.stdout(`${entry.path}  (${entry.name})${desc}\n`);
+          }
+        }
+      }
+    });
+
+  program
+    .command('inspect')
+    .description('Pretty-print a scenario file')
+    .argument('<scenario>', 'scenario JSON file path (e.g. retry/response-lost)')
+    .action(async (path: string) => {
+      const raw = await readScenario(io, path);
+      const spec = scenario(json(raw));
+      const output: Record<string, unknown> = {};
+      output.name = spec.name;
+      output.commands = spec.commands;
+      io.stdout(`${JSON.stringify(output, null, 2)}\n`);
+    });
+
+  program
+    .command('gen-id')
+    .description('Generate a random 128-bit ProtocolId')
+    .action(async () => {
+      const { generateProtocolId } = await import('@cashu-fault-lab/delivery-core');
+      io.stdout(`${generateProtocolId()}\n`);
+    });
 
   try {
     await program.parseAsync([...argv], { from: 'node' });

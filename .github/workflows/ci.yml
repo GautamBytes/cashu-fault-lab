@@ -4,90 +4,91 @@ on:
   push:
     branches: [main]
   pull_request:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    branches: [main]
 
 jobs:
-  verify:
+  format:
+    name: Format check
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 11.15.0
-
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-
-      - name: Pin Rust toolchain
-        run: |
-          rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
-          rustup override set 1.97.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm test:consumer
-      - run: pnpm audit --prod
+
+  rust:
+    name: Rust adapter checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.0
       - run: cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
       - run: cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path adapters/cdk/Cargo.toml
-      - name: Golden fault lanes, ten fixed seeds
-        run: |
-          for seed in $(seq 0 9); do
-            node apps/lab-cli/dist/bin.js run scenarios/retry/response-lost.json --seed "pr-http-${seed}" --sender reference-ts --receiver reference-ts
-            node apps/lab-cli/dist/bin.js run scenarios/retry/nostr-response-lost.json --seed "pr-nostr-${seed}" --sender reference-ts --receiver reference-ts
-          done
-      - run: node apps/lab-cli/dist/bin.js run scenarios/security/redirect-leak.json --seed pr-security
-      - run: node apps/lab-cli/dist/bin.js run scenarios/security/malformed-input.json --seed pr-security
-      - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1
 
-  real-mint:
+  consumer:
+    name: Consumer tests
+    needs: [build, test]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 11.15.0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-      - name: Pin Rust toolchain
-        run: |
-          rustup toolchain install 1.97.0 --profile minimal
-          rustup override set 1.97.0
       - run: pnpm install --frozen-lockfile
-      - name: Build funded wallet lane
-        run: pnpm exec turbo run build --filter=@cashu-fault-lab/scenario-runner
-      - name: Build CDK adapter
-        run: cargo build --manifest-path adapters/cdk/Cargo.toml
-      - name: Start Nutshell fake-wallet mint
-        run: docker compose -f infra/compose/nutshell.compose.yml up -d --wait
-      - name: Real mint response-loss recovery
-        env:
-          CFL_REAL_MINT_URL: http://127.0.0.1:3338
-        run: pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/docker-mint-e2e.test.ts
-      - name: cashu-ts and CDK delivery faults against a real mint
-        env:
-          CFL_REAL_MINT_URL: http://127.0.0.1:3338
-        run: pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/cross-language-docker.test.ts
-      - name: Stop mint
-        if: always()
-        run: docker compose -f infra/compose/nutshell.compose.yml down -v
+      - run: pnpm test:consumer

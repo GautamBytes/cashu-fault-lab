@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@cashu-fault-lab/adapter-contract": "workspace:*",
+    "@cashu-fault-lab/delivery-core": "workspace:*",
     "@cashu-fault-lab/report": "workspace:*",
     "@cashu-fault-lab/scenario-runner": "workspace:*",
     "commander": "15.0.0"
