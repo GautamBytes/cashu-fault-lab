@@ -7,8 +7,7 @@ import {
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import { Command, CommanderError, Option } from 'commander';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { readdir } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
 import { PackagedLabRuntime } from './packaged-runtime.js';

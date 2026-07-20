@@ -12,7 +12,6 @@ if [ ! -f .env.local ]; then
   cp .env.example .env.local
   echo "     Created .env.local — edit it with your values if needed"
 fi
-export $(grep -v '^#' .env.local | xargs)
 
 echo "==> Installing dependencies..."
 pnpm install --frozen-lockfile
@@ -31,6 +30,5 @@ echo "  pnpm lab ls"
 echo "  pnpm lab run scenarios/retry/response-lost.json --verbose"
 echo ""
 echo "For the full funded wallet stack:"
-echo "  source .env.local"
 echo "  docker compose -f infra/compose/wallet-adapters.compose.yml up --build -d --wait"
 echo "  pnpm lab matrix --profile delivery-v1 --adapters spec/examples/adapters.local.json"

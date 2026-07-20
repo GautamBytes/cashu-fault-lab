@@ -1,6 +1,6 @@
 import { getPublicKey } from 'nostr-tools';
 import { describe, expect, it } from 'vitest';
-import { NostrDeliveryInbox, type GiftWrapSource, type UnwrappedDelivery } from '../src/index.js';
+import { NostrDeliveryInbox, type GiftWrapSource } from '../src/index.js';
 
 const receiverKey = Uint8Array.from(Buffer.from('22'.repeat(32), 'hex'));
 const receiverPubkey = getPublicKey(receiverKey);
