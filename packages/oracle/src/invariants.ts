@@ -213,25 +213,11 @@ export function assertSafety(model: OracleModel): void {
     }
   }
 
-  // Transport convergence: every delivery observed over multiple transports must
-  // converge to the same receipt identity (payload hash + status).
-  const deliveryTransports = new Map<string, Set<string>>();
-  for (const observation of model.observations) {
-    if (observation.type === 'delivery_attempted') {
-      const existing = deliveryTransports.get(observation.deliveryId) ?? new Set();
-      existing.add(observation.transport);
-      deliveryTransports.set(observation.deliveryId, existing);
-    }
-  }
-  for (const [_, transportSet] of deliveryTransports) {
-    if (transportSet.size > 1) {
-      // When a delivery is observed over multiple transports (HTTP + Nostr),
-      // receipts must be consistent — verified above via identity immutability.
-      // This is a pass-through: the delivery_attempted identity immutability check
-      // already ensures payload/proof-set hashes are preserved across transport
-      // observations.
-    }
-  }
+  // Transport convergence: when a delivery is observed over multiple transports
+  // (HTTP + Nostr), receipts must be consistent. This is already enforced above
+  // by the delivery_attempted identity immutability check (same payload/proof-set
+  // hash for a given deliveryId) and the receipt version immutability check
+  // (same fields for a given deliveryId+version).
 
   // Net amount consistency: settled receipt amount must match credited amount.
   for (const [deliveryId, receiptList] of receiptsByDelivery) {
