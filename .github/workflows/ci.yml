@@ -76,6 +76,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build funded wallet lane
         run: pnpm exec turbo run build --filter=@cashu-fault-lab/scenario-runner
+      - name: Build CDK adapter
+        run: cargo build --manifest-path adapters/cdk/Cargo.toml
       - name: Start Nutshell fake-wallet mint
         run: docker compose -f infra/compose/nutshell.compose.yml up -d --wait
       - name: Real mint response-loss recovery

@@ -17,6 +17,7 @@ import {
 
 const mintUrl = process.env.CFL_REAL_MINT_URL;
 const token = 'cross-language-control-token';
+const adapterStartTimeoutMs = Number(process.env.CFL_ADAPTER_START_TIMEOUT_MS ?? 180_000);
 const responseLost: ScenarioSpec = {
   name: 'http-response-lost',
   commands: [
@@ -161,8 +162,12 @@ class PaymentFaultProxy implements ExternalFaultController {
 }
 
 async function waitForAdapter(baseUrl: string, process: ChildProcess): Promise<void> {
+  if (!Number.isFinite(adapterStartTimeoutMs) || adapterStartTimeoutMs <= 0) {
+    throw new Error('CFL_ADAPTER_START_TIMEOUT_MS must be a positive number');
+  }
   let lastError = '';
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  const deadline = Date.now() + adapterStartTimeoutMs;
+  while (Date.now() < deadline) {
     if (process?.exitCode !== null) throw new Error(`CDK adapter exited: ${lastError}`);
     try {
       const response = await fetch(`${baseUrl}/v1/capabilities`, {
@@ -299,5 +304,5 @@ describe.skipIf(!mintUrl)('real funded cross-language delivery', () => {
         expect(observations(result, 'merchant_credited')).toBe(1);
       }
     }
-  }, 180_000);
+  }, 300_000);
 });
