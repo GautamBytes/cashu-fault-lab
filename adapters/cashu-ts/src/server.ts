@@ -17,7 +17,7 @@ import {
 } from '@cashu-fault-lab/adapter-contract';
 import { parseProtocolId } from '@cashu-fault-lab/delivery-core';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 const capabilities: AdapterCapabilities = {
   implementation: 'cashu-ts',
@@ -61,11 +61,7 @@ export interface CashuTsAdapterServerOptions {
   readonly testMode?: boolean;
 }
 
-function secureEqual(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
+import { secureEqual } from '@cashu-fault-lab/delivery-core';
 
 function validateRequest(
   operation: Parameters<typeof validateAdapterRequest>[0],

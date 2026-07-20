@@ -6,7 +6,6 @@ import {
 } from '@cashu-fault-lab/adapter-contract';
 import { parseProtocolId, type DeliveryReceiptWire } from '@cashu-fault-lab/delivery-core';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
-import { timingSafeEqual } from 'node:crypto';
 
 export interface SenderAdapterControl {
   capabilities(): Promise<AdapterCapabilities>;
@@ -21,11 +20,7 @@ export interface SenderAdapterServerOptions {
   readonly testMode?: boolean;
 }
 
-function secureEqual(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
+import { secureEqual } from '@cashu-fault-lab/delivery-core';
 
 function assertResponse(
   operation: Parameters<typeof validateAdapterResponse>[0],

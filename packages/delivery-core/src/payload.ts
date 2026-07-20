@@ -1,5 +1,6 @@
 import { TextDecoder, TextEncoder } from 'node:util';
 import { DeliveryValidationError } from './errors.js';
+import { isRecord } from './guards.js';
 import { computePayloadHash, type CashuProof } from './fingerprint.js';
 import { parseProtocolId, type ProtocolId } from './ids.js';
 import { normalizeMintUrl } from './mint-url.js';
@@ -37,12 +38,6 @@ export interface DeliveryPayloadWire {
 
 function invalidPayload(message: string): never {
   throw new DeliveryValidationError('INVALID_DELIVERY_PAYLOAD', message);
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 }
 
 function assertOnlyKeys(

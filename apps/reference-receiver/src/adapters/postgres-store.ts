@@ -24,6 +24,7 @@ import {
   swapPlanAuthenticatedData,
 } from './crypto-envelope.js';
 import { isSameDeliveryBinding, validateRequestBinding } from '../domain/request-binding.js';
+import { assertSafeInteger, nextReceipt, sameRequest, sameDelivery } from './store-helpers.js';
 
 interface DeliveryRow extends QueryResultRow {
   readonly delivery_id: string;
@@ -76,51 +77,6 @@ function safeDatabaseInteger(value: string, name: string): number {
     throw new ReceiverDomainError('INVALID_STATE', `${name} is outside safe integer range`);
   }
   return parsed;
-}
-
-function assertSafeInteger(value: number, name: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new ReceiverDomainError('INVALID_REQUEST', `${name} must be a nonnegative safe integer`);
-  }
-}
-
-function nextReceipt(
-  previous: DeliveryReceipt,
-  status: DeliveryReceipt['status'],
-  detailCode: string,
-): DeliveryReceipt {
-  const next: DeliveryReceipt = {
-    ...previous,
-    status,
-    detailCode,
-    statusVersion: previous.statusVersion + 1,
-  };
-  assertReceiptTransition(previous, next);
-  return next;
-}
-
-function sameRequest(left: PaymentRequestRecord, right: PaymentRequestRecord): boolean {
-  return (
-    left.id === right.id &&
-    left.amount === right.amount &&
-    left.unit === right.unit &&
-    left.singleUse === right.singleUse &&
-    left.expiresAt === right.expiresAt &&
-    left.mints.length === right.mints.length &&
-    left.mints.every((mint, index) => mint === right.mints[index])
-  );
-}
-
-function sameDelivery(left: DeliveryRecord, input: PrepareDelivery): boolean {
-  return (
-    left.requestId === input.command.payload.id &&
-    left.deliveryId === input.command.payload.delivery.id &&
-    left.payloadHash === input.command.payloadHash &&
-    left.proofSetHash === input.proofSetHash &&
-    left.plan.mint === input.plan.mint &&
-    left.plan.unit === input.plan.unit &&
-    left.amount === input.netAmount
-  );
 }
 
 function databaseErrorCode(value: unknown): string | undefined {

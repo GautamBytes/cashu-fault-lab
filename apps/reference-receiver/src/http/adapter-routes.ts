@@ -9,7 +9,6 @@ import {
 } from '@cashu-fault-lab/adapter-contract';
 import { parseProtocolId, type DeliveryReceiptWire } from '@cashu-fault-lab/delivery-core';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { timingSafeEqual } from 'node:crypto';
 import { TextDecoder } from 'node:util';
 
 const CONTROL_BODY_LIMIT = 16_384;
@@ -29,11 +28,7 @@ export interface ReceiverAdapterRouteOptions {
   readonly testMode?: boolean;
 }
 
-function secureEqual(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left);
-  const rightBytes = Buffer.from(right);
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
+import { secureEqual } from '@cashu-fault-lab/delivery-core';
 
 function decodeBody(body: unknown, reply: FastifyReply): unknown {
   if (!Buffer.isBuffer(body)) return body;
