@@ -84,7 +84,17 @@ jobs:
       - run: pnpm exec turbo run build --filter=@cashu-fault-lab/scenario-runner
       - run: cargo build --manifest-path adapters/cdk/Cargo.toml
       - name: Start CDK fake-wallet mint
-        run: docker compose -f infra/compose/cdk-mint.compose.yml up -d --wait
+        run: docker compose -f infra/compose/cdk-mint.compose.yml up -d
+      - name: Wait for CDK mint
+        run: |
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8085/v1/info >/dev/null 2>&1; then
+              echo "CDK mint ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "CDK mint did not become ready" && exit 1
       - name: Run cross-language delivery against CDK mint
         env:
           CFL_REAL_MINT_URL: http://127.0.0.1:8085
