@@ -1,4 +1,5 @@
 import { DeliveryValidationError } from './errors.js';
+import { isRecord } from './guards.js';
 import { parseProtocolId, type ProtocolId } from './ids.js';
 import { normalizeMintUrl } from './mint-url.js';
 
@@ -48,10 +49,6 @@ const KNOWN_DETAIL_CODES = new Set<KnownReceiptDetailCode>([
   'expired',
   'conflict',
 ]);
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function isDeliveryStatus(value: unknown): value is DeliveryStatus {
   return value === 'processing' || value === 'settled' || value === 'rejected';

@@ -2,6 +2,9 @@ export { DeliveryValidationError, type DeliveryErrorCode } from './errors.js';
 export { generateProtocolId, parseProtocolId, type ProtocolId, type RandomBytes } from './ids.js';
 export { normalizeMintUrl } from './mint-url.js';
 export { parseDeliveryNegotiation, type DeliveryNegotiation } from './request.js';
+export { secureEqual } from './auth.js';
+export { isRecord } from './guards.js';
+export { positiveSafeInteger, boundedInteger, sleep } from './validators.js';
 export {
   parseDeliveryPayload,
   parseDeliveryPayloadJson,
