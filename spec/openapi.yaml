@@ -1,0 +1,558 @@
+openapi: '3.1.0'
+info:
+  title: Cashu Fault Lab — Adapter Contract
+  description: |
+    HTTP API that every wallet adapter must serve to integrate with Cashu Fault Lab.
+    The lab discovers capabilities dynamically, so only the routes relevant to your
+    implementation need to return 200. Unsupported routes must return `501` with
+    `{ "status": "N/A", "reason": "..." }`.
+
+    See `docs/adapter-guide.md` for the full integration guide.
+  version: '0.0.0'
+  contact:
+    url: https://github.com/GautamBytes/cashu-fault-lab
+
+servers:
+  - url: http://127.0.0.1:4103
+    description: Local adapter (loopback only)
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/capabilities:
+    get:
+      summary: Declare adapter capabilities
+      operationId: getCapabilities
+      description: |
+        Returns the adapter's identity, supported NUTs, transports, evidence tier,
+        encodings, and profile declarations. Called once at startup by the lab.
+      responses:
+        '200':
+          description: Adapter capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterCapabilities'
+              example:
+                implementation: 'my-wallet'
+                version: '1.2.3'
+                nuts: [18, 3, 7, 9, 19]
+                transports: ['http', 'nostr']
+                evidenceTier: 'T1'
+                encodings: ['creqA']
+                profiles:
+                  - name: 'delivery-v1'
+                    roles: ['sender']
+                    status: 'supported'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/reset:
+    post:
+      summary: Reset deterministic test state
+      operationId: reset
+      description: |
+        Provision deterministic test state from the given seed. The adapter should
+        fund a wallet against a pinned fake-wallet mint and store the funded state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [seed]
+              properties:
+                seed:
+                  type: string
+                  description: Deterministic seed for reproducible test state
+              additionalProperties: false
+            example:
+              seed: 'cashu-fault-lab'
+      responses:
+        '200':
+          description: State reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '501':
+          $ref: '#/components/responses/NotApplicable'
+
+  /v1/requests:
+    post:
+      summary: Create a payment request (receiver role)
+      operationId: createRequest
+      description: |
+        Create a NUT-18 payment request for the given amount and unit.
+        The request includes transport endpoints for each declared transport.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRequestInput'
+            example:
+              amount: 8
+              unit: 'sat'
+              description: 'test payment'
+              transports: ['http', 'nostr']
+              singleUse: true
+              expiresIn: 3600
+      responses:
+        '200':
+          description: Payment request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRequestView'
+              example:
+                id: 'xK3f9mQpL7vR2hN8dW5gYw'
+                raw: 'creqA...'
+                amount: 8
+                unit: 'sat'
+                singleUse: true
+                expiresAt: 1735689600
+                transports:
+                  - type: 'post'
+                    target: 'http://127.0.0.1:4300/pay'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '501':
+          $ref: '#/components/responses/NotApplicable'
+
+  /v1/send:
+    post:
+      summary: Send or resume a payment (sender role)
+      operationId: sendPayment
+      description: |
+        For senders: accept a NUT-18 payment request, reserve proofs, construct the
+        delivery payload, and send through the chosen transport.
+
+        **Retry rule**: When called again with the same `deliveryId`, reuse the exact
+        same inner payload bytes. Persist the delivery ID and proof reservation before
+        transport.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendPaymentInput'
+            example:
+              request: 'creqA...'
+              deliveryId: 'xK3f9mQpL7vR2hN8dW5gYw'
+              memo: 'coffee'
+      responses:
+        '200':
+          description: Payment sent; returns the receiver's receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryReceiptView'
+              example:
+                request_id: 'AAECAwQFBgcICQoLDA0ODw'
+                delivery_id: 'xK3f9mQpL7vR2hN8dW5gYw'
+                profile: 'cashu-delivery-v1'
+                payload_hash: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2'
+                status: 'settled'
+                status_version: 3
+                mint: 'https://mint.example.com'
+                unit: 'sat'
+                amount: 8
+                detail_code: 'settled'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '501':
+          $ref: '#/components/responses/NotApplicable'
+
+  /v1/deliveries/{deliveryId}:
+    get:
+      summary: Read the current receipt for a delivery (receiver role)
+      operationId: getDeliveryReceipt
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{22}$'
+            description: 128-bit base64url-encoded delivery identifier
+      responses:
+        '200':
+          description: Current receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryReceiptView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '501':
+          $ref: '#/components/responses/NotApplicable'
+
+  /v1/ledger:
+    get:
+      summary: Return merchant credit evidence (receiver role, T3)
+      operationId: getLedger
+      description: |
+        Return durable merchant credit evidence. This is receiver-owned evidence
+        that proves merchant credits are durable and externally verifiable.
+
+        Sender-only adapters must return `501 N/A`.
+      responses:
+        '200':
+          description: Ledger credits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LedgerCreditView'
+              example:
+                - requestId: 'AAECAwQFBgcICQoLDA0ODw'
+                  deliveryId: 'xK3f9mQpL7vR2hN8dW5gYw'
+                  amount: 8
+                  unit: 'sat'
+                  creditCount: 1
+                  createdAt: 1735689600
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '501':
+          $ref: '#/components/responses/NotApplicable'
+
+  /v1/proofs:
+    get:
+      summary: Return proof-state evidence without secrets (receiver role, T2+)
+      operationId: getProofs
+      description: |
+        Return proof-state hashes and states **without exposing secrets, signatures,
+        or blinding factors**. This enables the lab to verify proof ownership and
+        recovery without accessing bearer material.
+      responses:
+        '200':
+          description: Proof evidence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProofEvidenceView'
+              example:
+                - deliveryId: 'xK3f9mQpL7vR2hN8dW5gYw'
+                  proofSetHash: 'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3'
+                  inputYs:
+                    - '02a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a'
+                  state: 'spent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '501':
+          $ref: '#/components/responses/NotApplicable'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Bearer token from an environment variable. Never put tokens in manifests,
+        reports, or logs. Outside test mode, requests without a valid token must be
+        rejected with 401.
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [statusCode, error]
+            properties:
+              statusCode:
+                type: integer
+                const: 401
+              error:
+                type: string
+          example:
+            statusCode: 401
+            error: 'Unauthorized'
+
+    NotApplicable:
+      description: Operation not supported by this adapter
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [status, reason]
+            properties:
+              status:
+                type: string
+                const: 'N/A'
+              reason:
+                type: string
+            additionalProperties: false
+          example:
+            status: 'N/A'
+            reason: 'ledger not implemented'
+
+  schemas:
+    AdapterCapabilities:
+      type: object
+      required: [implementation, version, nuts, transports, evidenceTier]
+      properties:
+        implementation:
+          type: string
+          minLength: 1
+          description: Stable implementation identifier
+        version:
+          type: string
+          minLength: 1
+          description: Exact version of the adapter
+        nuts:
+          type: array
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 0
+          description: Supported NUT numbers (e.g. 18, 3, 7, 9, 19)
+        transports:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: ['http', 'nostr']
+          description: Supported transport protocols
+        evidenceTier:
+          type: string
+          enum: ['T0', 'T1', 'T2', 'T3']
+          description: Highest evidence tier the adapter passes
+        encodings:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: ['creqA', 'creqB']
+          description: Supported payment request encodings
+        profiles:
+          type: array
+          items:
+            type: object
+            required: [name, roles, status]
+            properties:
+              name:
+                type: string
+                minLength: 1
+                description: Profile name (e.g. "delivery-v1")
+              roles:
+                type: array
+                minItems: 1
+                uniqueItems: true
+                items:
+                  type: string
+                  enum: ['sender', 'receiver']
+                description: Roles supported for this profile
+              status:
+                type: string
+                enum: ['supported', 'unsupported']
+                description: Whether the profile is fully implemented
+              reason:
+                type: string
+                minLength: 1
+                description: Reason for unsupported status
+            additionalProperties: false
+      additionalProperties: false
+
+    CreateRequestInput:
+      type: object
+      required: [amount, unit, transports, singleUse, expiresIn]
+      properties:
+        amount:
+          type: integer
+          minimum: 0
+          description: Requested net amount
+        unit:
+          type: string
+          minLength: 1
+          description: Currency unit (e.g. "sat")
+        description:
+          type: string
+          description: Human-readable payment description
+        transports:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: ['http', 'nostr']
+          description: Accepted transport protocols
+        singleUse:
+          type: boolean
+          description: Whether the request forbids multiple deliveries
+        expiresIn:
+          type: integer
+          minimum: 0
+          description: Seconds until the request expires
+      additionalProperties: false
+
+    PaymentRequestView:
+      type: object
+      required: [id, raw, amount, unit, singleUse, expiresAt, transports]
+      properties:
+        id:
+          type: string
+          description: Request identifier
+        raw:
+          type: string
+          description: Encoded payment request string (e.g. "creqA...")
+        amount:
+          type: integer
+          minimum: 0
+          description: Net amount
+        unit:
+          type: string
+          description: Currency unit
+        singleUse:
+          type: boolean
+          description: Single-use flag
+        expiresAt:
+          type: integer
+          description: Unix timestamp when the request expires
+        transports:
+          type: array
+          items:
+            type: object
+            required: [type, target]
+            properties:
+              type:
+                type: string
+                enum: ['post', 'nostr']
+                description: Transport endpoint type
+              target:
+                type: string
+                description: Endpoint URL or pubkey
+              tags:
+                type: array
+                items:
+                  type: array
+                  items:
+                    type: string
+                description: Nostr tags (Nostr transport only)
+            additionalProperties: false
+      additionalProperties: false
+
+    SendPaymentInput:
+      type: object
+      required: [request]
+      properties:
+        request:
+          type: string
+          description: Raw payment request string
+        deliveryId:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{22}$'
+          description: 128-bit base64url-encoded delivery identifier
+        memo:
+          type: string
+          nullable: true
+          description: Optional memo attached to the delivery
+      additionalProperties: false
+
+    DeliveryReceiptView:
+      type: object
+      required:
+        [
+          request_id,
+          delivery_id,
+          profile,
+          payload_hash,
+          status,
+          status_version,
+          mint,
+          unit,
+          amount,
+          detail_code,
+        ]
+      properties:
+        request_id:
+          type: string
+          description: Request identifier
+        delivery_id:
+          type: string
+          description: Delivery identifier
+        profile:
+          type: string
+          description: Delivery profile name
+        payload_hash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA-256 hash of the canonical delivery payload
+        status:
+          type: string
+          enum: ['processing', 'settled', 'rejected']
+          description: Current delivery status
+        status_version:
+          type: integer
+          minimum: 1
+          description: Monotonically increasing version number
+        mint:
+          type: string
+          description: Normalized mint URL
+        unit:
+          type: string
+          description: Currency unit
+        amount:
+          type: integer
+          minimum: 0
+          description: Net amount
+        detail_code:
+          type: string
+          description: Machine-readable detail code
+      additionalProperties: false
+
+    LedgerCreditView:
+      type: object
+      required: [requestId, deliveryId, amount, unit, creditCount, createdAt]
+      properties:
+        requestId:
+          type: string
+          description: Associated request identifier
+        deliveryId:
+          type: string
+          description: Associated delivery identifier
+        amount:
+          type: integer
+          minimum: 0
+          description: Credited amount
+        unit:
+          type: string
+          description: Currency unit
+        creditCount:
+          type: integer
+          minimum: 0
+          description: Cumulative credit count for this delivery
+        createdAt:
+          type: integer
+          description: Unix timestamp when the credit was created
+      additionalProperties: false
+
+    ProofEvidenceView:
+      type: object
+      required: [deliveryId, proofSetHash, inputYs, state]
+      properties:
+        deliveryId:
+          type: string
+          description: Associated delivery identifier
+        proofSetHash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA-256 hash of the proof set
+        inputYs:
+          type: array
+          items:
+            type: string
+          description: Sorted, deduplicated input proof Y values (without secrets)
+        state:
+          type: string
+          enum: ['unspent', 'pending', 'spent', 'unknown']
+          description: Current proof state
+      additionalProperties: false
