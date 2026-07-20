@@ -1,5 +1,6 @@
 {
   "name": "nostr-response-lost",
+  "description": "Drops the first Nostr response. Verifies sender retries through NIP-17 gift-wrap delivery and the receiver deduplicates.",
   "commands": [
     {
       "type": "configure_fault",

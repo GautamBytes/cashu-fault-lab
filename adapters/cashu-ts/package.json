@@ -19,6 +19,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "start": "node dist/bin.js",
+    "test:consumer": "node test/consumer.mjs",
     "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },

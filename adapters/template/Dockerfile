@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1
+# Local build only — shares the monorepo build context. For standalone builds,
+# use the infra/docker/wallet-adapters.Dockerfile multi-stage pattern.
 
 FROM node:24-alpine AS build
 WORKDIR /app
@@ -21,7 +23,10 @@ RUN corepack pnpm run --filter @cashu-fault-lab/adapter-contract build
 RUN corepack pnpm run --filter @cashu-fault-lab/adapter-template build
 
 FROM node:24-alpine AS runtime
+ENV NODE_ENV=production
+COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/adapters/template/dist /app/dist
 COPY --from=build /app/packages/delivery-core/dist /app/packages/delivery-core/dist
 COPY --from=build /app/packages/adapter-contract/dist /app/packages/adapter-contract/dist
+USER node
 ENTRYPOINT ["node", "/app/dist/bin.js"]

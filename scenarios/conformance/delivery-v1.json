@@ -1,4 +1,5 @@
 {
   "name": "delivery-v1-conformance",
+  "description": "Validates delivery-v1 codec conformance: parses pinned wire-format vectors and fingerprint preimages from spec/vectors/.",
   "commands": [{ "type": "assert_quiescent" }]
 }

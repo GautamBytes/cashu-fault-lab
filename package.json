@@ -14,7 +14,8 @@
     "test:browser": "turbo run build --filter=@cashu-fault-lab/reference-receiver && node scripts/browser-cors-probe.mjs",
     "test:consumer": "turbo run test:consumer",
     "typecheck": "turbo run typecheck",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "audit": "pnpm audit --prod"
   },
   "devDependencies": {
     "@types/node": "26.1.1",

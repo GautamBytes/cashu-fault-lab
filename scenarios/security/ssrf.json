@@ -1,5 +1,6 @@
 {
   "name": "security-ssrf",
+  "description": "Probes that DNS rebinding to private IPs is blocked. Verifies proof material is never sent to internal network addresses.",
   "commands": [
     {
       "type": "configure_fault",

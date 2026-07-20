@@ -1,4 +1,4 @@
-import { emptyOracleModel, assertSafety } from '@cashu-fault-lab/oracle';
+import { emptyOracleModel, assertSafety } from '../dist/index.js';
 const model = emptyOracleModel();
 assertSafety(model);
-console.log('consumer OK');
+console.log('oracle consumer OK');

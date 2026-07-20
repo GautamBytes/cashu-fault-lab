@@ -1,5 +1,6 @@
 {
   "name": "security-redirect-leak",
+  "description": "Probes that HTTP redirects are disabled. Verifies proof bearer material is never leaked to attacker-controlled redirect targets.",
   "commands": [
     {
       "type": "configure_fault",

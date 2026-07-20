@@ -29,6 +29,7 @@ const execFileAsync = promisify(execFile);
 
 export interface LabServiceController {
   up(profile: string): Promise<void>;
+  down(profile: string): Promise<void>;
 }
 
 export interface PackagedLabRuntimeOptions {
@@ -47,6 +48,24 @@ class DockerComposeServiceController implements LabServiceController {
       new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
     );
     await execFileAsync('docker', ['compose', '-f', composeFile, '--profile', profile, 'up', '-d']);
+  }
+
+  async down(profile: string): Promise<void> {
+    if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(profile)) {
+      throw new Error('Compose profile is invalid');
+    }
+    const composeFile = fileURLToPath(
+      new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
+    );
+    await execFileAsync('docker', [
+      'compose',
+      '-f',
+      composeFile,
+      '--profile',
+      profile,
+      'down',
+      '-v',
+    ]);
   }
 }
 
@@ -151,6 +170,10 @@ export class PackagedLabRuntime implements LabRuntime {
 
   async up(profile: string): Promise<void> {
     await this.#services.up(profile);
+  }
+
+  async down(profile: string): Promise<void> {
+    await this.#services.down(profile);
   }
 
   async run(

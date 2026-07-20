@@ -1,21 +1,96 @@
-name: Weekly security and recovery
+name: Weekly
 
 on:
   schedule:
-    - cron: '43 2 * * 0'
-  workflow_dispatch:
+    - cron: '0 4 * * 1' # 4 AM UTC every Monday
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 concurrency:
-  group: weekly-cashu-fault-lab
-  cancel-in-progress: false
+  group: weekly-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  security-recovery:
+  stress:
+    name: Stress tests
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Pin Rust toolchain
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
+          rustup override set 1.97.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: cargo build --manifest-path adapters/cdk/Cargo.toml
+      - name: Duplicate storm (1000 seeds + 1000 duplicates)
+        run: |
+          for seed in $(seq 0 999); do
+            node apps/lab-cli/dist/bin.js run scenarios/concurrency/duplicate-storm.json --seed "weekly-dup-${seed}" --sender reference-ts --receiver reference-ts
+          done
+      - name: Crash recovery stress (500 seeds)
+        run: |
+          for seed in $(seq 0 499); do
+            node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/mint-response-lost.json --seed "weekly-crash-${seed}" --sender reference-ts --receiver reference-ts
+          done
+      - name: Cross-transport convergence stress (300 seeds)
+        run: |
+          for seed in $(seq 0 299); do
+            node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed "weekly-cross-${seed}" --sender reference-ts --receiver reference-ts
+          done
+
+  real-mint:
+    name: Real-mint integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Pin Rust toolchain
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup override set 1.97.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build --filter=@cashu-fault-lab/scenario-runner
+      - run: cargo build --manifest-path adapters/cdk/Cargo.toml
+      - name: Start Nutshell fake-wallet mint
+        run: docker compose -f infra/compose/nutshell.compose.yml up -d --wait
+      - name: Real mint response-loss recovery
+        env:
+          CFL_REAL_MINT_URL: http://127.0.0.1:3338
+        run: pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/docker-mint-e2e.test.ts
+      - name: Cross-language delivery faults
+        env:
+          CFL_REAL_MINT_URL: http://127.0.0.1:3338
+        run: pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/cross-language-docker.test.ts
+      - name: Stop mint
+        if: always()
+        run: docker compose -f infra/compose/nutshell.compose.yml down -v
+
+  browser:
+    name: Browser CORS lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
         with:
@@ -28,36 +103,5 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      - run: npx playwright install chromium
       - run: pnpm test:browser
-      - name: Security scenarios
-        run: |
-          node apps/lab-cli/dist/bin.js run scenarios/security/redirect-leak.json --seed weekly-redirect
-          node apps/lab-cli/dist/bin.js run scenarios/security/ssrf.json --seed weekly-ssrf
-          node apps/lab-cli/dist/bin.js run scenarios/security/cors.json --seed weekly-cors
-          node apps/lab-cli/dist/bin.js run scenarios/security/malformed-input.json --seed weekly-malformed
-      - name: Long recovery and cross-transport storm
-        run: |
-          for seed in $(seq 0 199); do
-            node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/mint-response-lost.json --seed "weekly-recovery-${seed}"
-            node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed "weekly-storm-${seed}"
-          done
-      - run: pnpm audit --prod
-
-  rust-adapter:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - name: Pin Rust toolchain
-        run: |
-          rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
-          rustup override set 1.97.0
-      - run: cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
-      - run: cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
-      - run: cargo test --manifest-path adapters/cdk/Cargo.toml

@@ -1,5 +1,6 @@
 {
   "name": "security-cors",
+  "description": "Probes CORS origin enforcement. Verifies trusted origins can access the payment endpoint and attacker origins are blocked.",
   "commands": [
     {
       "type": "configure_fault",

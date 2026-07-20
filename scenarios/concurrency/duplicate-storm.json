@@ -1,5 +1,6 @@
 {
   "name": "http-duplicate-storm",
+  "description": "Injects 99 HTTP duplicates on a single delivery. Verifies the receiver creates exactly one settlement plan and one merchant credit.",
   "commands": [
     {
       "type": "configure_fault",

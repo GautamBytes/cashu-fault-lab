@@ -1,5 +1,6 @@
 {
   "name": "http-request-lost",
+  "description": "Drops the first HTTP request before it reaches the receiver. Verifies sender resends the entire delivery payload.",
   "commands": [
     {
       "type": "configure_fault",

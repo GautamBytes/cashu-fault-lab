@@ -1,5 +1,6 @@
 {
   "name": "crash-recovery-mint-response-lost",
+  "description": "Mint commits the swap but drops the response. Receiver restarts, recovers via NUT-19 replay or NUT-09 restore, and settles without double credit.",
   "commands": [
     {
       "type": "configure_fault",

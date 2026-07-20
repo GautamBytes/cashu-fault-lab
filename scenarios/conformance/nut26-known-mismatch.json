@@ -1,4 +1,5 @@
 {
   "name": "nut26-nostr-known-mismatch",
+  "description": "Documents the known NUT-26/NUT-18 incompatibility: NIP-04 raw-key vs NIP-17 nprofile transport mapping mismatch.",
   "commands": [{ "type": "assert_quiescent" }]
 }
