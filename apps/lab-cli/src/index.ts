@@ -23,6 +23,7 @@ export interface LabSelection {
 
 export interface LabRuntime {
   up(profile: string): Promise<void>;
+  down(profile: string): Promise<void>;
   run(scenario: ScenarioSpec, seed: string, selection?: LabSelection): Promise<ScenarioRunResult>;
   replay(artifact: FailureArtifact): Promise<ScenarioRunResult>;
   matrix(
@@ -173,6 +174,15 @@ export async function runCli(
     .action(async (options: { profile: string }) => {
       await runtime.up(options.profile);
       io.stdout(`started ${options.profile}\n`);
+    });
+
+  program
+    .command('down')
+    .description('Stop the local lab services')
+    .option('--profile <profile>', 'compose profile', 'lab')
+    .action(async (options: { profile: string }) => {
+      await runtime.down(options.profile);
+      io.stdout(`stopped ${options.profile}\n`);
     });
 
   program

@@ -28,6 +28,7 @@ class FakeRuntime implements LabRuntime {
   adapterManifest: AdapterManifest | undefined;
 
   async up(): Promise<void> {}
+  async down(): Promise<void> {}
 
   async run(
     _scenario: ScenarioSpec,

@@ -1,4 +1,5 @@
 {
   "name": "legacy-nut18-codec",
+  "description": "Validates legacy NUT-18 codec conformance: parses upstream creqA payment requests with NIP-17 nprofile targets.",
   "commands": [{ "type": "assert_quiescent" }]
 }

@@ -1,5 +1,6 @@
 {
   "name": "cross-transport-duplicate-storm",
+  "description": "Injects 49 HTTP and 50 Nostr duplicates on a single delivery. Verifies at-most-once settlement and credit across dual transport storm.",
   "commands": [
     {
       "type": "configure_fault",

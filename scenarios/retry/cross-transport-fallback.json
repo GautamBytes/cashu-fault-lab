@@ -1,5 +1,6 @@
 {
   "name": "http-nostr-fallback",
+  "description": "Drops the HTTP response so the sender falls back to Nostr transport. Verifies both transports converge on the same settled receipt.",
   "commands": [
     {
       "type": "configure_fault",

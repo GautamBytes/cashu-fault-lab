@@ -1,5 +1,6 @@
 {
   "name": "http-response-lost",
+  "description": "Drops the first HTTP response. Verifies sender retries with the same delivery ID and payload bytes, converging on a settled receipt.",
   "commands": [
     {
       "type": "configure_fault",

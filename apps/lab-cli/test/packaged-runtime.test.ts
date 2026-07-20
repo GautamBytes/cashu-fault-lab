@@ -14,7 +14,7 @@ describe('PackagedLabRuntime', () => {
   it('starts the selected compose profile through the packaged service controller', async () => {
     const profiles: string[] = [];
     const runtime = new PackagedLabRuntime({
-      services: { up: async (profile) => void profiles.push(profile) },
+      services: { up: async (profile) => void profiles.push(profile), down: async () => {} },
     });
 
     await runtime.up('lab');

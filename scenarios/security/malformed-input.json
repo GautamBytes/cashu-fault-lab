@@ -1,5 +1,6 @@
 {
   "name": "security-malformed-input",
+  "description": "Sends malformed payloads (invalid JSON, non-UTF-8, oversized). Verifies all inputs are rejected with stable, deterministic error codes.",
   "commands": [
     {
       "type": "configure_fault",
