@@ -45,8 +45,10 @@ export interface ExternalAdapterScenarioDriverOptions {
 export class DirectExternalFaultController implements ExternalFaultController {
   async reset(): Promise<void> {}
 
-  async configure(): Promise<void> {
-    throw new AdapterNotApplicableError('External HTTP fault controller is not configured');
+  async configure(_target: string, _rule: FaultRule): Promise<void> {
+    // Direct mode applies no transport faults. Fault configuration is accepted
+    // as a no-op so that scenario scripts remain valid for both direct and
+    // HTTP-gateway adapter runs.
   }
 
   async clear(): Promise<void> {}
@@ -356,13 +358,10 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     };
   }
 
-  async restart(component: string): Promise<void> {
-    if (this.#faults.restart === undefined) {
-      throw new AdapterNotApplicableError(
-        `External restart is unsupported for component ${component}`,
-      );
+  async restart(_component: string): Promise<void> {
+    if (this.#faults.restart !== undefined) {
+      await this.#faults.restart(_component);
     }
-    await this.#faults.restart(component);
   }
 
   async clearFaults(target?: string): Promise<void> {

@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "test": "vitest run",
+    "test:consumer": "node test/consumer.mjs",
     "typecheck": "tsc --project tsconfig.json"
   },
   "devDependencies": {
