@@ -4,6 +4,7 @@ import {
   type PaymentRequestTransport,
 } from '@cashu/cashu-ts';
 import {
+  AdapterNotApplicableError,
   validateAdapterRequest,
   validateAdapterResponse,
   type AdapterCapabilities,
@@ -42,6 +43,7 @@ const capabilities: AdapterCapabilities = {
 };
 
 export interface CashuTsAdapterOperations {
+  capabilities?(): Promise<AdapterCapabilities>;
   reset?(seed: string): Promise<void>;
   send(input: SendPaymentInput): Promise<DeliveryReceiptView>;
   delivery(deliveryId: string): Promise<DeliveryReceiptView>;
@@ -86,6 +88,31 @@ function assertResponse(
 
 function unavailable(reply: FastifyReply, reason: string): FastifyReply {
   return reply.code(501).send({ status: 'N/A', reason });
+}
+
+function notApplicableReason(error: unknown): string | undefined {
+  if (error instanceof AdapterNotApplicableError) return error.reason;
+  if (typeof error !== 'object' || error === null || Array.isArray(error)) return undefined;
+  const value = error as Readonly<Record<string, unknown>>;
+  return value.code === 'ADAPTER_NOT_APPLICABLE' && typeof value.reason === 'string'
+    ? value.reason
+    : undefined;
+}
+
+async function invoke<T>(
+  reply: FastifyReply,
+  operation: () => Promise<T>,
+): Promise<{ readonly ok: true; readonly value: T } | { readonly ok: false }> {
+  try {
+    return { ok: true, value: await operation() };
+  } catch (error) {
+    const reason = notApplicableReason(error);
+    if (reason !== undefined) {
+      unavailable(reply, reason);
+      return { ok: false };
+    }
+    throw error;
+  }
 }
 
 function protocolId(seed: string, ordinal: number): string {
@@ -138,8 +165,9 @@ export async function buildCashuTsAdapterServer(
   });
 
   app.get('/v1/capabilities', async () => {
-    assertResponse('capabilities', capabilities);
-    return capabilities;
+    const value = (await options.operations?.capabilities?.()) ?? capabilities;
+    assertResponse('capabilities', value);
+    return value;
   });
 
   app.post<{ Body: unknown }>('/v1/reset', async (request, reply) => {
@@ -200,7 +228,11 @@ export async function buildCashuTsAdapterServer(
     if (!options.operations) {
       return unavailable(reply, 'No funded cashu-ts wallet operations were configured');
     }
-    const value = await options.operations.send(request.body as SendPaymentInput);
+    const result = await invoke(reply, () =>
+      options.operations!.send(request.body as SendPaymentInput),
+    );
+    if (!result.ok) return reply;
+    const value = result.value;
     assertResponse('send', value);
     return value;
   });
@@ -215,7 +247,9 @@ export async function buildCashuTsAdapterServer(
     }
     if (!options.operations)
       return unavailable(reply, 'Delivery state operations are not configured');
-    const value = await options.operations.delivery(request.params.id);
+    const result = await invoke(reply, () => options.operations!.delivery(request.params.id));
+    if (!result.ok) return reply;
+    const value = result.value;
     assertResponse('delivery', value);
     return value;
   });
@@ -223,7 +257,9 @@ export async function buildCashuTsAdapterServer(
   app.get('/v1/ledger', async (_request, reply) => {
     if (!options.operations)
       return unavailable(reply, 'Receiver ledger operations are not configured');
-    const value = await options.operations.ledger();
+    const result = await invoke(reply, () => options.operations!.ledger());
+    if (!result.ok) return reply;
+    const value = result.value;
     assertResponse('ledger', value);
     return value;
   });
@@ -231,7 +267,9 @@ export async function buildCashuTsAdapterServer(
   app.get('/v1/proofs', async (_request, reply) => {
     if (!options.operations)
       return unavailable(reply, 'Proof evidence operations are not configured');
-    const value = await options.operations.proofs();
+    const result = await invoke(reply, () => options.operations!.proofs());
+    if (!result.ok) return reply;
+    const value = result.value;
     assertResponse('proofs', value);
     return value;
   });
