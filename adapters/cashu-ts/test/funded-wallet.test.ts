@@ -15,6 +15,7 @@ class Client implements CashuTsWalletClient {
   mintCalls = 0;
   mintOutputType: unknown;
   sendCalls = 0;
+  sendConfig: unknown;
   sendOutputConfig: unknown;
 
   async loadMint(): Promise<void> {
@@ -42,7 +43,7 @@ class Client implements CashuTsWalletClient {
   async mintProofsBolt11(
     _amount?: unknown,
     _quote?: unknown,
-    _config?: unknown,
+    config?: unknown,
     outputType?: unknown,
   ): Promise<Proof[]> {
     this.mintCalls += 1;
@@ -53,12 +54,13 @@ class Client implements CashuTsWalletClient {
   async send(
     _amount?: unknown,
     _proofs?: unknown,
-    _config?: unknown,
+    config?: unknown,
     outputConfig?: unknown,
   ): Promise<{ readonly keep: Proof[]; readonly send: Proof[] }> {
     this.sendCalls += 1;
+    this.sendConfig = config;
     this.sendOutputConfig = outputConfig;
-    return { keep: [], send: [proof] };
+    return { keep: [], send: [{ ...proof, amount: Amount.from(9) }] };
   }
 }
 
@@ -92,6 +94,7 @@ describe('FundedCashuTsWallet', () => {
     expect(client.mintCalls).toBe(1);
     expect(client.mintOutputType).toEqual({ type: 'random' });
     expect(client.sendCalls).toBe(1);
+    expect(client.sendConfig).toEqual({ includeFees: true });
     expect(client.sendOutputConfig).toEqual({
       send: { type: 'random' },
       keep: { type: 'random' },

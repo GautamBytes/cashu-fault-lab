@@ -29,6 +29,7 @@
     "nostr-tools": "2.23.12"
   },
   "devDependencies": {
+    "@cashu-fault-lab/adapter-cashu-ts": "workspace:*",
     "fast-check": "4.9.0"
   }
 }

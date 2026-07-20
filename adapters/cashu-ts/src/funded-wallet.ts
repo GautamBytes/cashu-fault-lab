@@ -176,15 +176,20 @@ export class FundedCashuTsWallet implements CashuTsWalletPort {
     let result: { readonly keep: Proof[]; readonly send: Proof[] };
     try {
       // A replayed seeded run must not submit the same blinded swap outputs again.
-      result = await client.send(amount, this.#available, undefined, {
-        send: { type: 'random' },
-        keep: { type: 'random' },
-      });
+      result = await client.send(
+        amount,
+        this.#available,
+        { includeFees: true },
+        {
+          send: { type: 'random' },
+          keep: { type: 'random' },
+        },
+      );
     } catch {
       throw new Error('Cashu wallet proof reservation failed');
     }
     const total = result.send.reduce((sum, proof) => sum + proof.amount.toNumber(), 0);
-    if (total !== amount || result.send.length === 0) {
+    if (total < amount || result.send.length === 0) {
       throw new Error('Cashu wallet returned an invalid proof reservation');
     }
     this.#available = [...result.keep];

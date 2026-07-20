@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "cashu-fault-lab-reference-receiver": "./dist/bin.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,6 +18,7 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
+    "start": "node dist/bin.js",
     "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },

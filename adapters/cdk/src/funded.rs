@@ -351,7 +351,7 @@ fn validate_reserved(reserved: &ReservedProofs, amount: u64) -> Result<(), Strin
             .checked_add(proof_amount)
             .ok_or_else(|| "CDK wallet returned an invalid proof reservation".to_owned())
     })?;
-    if total != amount || reserved.input_ys.len() != reserved.proofs.len() {
+    if total < amount || reserved.input_ys.len() != reserved.proofs.len() {
         return Err("CDK wallet returned an invalid proof reservation".to_owned());
     }
     if !is_hash(&reserved.proof_set_hash)

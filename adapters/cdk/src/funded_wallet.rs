@@ -138,7 +138,13 @@ impl WalletPort for FundedCdkWallet {
             .clone()
             .ok_or_else(|| "CDK wallet is not funded".to_owned())?;
         let prepared = wallet
-            .prepare_send(Amount::from(amount), SendOptions::default())
+            .prepare_send(
+                Amount::from(amount),
+                SendOptions {
+                    include_fee: true,
+                    ..Default::default()
+                },
+            )
             .await
             .map_err(|_| "CDK wallet proof reservation failed".to_owned())?;
         let token = prepared
@@ -156,7 +162,7 @@ impl WalletPort for FundedCdkWallet {
             sum.checked_add(proof.amount.to_u64())
                 .ok_or_else(|| "CDK wallet returned an invalid proof reservation".to_owned())
         })?;
-        if proofs.is_empty() || total != amount {
+        if proofs.is_empty() || total < amount {
             return Err("CDK wallet returned an invalid proof reservation".to_owned());
         }
         let input_ys = proofs

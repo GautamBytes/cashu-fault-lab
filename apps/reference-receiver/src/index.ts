@@ -24,6 +24,14 @@ export {
 } from './adapters/swap-plan.js';
 export { MemoryReceiverStore } from './adapters/memory-store.js';
 export {
+  FundedReceiverAdapterControl,
+  type FundedReceiverAdapterControlOptions,
+} from './funded-adapter.js';
+export {
+  buildFundedReceiverAdapterServer,
+  type FundedReceiverAdapterServerOptions,
+} from './funded-server.js';
+export {
   CryptoEnvelope,
   replacementAuthenticatedData,
   swapPlanAuthenticatedData,

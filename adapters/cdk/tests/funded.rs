@@ -59,7 +59,7 @@ impl WalletPort for FakeWallet {
         Ok(ReservedProofs {
             mint: "https://mint.example".to_owned(),
             proofs: vec![json!({
-                "amount": 8,
+                "amount": 9,
                 "id": "00aa",
                 "secret": "funded-proof-secret",
                 "C": format!("02{}", "11".repeat(32)),

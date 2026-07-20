@@ -15,6 +15,14 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
   return parsed;
 }
 
+function listenHost(value: string | undefined): string {
+  const host = value ?? '127.0.0.1';
+  if (host !== '127.0.0.1' && host !== '0.0.0.0') {
+    throw new Error('CFL_CASHU_TS_HOST must be 127.0.0.1 or 0.0.0.0');
+  }
+  return host;
+}
+
 const app = await buildFundedCashuTsAdapterServer({
   mintUrl: required('CFL_CASHU_TS_MINT_URL'),
   controlToken: required('CFL_CASHU_TS_CONTROL_TOKEN'),
@@ -25,6 +33,7 @@ const app = await buildFundedCashuTsAdapterServer({
   ),
 });
 const port = positiveInteger(process.env.CFL_CASHU_TS_PORT, 4101, 'CFL_CASHU_TS_PORT');
+const host = listenHost(process.env.CFL_CASHU_TS_HOST);
 
 const close = async (): Promise<void> => {
   await app.close();
@@ -32,4 +41,4 @@ const close = async (): Promise<void> => {
 };
 process.once('SIGINT', () => void close());
 process.once('SIGTERM', () => void close());
-await app.listen({ host: '127.0.0.1', port });
+await app.listen({ host, port });

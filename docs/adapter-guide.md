@@ -31,6 +31,8 @@ These tiers follow the canonical definitions in the [design](superpowers/specs/2
 
 Declare each profile by role. Return HTTP `501` with `{ "status": "N/A", "reason": "..." }` when the adapter lacks funded wallet state or a profile. A matrix skips that pair. Do not return synthetic success.
 
+Evidence is role-specific. A funded sender can claim T1 after it reserves real proofs, delivers them through its declared transport, and reconciles a receiver receipt. It cannot claim T3: durable merchant credit is receiver-owned evidence and must come from an independently inspectable receiver ledger. Likewise, the bundled reference receiver's T1 evidence does not turn a sender-only cashu-ts or CDK adapter into a receiver implementation.
+
 ## Retry rules
 
 Create one delivery ID and reserve one proof set. Persist both before transport. Retries reuse the exact inner payload bytes. HTTP redirects stay disabled. HTTP relay or Nostr relay acceptance does not settle a payment; only a verified receiver receipt can settle sender state.
@@ -72,5 +74,15 @@ cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
 cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path adapters/cdk/Cargo.toml
 ```
+
+Run the real cross-language sender lane against a started fake-wallet mint:
+
+```bash
+CFL_REAL_MINT_URL=http://127.0.0.1:3338 \
+  pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run \
+  test/cross-language-docker.test.ts
+```
+
+For an external adapter process, register only its loopback origin and token environment-variable name in a schema-version 1 manifest. `spec/examples/adapters.local.json` is the runnable example; bearer values stay in the environment and out of manifests and reports.
 
 Copy `adapters/template/README.md` into a new adapter directory, then replace each checklist item with executable contract tests.

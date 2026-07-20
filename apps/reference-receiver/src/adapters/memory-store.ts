@@ -86,6 +86,17 @@ export class MemoryReceiverStore implements ReceiverStore {
   #tail: Promise<void> = Promise.resolve();
   readonly #redemptionLocks = new Set<string>();
 
+  async reset(): Promise<void> {
+    await this.#transaction((draft) => {
+      draft.requests.clear();
+      draft.deliveries.clear();
+      draft.proofClaims.clear();
+      draft.requestReservations.clear();
+      draft.credits.clear();
+    });
+    this.#redemptionLocks.clear();
+  }
+
   async createRequest(input: CreatePaymentRequest): Promise<PaymentRequestRecord> {
     const id = parseProtocolId(input.id);
     assertSafeInteger(input.amount, 'Request amount');

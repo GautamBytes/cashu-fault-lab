@@ -1,0 +1,11 @@
+.git
+.github
+.turbo
+**/.turbo
+**/dist
+**/node_modules
+adapters/cdk/target
+artifacts
+coverage
+graphify-out
+*.log

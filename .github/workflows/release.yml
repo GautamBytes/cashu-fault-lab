@@ -39,8 +39,17 @@ jobs:
       - run: cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
       - run: cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path adapters/cdk/Cargo.toml
+      - name: Start Nutshell real-mint lane
+        run: docker compose -f infra/compose/nutshell.compose.yml up -d --wait
+      - name: Prove funded cashu-ts and CDK sender fault handling
+        env:
+          CFL_REAL_MINT_URL: http://127.0.0.1:3338
+        run: pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/cross-language-docker.test.ts
       - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1 --min-passes 2
       - run: node apps/lab-cli/dist/bin.js matrix --profile legacy-nut18
       - run: node apps/lab-cli/dist/bin.js matrix --profile nut26-nostr
       - run: node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/mint-response-lost.json --seed release
       - run: node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed release
+      - name: Stop Nutshell
+        if: always()
+        run: docker compose -f infra/compose/nutshell.compose.yml down -v
