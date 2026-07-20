@@ -2,8 +2,12 @@ import {
   MintQuoteState,
   Wallet,
   hashToCurve,
+  type MintProofsConfig,
   type MintQuoteBolt11Response,
+  type OutputConfig,
+  type OutputType,
   type Proof,
+  type SendConfig,
 } from '@cashu/cashu-ts';
 import type { ProofEvidenceView } from '@cashu-fault-lab/adapter-contract';
 import {
@@ -19,10 +23,17 @@ export interface CashuTsWalletClient {
   loadMint(): Promise<void>;
   createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteBolt11Response>;
   checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
-  mintProofsBolt11(amount: number, quote: string | MintQuoteBolt11Response): Promise<Proof[]>;
+  mintProofsBolt11(
+    amount: number,
+    quote: string | MintQuoteBolt11Response,
+    config?: MintProofsConfig,
+    outputType?: OutputType,
+  ): Promise<Proof[]>;
   send(
     amount: number,
     proofs: Proof[],
+    config?: SendConfig,
+    outputConfig?: OutputConfig,
   ): Promise<{ readonly keep: Proof[]; readonly send: Proof[] }>;
 }
 
@@ -131,7 +142,11 @@ export class FundedCashuTsWallet implements CashuTsWalletPort {
       if (quote.state !== MintQuoteState.PAID) {
         throw new Error('Fake mint quote did not become paid');
       }
-      this.#available = await client.mintProofsBolt11(this.#fundingAmount, quote);
+      // Funding proofs are intentionally random. Replaying a seeded lab run must not recreate
+      // blinded mint outputs that an already-used fake mint correctly rejects as duplicates.
+      this.#available = await client.mintProofsBolt11(this.#fundingAmount, quote, undefined, {
+        type: 'random',
+      });
     } catch {
       this.#client = undefined;
       this.#available = [];
@@ -160,7 +175,11 @@ export class FundedCashuTsWallet implements CashuTsWalletPort {
     if (client === undefined) throw new Error('Cashu wallet is not funded');
     let result: { readonly keep: Proof[]; readonly send: Proof[] };
     try {
-      result = await client.send(amount, this.#available);
+      // A replayed seeded run must not submit the same blinded swap outputs again.
+      result = await client.send(amount, this.#available, undefined, {
+        send: { type: 'random' },
+        keep: { type: 'random' },
+      });
     } catch {
       throw new Error('Cashu wallet proof reservation failed');
     }

@@ -65,6 +65,39 @@ pub fn capabilities() -> AdapterCapabilities {
     }
 }
 
+pub fn funded_capabilities() -> AdapterCapabilities {
+    AdapterCapabilities {
+        implementation: "cdk".to_owned(),
+        version: "0.17.3".to_owned(),
+        nuts: vec![3, 7, 18],
+        transports: vec!["http".to_owned()],
+        evidence_tier: "T1".to_owned(),
+        encodings: vec!["creqA".to_owned(), "creqB".to_owned()],
+        profiles: vec![
+            ProfileCapability {
+                name: "legacy-nut18".to_owned(),
+                roles: vec!["sender".to_owned()],
+                status: "unsupported".to_owned(),
+                reason: Some(
+                    "Funded operations require the delivery-v1 idempotency extension".to_owned(),
+                ),
+            },
+            ProfileCapability {
+                name: "delivery-v1".to_owned(),
+                roles: vec!["sender".to_owned()],
+                status: "supported".to_owned(),
+                reason: None,
+            },
+            ProfileCapability {
+                name: "nut26-nostr".to_owned(),
+                roles: vec!["sender".to_owned()],
+                status: "unsupported".to_owned(),
+                reason: Some("Funded operations currently implement HTTP delivery only".to_owned()),
+            },
+        ],
+    }
+}
+
 pub fn decode_request(encoded: &str) -> Result<PaymentRequest, String> {
     PaymentRequest::from_str(encoded).map_err(|_| "payment request decoding failed".to_owned())
 }

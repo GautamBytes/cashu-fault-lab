@@ -7,7 +7,7 @@ describe.skipIf(!mintUrl)('funded cashu-ts Docker mint adapter', () => {
   it('funds and reserves real proofs without exposing proof material', async () => {
     const wallet = new FundedCashuTsWallet({
       mintUrl: mintUrl!,
-      fundingAmount: 8,
+      fundingAmount: 16,
     });
     await wallet.reset('docker-funded-wallet');
     const reserved = await wallet.reserve(8, 'sat', [mintUrl!], 'EBESExQVFhcYGRobHB0eHw');

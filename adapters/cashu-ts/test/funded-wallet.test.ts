@@ -13,7 +13,9 @@ class Client implements CashuTsWalletClient {
   loadCalls = 0;
   quoteCalls = 0;
   mintCalls = 0;
+  mintOutputType: unknown;
   sendCalls = 0;
+  sendOutputConfig: unknown;
 
   async loadMint(): Promise<void> {
     this.loadCalls += 1;
@@ -37,13 +39,25 @@ class Client implements CashuTsWalletClient {
     return typeof quote === 'string' ? this.createMintQuoteBolt11() : quote;
   }
 
-  async mintProofsBolt11(): Promise<Proof[]> {
+  async mintProofsBolt11(
+    _amount?: unknown,
+    _quote?: unknown,
+    _config?: unknown,
+    outputType?: unknown,
+  ): Promise<Proof[]> {
     this.mintCalls += 1;
+    this.mintOutputType = outputType;
     return [proof];
   }
 
-  async send(): Promise<{ readonly keep: Proof[]; readonly send: Proof[] }> {
+  async send(
+    _amount?: unknown,
+    _proofs?: unknown,
+    _config?: unknown,
+    outputConfig?: unknown,
+  ): Promise<{ readonly keep: Proof[]; readonly send: Proof[] }> {
     this.sendCalls += 1;
+    this.sendOutputConfig = outputConfig;
     return { keep: [], send: [proof] };
   }
 }
@@ -76,7 +90,12 @@ describe('FundedCashuTsWallet', () => {
     expect(client.loadCalls).toBe(1);
     expect(client.quoteCalls).toBe(1);
     expect(client.mintCalls).toBe(1);
+    expect(client.mintOutputType).toEqual({ type: 'random' });
     expect(client.sendCalls).toBe(1);
+    expect(client.sendOutputConfig).toEqual({
+      send: { type: 'random' },
+      keep: { type: 'random' },
+    });
     const pending = await wallet.evidence('EBESExQVFhcYGRobHB0eHw');
     expect(pending).toMatchObject({
       state: 'pending',

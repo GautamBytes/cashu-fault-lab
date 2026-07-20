@@ -19,7 +19,7 @@ fn vectors() -> Vec<Vector> {
 }
 
 #[test]
-fn publishes_honest_t0_capabilities() {
+fn publishes_honest_legacy_capabilities() {
     let value = capabilities();
     assert_eq!(value.implementation, "cdk");
     assert_eq!(value.version, "0.17.3");
