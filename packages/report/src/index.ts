@@ -1,6 +1,7 @@
-export { renderHtml } from './html.js';
-export { renderJson } from './json.js';
-export { renderJunit } from './junit.js';
+export { renderHtml, renderMatrixHtml } from './html.js';
+export { renderJson, renderMatrixJson } from './json.js';
+export { renderJunit, renderMatrixJunit } from './junit.js';
+export { createMatrixReport, type MatrixReportDocument, type MatrixReportInput } from './matrix.js';
 export {
   createReport,
   type ReportCapabilities,

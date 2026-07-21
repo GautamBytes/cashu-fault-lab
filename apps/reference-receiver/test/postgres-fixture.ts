@@ -33,6 +33,18 @@ export async function resetPostgres(pool: Pool): Promise<void> {
 }
 
 export async function stopPostgresFixture(fixture: PostgresFixture): Promise<void> {
+  // Pool.end() resolves before every underlying socket has fully drained its
+  // close handshake. If we stop the container immediately, postgres terminates
+  // the connections out from under us and pg emits uncaught 'error' events
+  // (FATAL code 57P01) that vitest 4 surfaces as test-run failures. Attach a
+  // no-op error listener before ending so late socket errors are swallowed,
+  // then wait for the event loop to drain before tearing down the container.
+  const swallowLateErrors = (): void => {
+    // no-op: late connection errors between pool.end() and container.stop() are expected
+  };
+  fixture.pool.on('error', swallowLateErrors);
   await fixture.pool.end();
+  await new Promise<void>((resolve) => setTimeout(resolve, 250));
+  fixture.pool.off('error', swallowLateErrors);
   await fixture.container.stop();
 }
