@@ -15,9 +15,16 @@ import {
   type ProofEvidenceView,
   type SendPaymentInput,
 } from '@cashu-fault-lab/adapter-contract';
-import { parseProtocolId } from '@cashu-fault-lab/delivery-core';
+import {
+  DeliveryValidationError,
+  parseProtocolId,
+  secureEqual,
+} from '@cashu-fault-lab/delivery-core';
+import { ReceiverDomainError } from '@cashu-fault-lab/reference-receiver';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { createHash } from 'node:crypto';
+
+const PAYMENT_BODY_LIMIT = 65_536;
 
 const capabilities: AdapterCapabilities = {
   implementation: 'cashu-ts',
@@ -45,7 +52,9 @@ const capabilities: AdapterCapabilities = {
 export interface CashuTsAdapterOperations {
   capabilities?(): Promise<AdapterCapabilities>;
   reset?(seed: string): Promise<void>;
+  createRequest?(input: CreateRequestInput): Promise<PaymentRequestView>;
   send(input: SendPaymentInput): Promise<DeliveryReceiptView>;
+  receive?(payloadBytes: Uint8Array): Promise<DeliveryReceiptView>;
   delivery(deliveryId: string): Promise<DeliveryReceiptView>;
   ledger(): Promise<readonly LedgerCreditView[]>;
   proofs(): Promise<readonly ProofEvidenceView[]>;
@@ -60,8 +69,6 @@ export interface CashuTsAdapterServerOptions {
   readonly controlToken?: string;
   readonly testMode?: boolean;
 }
-
-import { secureEqual } from '@cashu-fault-lab/delivery-core';
 
 function validateRequest(
   operation: Parameters<typeof validateAdapterRequest>[0],
@@ -93,6 +100,44 @@ function notApplicableReason(error: unknown): string | undefined {
   return value.code === 'ADAPTER_NOT_APPLICABLE' && typeof value.reason === 'string'
     ? value.reason
     : undefined;
+}
+
+function paymentBytes(body: unknown): Uint8Array {
+  if (Buffer.isBuffer(body)) return Uint8Array.from(body);
+  if (body === undefined) {
+    throw new DeliveryValidationError('INVALID_DELIVERY_PAYLOAD', 'Payment payload is missing');
+  }
+  const serialized = JSON.stringify(body);
+  if (serialized === undefined) {
+    throw new DeliveryValidationError('INVALID_DELIVERY_PAYLOAD', 'Payment payload is invalid');
+  }
+  const bytes = Buffer.from(serialized, 'utf8');
+  if (bytes.byteLength > PAYMENT_BODY_LIMIT) {
+    throw new DeliveryValidationError('INVALID_DELIVERY_PAYLOAD', 'Payload exceeds 65,536 bytes');
+  }
+  return bytes;
+}
+
+function mapPaymentError(error: unknown, reply: FastifyReply): void {
+  if (error instanceof ReceiverDomainError) {
+    const conflict = new Set(['DELIVERY_CONFLICT', 'PROOF_CONFLICT', 'SINGLE_USE_CONFLICT']);
+    const expired = new Set(['REQUEST_EXPIRED', 'DELIVERY_EXPIRED']);
+    void reply
+      .code(conflict.has(error.code) ? 409 : expired.has(error.code) ? 410 : 422)
+      .send({ code: error.code, message: error.message });
+    return;
+  }
+  if (error instanceof DeliveryValidationError) {
+    void reply.code(error.code === 'DELIVERY_EXPIRED' ? 410 : 422).send({
+      code: error.code,
+      message: error.message,
+    });
+    return;
+  }
+  void reply.code(500).send({
+    code: 'INTERNAL_ERROR',
+    message: 'Internal server error',
+  });
 }
 
 async function invoke<T>(
@@ -152,6 +197,7 @@ export async function buildCashuTsAdapterServer(
 
   app.addHook('preHandler', async (request, reply) => {
     if (options.testMode) return;
+    if (request.url !== '/v1' && !request.url.startsWith('/v1/')) return;
     if (!secureEqual(request.headers.authorization ?? '', `Bearer ${options.controlToken!}`)) {
       await reply.code(401).header('WWW-Authenticate', 'Bearer').send({
         code: 'UNAUTHORIZED',
@@ -180,6 +226,13 @@ export async function buildCashuTsAdapterServer(
     if (!validateRequest('createRequest', request.body, reply)) return reply;
     if (!seed) return reply.code(409).send({ code: 'RESET_REQUIRED', message: 'Reset first' });
     const input = request.body as CreateRequestInput;
+    if (options.operations?.createRequest !== undefined) {
+      const result = await invoke(reply, () => options.operations!.createRequest!(input));
+      if (!result.ok) return reply;
+      const value = result.value;
+      assertResponse('createRequest', value);
+      return value;
+    }
     let transports: readonly PaymentRequestTransport[];
     try {
       transports = transportViews(input, options);
@@ -217,6 +270,31 @@ export async function buildCashuTsAdapterServer(
     };
     assertResponse('createRequest', value);
     return value;
+  });
+
+  app.post<{ Body: unknown }>('/pay', { bodyLimit: PAYMENT_BODY_LIMIT }, async (request, reply) => {
+    try {
+      if (!/^application\/json(?:\s*;|$)/i.test(request.headers['content-type'] ?? '')) {
+        return reply.code(415).send({
+          code: 'UNSUPPORTED_MEDIA_TYPE',
+          message: 'Payment requests require application/json',
+        });
+      }
+      if (options.operations?.receive === undefined) {
+        return unavailable(reply, 'Receiver payment operations are not configured');
+      }
+      const value = await options.operations.receive(paymentBytes(request.body));
+      assertResponse('delivery', value);
+      if (value.status === 'processing') {
+        reply.header('Retry-After', '1').code(202);
+      } else {
+        reply.code(200);
+      }
+      return value;
+    } catch (error) {
+      mapPaymentError(error, reply);
+      return reply;
+    }
   });
 
   app.post<{ Body: unknown }>('/v1/send', async (request, reply) => {

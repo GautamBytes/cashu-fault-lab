@@ -102,9 +102,11 @@ services:
     command: ['node', 'adapters/cashu-ts/dist/bin.js']
     environment:
       CFL_CASHU_TS_CONTROL_TOKEN: ${CFL_CASHU_TS_TOKEN:?set CFL_CASHU_TS_TOKEN}
+      CFL_CASHU_TS_CLAIM_KEY: ${CFL_CASHU_TS_CLAIM_KEY:-ERERERERERERERERERERERERERERERERERERERERERE}
       CFL_CASHU_TS_FUNDING_AMOUNT: ${CFL_WALLET_FUNDING_AMOUNT:-64}
       CFL_CASHU_TS_HOST: 0.0.0.0
       CFL_CASHU_TS_MINT_URL: http://127.0.0.1:3338
+      CFL_CASHU_TS_PAYMENT_TARGET: http://127.0.0.1:4101/pay
       CFL_CASHU_TS_PORT: 4101
     depends_on:
       http-fault-gateway:
