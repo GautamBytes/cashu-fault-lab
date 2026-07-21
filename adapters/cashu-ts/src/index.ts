@@ -14,6 +14,12 @@ export {
   type ReservedCashuTsProofs,
 } from './funded-operations.js';
 export {
+  FundedCashuTsDualRoleOperations,
+  FundedCashuTsReceiverOperations,
+  type FundedCashuTsDualRoleOperationsOptions,
+  type FundedCashuTsReceiverOperationsOptions,
+} from './funded-receiver-operations.js';
+export {
   FundedCashuTsWallet,
   type CashuTsWalletClient,
   type FundedCashuTsWalletOptions,

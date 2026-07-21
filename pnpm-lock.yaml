@@ -35,6 +35,9 @@ importers:
       '@cashu-fault-lab/delivery-core':
         specifier: workspace:*
         version: link:../../packages/delivery-core
+      '@cashu-fault-lab/reference-receiver':
+        specifier: workspace:*
+        version: link:../../apps/reference-receiver
       '@cashu/cashu-ts':
         specifier: 4.7.2
         version: 4.7.2

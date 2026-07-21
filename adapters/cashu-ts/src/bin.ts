@@ -23,6 +23,23 @@ function listenHost(value: string | undefined): string {
   return host;
 }
 
+function optionalClaimKey(): Uint8Array | undefined {
+  const value = process.env.CFL_CASHU_TS_CLAIM_KEY;
+  if (value === undefined || value.length === 0) return undefined;
+  const decoded = Buffer.from(value, 'base64url');
+  if (decoded.byteLength !== 32) {
+    throw new Error('CFL_CASHU_TS_CLAIM_KEY must decode to exactly 32 bytes');
+  }
+  return decoded;
+}
+
+const port = positiveInteger(process.env.CFL_CASHU_TS_PORT, 4101, 'CFL_CASHU_TS_PORT');
+const host = listenHost(process.env.CFL_CASHU_TS_HOST);
+const proofClaimKey = optionalClaimKey();
+const paymentTarget =
+  proofClaimKey === undefined
+    ? undefined
+    : (process.env.CFL_CASHU_TS_PAYMENT_TARGET ?? `http://127.0.0.1:${port}/pay`);
 const app = await buildFundedCashuTsAdapterServer({
   mintUrl: required('CFL_CASHU_TS_MINT_URL'),
   controlToken: required('CFL_CASHU_TS_CONTROL_TOKEN'),
@@ -31,9 +48,9 @@ const app = await buildFundedCashuTsAdapterServer({
     64,
     'CFL_CASHU_TS_FUNDING_AMOUNT',
   ),
+  ...(proofClaimKey === undefined ? {} : { proofClaimKey }),
+  ...(paymentTarget === undefined ? {} : { paymentTarget }),
 });
-const port = positiveInteger(process.env.CFL_CASHU_TS_PORT, 4101, 'CFL_CASHU_TS_PORT');
-const host = listenHost(process.env.CFL_CASHU_TS_HOST);
 
 const close = async (): Promise<void> => {
   await app.close();
