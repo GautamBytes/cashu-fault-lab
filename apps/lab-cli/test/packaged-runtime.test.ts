@@ -296,4 +296,37 @@ describe('PackagedLabRuntime', () => {
       ),
     ).toHaveLength(2);
   });
+
+  it('shrinks a failing artifact to a smaller reproducing command set', async () => {
+    const runtime = new PackagedLabRuntime();
+    const spec: ScenarioSpec = {
+      name: 'unsupported-shrink-target',
+      commands: [
+        { type: 'assert_quiescent' },
+        { type: 'send', sender: 'reference', requestId: 'AAECAwQFBgcICQoLDA0ODw' },
+        { type: 'assert_quiescent' },
+      ],
+    };
+    const baseline = await runtime.run(spec, 'shrink-seed');
+
+    expect(baseline.status).toBe('failed');
+    if (baseline.status !== 'failed') throw new Error('expected failure');
+    expect(baseline.error.message).toMatch(/unsupported packaged scenario/i);
+
+    const minimized = await runtime.shrink(baseline.artifact);
+
+    expect(minimized.status).toBe('failed');
+    if (minimized.status !== 'failed') throw new Error('expected failure');
+    expect(minimized.error.name).toBe(baseline.error.name);
+    expect(minimized.error.message).toBe(baseline.error.message);
+    expect(minimized.artifact.commands.length).toBeLessThan(spec.commands.length);
+  });
+
+  it('refuses to shrink an artifact that no longer reproduces a failure', async () => {
+    const runtime = new PackagedLabRuntime();
+    const passing = await runtime.run(await scenario('retry/response-lost.json'), 'shrink-passing');
+
+    expect(passing.status).toBe('passed');
+    await expect(runtime.shrink(passing.artifact)).rejects.toThrow(/cannot be minimized/i);
+  });
 });

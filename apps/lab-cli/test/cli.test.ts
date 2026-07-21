@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
+import type { DoctorProbes } from '../src/doctor.js';
 import { runCli, type CliIo, type LabRuntime } from '../src/index.js';
 
 const artifact: FailureArtifact = {
@@ -24,6 +25,8 @@ const passed: ScenarioRunResult = { status: 'passed', artifact };
 class FakeRuntime implements LabRuntime {
   runs = 0;
   replays = 0;
+  shrinks = 0;
+  shrinkRunLimit: number | undefined;
   selection: { sender: string; receiver: string } | undefined;
   adapterManifest: AdapterManifest | undefined;
 
@@ -43,6 +46,12 @@ class FakeRuntime implements LabRuntime {
 
   async replay(_artifact: FailureArtifact): Promise<ScenarioRunResult> {
     this.replays += 1;
+    return passed;
+  }
+
+  async shrink(_artifact: FailureArtifact, runLimit?: number): Promise<ScenarioRunResult> {
+    this.shrinks += 1;
+    this.shrinkRunLimit = runLimit;
     return passed;
   }
 
@@ -192,6 +201,64 @@ describe('lab CLI', () => {
     expect(runtime.runs).toBe(1);
   });
 
+  it('validates a well-formed scenario and prints ok', async () => {
+    const scenario: ScenarioSpec = {
+      name: 'response-lost',
+      commands: [
+        {
+          type: 'configure_fault',
+          target: 'http',
+          rule: { kind: 'drop_response', occurrence: 1 },
+        },
+        { type: 'send', sender: 'reference', requestId: 'AAECAwQFBgcICQoLDA0ODw' },
+        { type: 'assert_quiescent' },
+      ],
+    };
+    const setup = fixture({ 'scenario.json': JSON.stringify(scenario) });
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'validate', 'scenario.json'], {
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(setup.stdout()).toMatch(/^ok response-lost \(3 commands\)/);
+  });
+
+  it('validate exits nonzero and reports the error path for a malformed scenario', async () => {
+    const setup = fixture({
+      'scenario.json': JSON.stringify({
+        name: 'bad',
+        commands: [{ type: 'configure_fault', target: 'carrier-pigeon', rule: { kind: 'drop' } }],
+      }),
+    });
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'validate', 'scenario.json'], {
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(1);
+    expect(setup.stderr()).toMatch(/invalid:/);
+  });
+
+  it('run rejects a scenario with an unknown command type before invoking the runtime', async () => {
+    const setup = fixture({
+      'scenario.json': JSON.stringify({
+        name: 'bad',
+        commands: [{ type: 'bogus' }],
+      }),
+    });
+    const runtime = new FakeRuntime();
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'run', 'scenario.json'], {
+      runtime,
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(2);
+    expect(runtime.runs).toBe(0);
+    expect(setup.stderr()).toMatch(/scenario file is invalid/i);
+  });
+
   it('replays an artifact through the selected runtime', async () => {
     const setup = fixture({ 'artifact.json': JSON.stringify(artifact) });
     const runtime = new FakeRuntime();
@@ -205,6 +272,87 @@ describe('lab CLI', () => {
     expect(runtime.replays).toBe(1);
   });
 
+  it('diff prints a text summary and exits nonzero when outcomes differ', async () => {
+    const passing: ScenarioRunResult = { status: 'passed', artifact };
+    const failing: ScenarioRunResult = {
+      status: 'failed',
+      artifact,
+      error: { name: 'Error', message: 'boom' },
+    };
+    const setup = fixture({
+      'left.json': JSON.stringify(passing),
+      'right.json': JSON.stringify(failing),
+    });
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'diff', 'left.json', 'right.json'], {
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(1);
+    expect(setup.stdout()).toContain('diff left.json -> right.json');
+    expect(setup.stdout()).toContain('status: passed -> failed');
+    expect(setup.stdout()).toContain('outcome: different');
+  });
+
+  it('diff --json emits machine-readable output and exits zero for identical outcomes', async () => {
+    const passing: ScenarioRunResult = { status: 'passed', artifact };
+    const setup = fixture({
+      'left.json': JSON.stringify(passing),
+      'right.json': JSON.stringify(passing),
+    });
+
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'diff', 'left.json', 'right.json', '--json'],
+      { io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(0);
+    const diff = JSON.parse(setup.stdout()) as { sameOutcome: boolean };
+    expect(diff.sameOutcome).toBe(true);
+  });
+
+  it('shrinks a failing artifact and forwards the run limit', async () => {
+    const setup = fixture({ 'artifact.json': JSON.stringify(artifact) });
+    const runtime = new FakeRuntime();
+
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'shrink', 'artifact.json', '--run-limit', '42'],
+      { runtime, io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(0);
+    expect(runtime.shrinks).toBe(1);
+    expect(runtime.shrinkRunLimit).toBe(42);
+  });
+
+  it('rejects an invalid shrink run limit', async () => {
+    const setup = fixture({ 'artifact.json': JSON.stringify(artifact) });
+
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'shrink', 'artifact.json', '--run-limit', '0'],
+      { runtime: new FakeRuntime(), io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(2);
+    expect(setup.stderr()).toMatch(/run limit/i);
+  });
+
+  it('surfaces a shrink error without crashing the CLI', async () => {
+    const setup = fixture({ 'artifact.json': JSON.stringify(artifact) });
+    const runtime = new FakeRuntime();
+    runtime.shrink = async () => {
+      throw new Error('Artifact does not reproduce a failure and cannot be minimized');
+    };
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'shrink', 'artifact.json'], {
+      runtime,
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(setup.stderr()).toMatch(/cannot be minimized/i);
+  });
+
   it('fails a matrix gate when fewer than the required pairs pass', async () => {
     const setup = fixture();
     const outcome = await runCli(
@@ -214,6 +362,57 @@ describe('lab CLI', () => {
 
     expect(outcome.exitCode).toBe(1);
     expect(setup.stderr()).toMatch(/requires at least 2 passing pairs/i);
+  });
+
+  it('writes a JSON matrix report when --format json is given', async () => {
+    const setup = fixture();
+    const outcome = await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        'matrix',
+        '--profile',
+        'delivery-v1',
+        '--format',
+        'json',
+        '--output',
+        'matrix.json',
+      ],
+      { runtime: new FakeRuntime(), io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(0);
+    const report = JSON.parse(setup.stored.get('matrix.json')!) as {
+      profile: string;
+      summary: { passed: number; total: number };
+    };
+    expect(report.profile).toBe('delivery-v1');
+    expect(report.summary.passed).toBe(1);
+    expect(report.summary.total).toBe(1);
+  });
+
+  it('renders a junit matrix report to stdout when --format junit is given', async () => {
+    const setup = fixture();
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'matrix', '--format', 'junit'], {
+      runtime: new FakeRuntime(),
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(setup.stdout()).toContain('<testsuite');
+    expect(setup.stdout()).toContain('fake->fake');
+  });
+
+  it('renders an html matrix report to stdout when --format html is given', async () => {
+    const setup = fixture();
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'matrix', '--format', 'html'], {
+      runtime: new FakeRuntime(),
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(setup.stdout()).toContain('<!doctype html>');
+    expect(setup.stdout()).toContain('Compatibility matrix');
   });
 
   it('loads and passes a versioned adapter manifest to run and matrix commands', async () => {
@@ -314,5 +513,56 @@ describe('lab CLI', () => {
         })
       ).exitCode,
     ).toBe(2);
+  });
+
+  it('doctor prints checks and exits nonzero when a required env var is missing', async () => {
+    const setup = fixture();
+    const probes: DoctorProbes = {
+      env: {},
+      execFile: async () => ({ stdout: '', stderr: '' }),
+      isPortFree: async () => true,
+    };
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'doctor'], {
+      io: setup.io,
+      doctorProbes: probes,
+    });
+
+    expect(outcome.exitCode).toBe(1);
+    expect(setup.stdout()).toMatch(/CFL_CASHU_TS_TOKEN: missing/);
+    expect(setup.stdout()).toMatch(/doctor:/);
+  });
+
+  it('doctor --json emits a machine-readable report', async () => {
+    const setup = fixture();
+    const probes: DoctorProbes = {
+      env: {
+        CFL_CASHU_TS_TOKEN: 'lab-only-cashu-ts-token',
+        CFL_CDK_TOKEN: 'lab-only-cdk-token',
+        CFL_REFERENCE_RECEIVER_TOKEN: 'lab-only-receiver-token',
+        CFL_REFERENCE_RECEIVER_CLAIM_KEY: 'ERERERERERERERERERERERERERERERERERERERERERE',
+        CFL_HTTP_FAULT_GATEWAY_TOKEN: 'lab-only-fault-token',
+      },
+      execFile: async (command) => {
+        const table: Readonly<Record<string, string>> = {
+          node: 'v24.0.0',
+          pnpm: '11.15.0',
+          docker: 'Docker version 27.0.0, build abc',
+          cargo: 'cargo 1.97.0 (abc)',
+        };
+        return { stdout: `${table[command] ?? ''}\n`, stderr: '' };
+      },
+      isPortFree: async () => true,
+    };
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'doctor', '--json'], {
+      io: setup.io,
+      doctorProbes: probes,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    const report = JSON.parse(setup.stdout()) as { ok: boolean; checks: { name: string }[] };
+    expect(report.ok).toBe(true);
+    expect(report.checks.some((c) => c.name === 'node')).toBe(true);
   });
 });

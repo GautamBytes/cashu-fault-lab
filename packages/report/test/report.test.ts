@@ -1,7 +1,16 @@
-import type { ScenarioRunResult } from '@cashu-fault-lab/scenario-runner';
+import type { MatrixCaseResult, ScenarioRunResult } from '@cashu-fault-lab/scenario-runner';
 import { validateScenarioResult } from '@cashu-fault-lab/adapter-contract';
 import { describe, expect, it } from 'vitest';
-import { createReport, renderHtml, renderJson, renderJunit } from '../src/index.js';
+import {
+  createMatrixReport,
+  createReport,
+  renderHtml,
+  renderJson,
+  renderJunit,
+  renderMatrixHtml,
+  renderMatrixJson,
+  renderMatrixJunit,
+} from '../src/index.js';
 
 const result: ScenarioRunResult = {
   status: 'failed',
@@ -135,5 +144,96 @@ describe('allowlist report rendering', () => {
     expect(() => createReport({ result, imageDigests: { mint: 'latest' } })).toThrowError(
       /digest/i,
     );
+  });
+});
+
+const matrixResults: readonly MatrixCaseResult[] = [
+  { profile: 'delivery-v1', sender: 'ref', receiver: 'ref', status: 'passed' },
+  {
+    profile: 'delivery-v1',
+    sender: 'cashu-ts',
+    receiver: 'ref',
+    status: 'failed',
+    code: 'ADAPTER_UNSUPPORTED',
+    reason: 'cashu-ts does not implement receipts',
+  },
+  {
+    profile: 'delivery-v1',
+    sender: 'cdk',
+    receiver: 'ref',
+    status: 'not_applicable',
+    reason: 'cdk receiver is not registered',
+  },
+  {
+    profile: 'nut26-nostr',
+    sender: 'cdk',
+    receiver: 'cashu-ts',
+    status: 'expected_failure',
+    code: 'NUT26_NIP_MAPPING_MISMATCH',
+    reason: 'NIP-04 raw key mismatch',
+  },
+];
+
+describe('matrix report rendering', () => {
+  it('summarizes pass/fail/N/A/expected counts across cases', () => {
+    const report = createMatrixReport({
+      profile: 'delivery-v1',
+      seed: 'matrix-seed',
+      results: matrixResults,
+    });
+
+    expect(report.summary).toEqual({
+      passed: 1,
+      failed: 1,
+      notApplicable: 1,
+      expectedFailure: 1,
+      total: 4,
+    });
+    expect(report.profile).toBe('delivery-v1');
+    expect(report.cases).toHaveLength(4);
+  });
+
+  it('renders deterministic JSON containing every case', () => {
+    const json = renderMatrixJson({
+      profile: 'delivery-v1',
+      seed: 'matrix-seed',
+      results: matrixResults,
+    });
+
+    expect(json).toContain('"passed": 1');
+    expect(json).toContain('"total": 4');
+    expect(json).toContain('NUT26_NIP_MAPPING_MISMATCH');
+    expect(json).toContain('cashu-ts does not implement receipts');
+  });
+
+  it('renders JUnit with one testcase per pair and correct skip/failure counts', () => {
+    const junit = renderMatrixJunit({
+      profile: 'delivery-v1',
+      seed: 'matrix-seed',
+      results: matrixResults,
+    });
+
+    expect(junit).toContain('<testsuite');
+    expect(junit).toContain('tests="4"');
+    expect(junit).toContain('failures="1"');
+    expect(junit).toContain('skipped="2"');
+    expect(junit).toContain('<failure type="ADAPTER_UNSUPPORTED"');
+    expect(junit).toContain('<skipped type="NUT26_NIP_MAPPING_MISMATCH"');
+    expect(junit).toContain('<skipped message="cdk receiver is not registered"');
+    expect(junit.match(/<testcase/g)?.length).toBe(4);
+  });
+
+  it('renders self-contained HTML without leaking secrets or script tags', () => {
+    const html = renderMatrixHtml({
+      profile: 'delivery-v1',
+      seed: 'matrix-seed',
+      results: matrixResults,
+    });
+
+    expect(html).toContain('<!doctype html>');
+    expect(html).toContain('Compatibility matrix');
+    expect(html).toContain('ref</td><td>→</td><td>ref');
+    expect(html).toContain('NUT26_NIP_MAPPING_MISMATCH');
+    expect(html).not.toContain('<script>');
   });
 });

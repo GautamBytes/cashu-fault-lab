@@ -4,6 +4,7 @@ export {
   deliveryReceiptSchema,
   deliveryRequestSchema,
   scenarioResultSchema,
+  scenarioSpecSchema,
   type JsonSchema,
 } from './schemas.js';
 export {
@@ -13,6 +14,7 @@ export {
   validateDeliveryReceipt,
   validateDeliveryRequest,
   validateScenarioResult,
+  validateScenarioSpec,
 } from './validation.js';
 export {
   AdapterClientError,

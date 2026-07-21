@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schema/scenario-spec-v1.json",
+  "title": "Cashu Fault Lab Scenario Specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "commands"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "description": { "type": "string", "maxLength": 1024 },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/command" }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/$defs/configure_fault" },
+        { "$ref": "#/$defs/send" },
+        { "$ref": "#/$defs/restart" },
+        { "$ref": "#/$defs/advance_time" },
+        { "$ref": "#/$defs/clear_faults" },
+        { "$ref": "#/$defs/assert_quiescent" }
+      ]
+    },
+    "faultRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "occurrence": { "type": "integer", "minimum": 1 },
+        "delayMs": { "type": "integer", "minimum": 0 },
+        "duplicateCount": { "type": "integer", "minimum": 1 },
+        "statusCode": { "type": "integer", "minimum": 100, "maximum": 599 }
+      }
+    },
+    "configure_fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "target", "rule"],
+      "properties": {
+        "type": { "const": "configure_fault" },
+        "target": { "enum": ["http", "nostr", "receiver", "mint"] },
+        "rule": { "$ref": "#/$defs/faultRule" }
+      }
+    },
+    "send": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "sender", "requestId"],
+      "properties": {
+        "type": { "const": "send" },
+        "sender": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "restart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "component"],
+      "properties": {
+        "type": { "const": "restart" },
+        "component": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "advance_time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "milliseconds"],
+      "properties": {
+        "type": { "const": "advance_time" },
+        "milliseconds": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "clear_faults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "clear_faults" },
+        "target": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "assert_quiescent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "assert_quiescent" }
+      }
+    }
+  }
+}

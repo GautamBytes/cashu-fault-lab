@@ -1,4 +1,12 @@
-import { renderHtml, renderJson, renderJunit } from '@cashu-fault-lab/report';
+import {
+  renderHtml,
+  renderJson,
+  renderJunit,
+  renderMatrixHtml,
+  renderMatrixJson,
+  renderMatrixJunit,
+} from '@cashu-fault-lab/report';
+import { validateScenarioSpec } from '@cashu-fault-lab/adapter-contract';
 import {
   assertReplayableArtifact,
   type FailureArtifact,
@@ -25,6 +33,7 @@ export interface LabRuntime {
   down(profile: string): Promise<void>;
   run(scenario: ScenarioSpec, seed: string, selection?: LabSelection): Promise<ScenarioRunResult>;
   replay(artifact: FailureArtifact): Promise<ScenarioRunResult>;
+  shrink(artifact: FailureArtifact, runLimit?: number): Promise<ScenarioRunResult>;
   matrix(
     profile: string,
     seed: string,
@@ -42,6 +51,7 @@ export interface CliIo {
 export interface RunCliDependencies {
   readonly runtime?: LabRuntime;
   readonly io?: CliIo;
+  readonly doctorProbes?: import('./doctor.js').DoctorProbes;
 }
 
 export interface CliOutcome {
@@ -74,6 +84,12 @@ function json(value: string): unknown {
 function scenario(value: unknown): ScenarioSpec {
   if (!isRecord(value) || typeof value.name !== 'string' || !Array.isArray(value.commands)) {
     throw new Error('Scenario file is invalid');
+  }
+  const validation = validateScenarioSpec(value);
+  if (!validation.ok) {
+    throw new Error(
+      `Scenario file is invalid: ${validation.errorCode} at ${validation.path || '<root>'} — ${validation.message}`,
+    );
   }
   return value as unknown as ScenarioSpec;
 }
@@ -158,6 +174,7 @@ export async function runCli(
 ): Promise<CliOutcome> {
   const io = dependencies.io ?? defaultIo;
   const runtime = dependencies.runtime ?? new PackagedLabRuntime();
+  const doctorProbes = dependencies.doctorProbes;
   let exitCode: CliOutcome['exitCode'] = 0;
   const program = new Command()
     .name('cashu-fault-lab')
@@ -272,6 +289,69 @@ export async function runCli(
     });
 
   program
+    .command('shrink')
+    .description('Minimize a failing artifact to the smallest reproducing command set')
+    .argument('<artifact>', 'artifact JSON file')
+    .option('--artifact <path>', 'write the minimized result artifact')
+    .option('--run-limit <count>', 'maximum shrink probe runs', '100')
+    .option('--verbose', 'print minimization progress', false)
+    .action(
+      async (path: string, options: { artifact?: string; runLimit: string; verbose: boolean }) => {
+        const limit = Number(options.runLimit);
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
+          throw new Error('Shrink run limit must be a positive safe integer');
+        }
+        const decoded = json(await io.readText(path));
+        const source =
+          isRecord(decoded) && 'artifact' in decoded
+            ? runResult(decoded).artifact
+            : artifact(decoded);
+        verboseLine(options.verbose, io, `shrink: ${source.scenario} seed=${source.seed}`);
+        verboseLine(
+          options.verbose,
+          io,
+          `commands: ${source.commands.length} (run limit ${limit})`,
+        );
+        const start = Date.now();
+        let result: ScenarioRunResult;
+        try {
+          result = await runtime.shrink(source, limit);
+        } catch (error) {
+          io.stderr(`${safeError(error)}\n`);
+          return;
+        }
+        await maybeWrite(io, options.artifact, resultArtifact(result));
+        const reduction =
+          result.artifact.commands.length < source.commands.length
+            ? ` (${source.commands.length} -> ${result.artifact.commands.length})`
+            : '';
+        io.stdout(
+          `${result.status} ${result.artifact.scenario} seed=${result.artifact.seed}${reduction} (${elapsed(start)})\n`,
+        );
+        if (result.status === 'failed') exitCode = 1;
+      },
+    );
+
+  program
+    .command('diff')
+    .description('Compare two scenario result artifacts and print the structured differences')
+    .argument('<left>', 'left (baseline) artifact JSON file')
+    .argument('<right>', 'right (candidate) artifact JSON file')
+    .option('--json', 'emit machine-readable JSON instead of text', false)
+    .action(async (leftPath: string, rightPath: string, options: { json: boolean }) => {
+      const left = runResult(json(await io.readText(leftPath)));
+      const right = runResult(json(await io.readText(rightPath)));
+      const { diffScenarios, renderDiffText } = await import('./diff.js');
+      const diff = diffScenarios(left, right);
+      if (options.json) {
+        io.stdout(`${JSON.stringify(diff, null, 2)}\n`);
+      } else {
+        io.stdout(renderDiffText(leftPath, rightPath, left, right, diff));
+      }
+      if (!diff.sameOutcome) exitCode = 1;
+    });
+
+  program
     .command('matrix')
     .description('Run the sender/receiver compatibility matrix')
     .option(
@@ -282,6 +362,12 @@ export async function runCli(
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .option('--min-passes <count>', 'minimum passing pairs required')
     .option('--adapters <path>', 'external adapter manifest')
+    .addOption(
+      new Option('--format <format>', 'report format for full matrix output')
+        .choices(['text', 'json', 'junit', 'html'])
+        .default('text'),
+    )
+    .option('--output <path>', 'write the formatted matrix report to a file')
     .option('--verbose', 'print per-pair results', false)
     .action(
       async (options: {
@@ -289,6 +375,8 @@ export async function runCli(
         seed: string;
         minPasses?: string;
         adapters?: string;
+        format: 'text' | 'json' | 'junit' | 'html';
+        output?: string;
         verbose: boolean;
       }) => {
         const minimum = options.minPasses === undefined ? 0 : Number(options.minPasses);
@@ -301,7 +389,7 @@ export async function runCli(
         const adapterManifest = await readAdapterManifest(io, options.adapters);
         const results = await runtime.matrix(options.profile, options.seed, adapterManifest);
 
-        if (options.verbose) {
+        if (options.verbose || options.format === 'text') {
           for (const result of results) {
             const icon = result.status === 'passed' ? '✓' : result.status === 'failed' ? '✗' : '—';
             io.stdout(
@@ -314,9 +402,21 @@ export async function runCli(
         const failed = results.filter((result) => result.status === 'failed').length;
         const notApplicable = results.filter((result) => result.status === 'not_applicable').length;
         const expected = results.filter((result) => result.status === 'expected_failure').length;
-        io.stdout(
-          `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure (${elapsed(start)})\n`,
-        );
+        if (options.format === 'text') {
+          io.stdout(
+            `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure (${elapsed(start)})\n`,
+          );
+        } else {
+          const matrixInput = { profile: options.profile, seed: options.seed, results };
+          const rendered =
+            options.format === 'html'
+              ? renderMatrixHtml(matrixInput)
+              : options.format === 'junit'
+                ? renderMatrixJunit(matrixInput)
+                : renderMatrixJson(matrixInput);
+          if (options.output) await io.writeText(options.output, rendered);
+          else io.stdout(rendered);
+        }
         if (failed > 0) exitCode = 1;
         if (passed < minimum) {
           io.stderr(
@@ -424,11 +524,53 @@ export async function runCli(
     });
 
   program
+    .command('validate')
+    .description('Validate a scenario file against the scenario-spec schema')
+    .argument('<scenario>', 'scenario JSON file path (e.g. retry/response-lost)')
+    .action(async (path: string) => {
+      const raw = await readScenario(io, path);
+      const value = json(raw);
+      const validation = validateScenarioSpec(value);
+      if (validation.ok) {
+        const spec = value as unknown as ScenarioSpec;
+        io.stdout(`ok ${spec.name} (${spec.commands.length} commands)\n`);
+        return;
+      }
+      io.stderr(
+        `invalid: ${validation.errorCode} at ${validation.path || '<root>'} — ${validation.message}\n`,
+      );
+      exitCode = 1;
+    });
+
+  program
     .command('gen-id')
     .description('Generate a random 128-bit ProtocolId')
     .action(async () => {
       const { generateProtocolId } = await import('@cashu-fault-lab/delivery-core');
       io.stdout(`${generateProtocolId()}\n`);
+    });
+
+  program
+    .command('doctor')
+    .description('Check local prerequisites (env, tools, ports) for funded lab lanes')
+    .option('--json', 'emit machine-readable JSON instead of text', false)
+    .action(async (options: { json: boolean }) => {
+      const { runDoctor, defaultDoctorProbes } = await import('./doctor.js');
+      const report = await runDoctor(doctorProbes ?? defaultDoctorProbes());
+      if (options.json) {
+        io.stdout(`${JSON.stringify(report, null, 2)}\n`);
+      } else {
+        for (const check of report.checks) {
+          const icon = check.status === 'ok' ? '✓' : check.status === 'warn' ? '!' : '✗';
+          io.stdout(`  ${icon} ${check.name}: ${check.detail}\n`);
+        }
+        const failedCount = report.checks.filter((c) => c.status === 'fail').length;
+        const warnCount = report.checks.filter((c) => c.status === 'warn').length;
+        io.stdout(
+          `\ndoctor: ${report.checks.length} checks, ${failedCount} failed, ${warnCount} warned\n`,
+        );
+      }
+      if (!report.ok) exitCode = 1;
     });
 
   try {

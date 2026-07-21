@@ -5,6 +5,7 @@ import {
   ExternalAdapterScenarioDriver,
   HttpExternalFaultController,
   ScenarioRunner,
+  minimizeFailingCommands,
   runExternalDeliveryPair,
   runReferenceDeliveryProbe,
   runReferenceHttpScenario,
@@ -15,6 +16,7 @@ import {
   type ExternalFaultController,
   type MatrixCaseResult,
   type MatrixParticipant,
+  type ScenarioError,
   type ScenarioRunResult,
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
@@ -255,6 +257,33 @@ export class PackagedLabRuntime implements LabRuntime {
 
   async replay(artifact: FailureArtifact): Promise<ScenarioRunResult> {
     return this.run({ name: artifact.scenario, commands: artifact.commands }, artifact.seed);
+  }
+
+  async shrink(artifact: FailureArtifact, runLimit = 100): Promise<ScenarioRunResult> {
+    const baseline = await this.replay(artifact);
+    if (baseline.status !== 'failed') {
+      throw new Error('Artifact does not reproduce a failure and cannot be minimized');
+    }
+    const sameFailure = (left: ScenarioError, right: ScenarioRunResult): boolean =>
+      right.status === 'failed' &&
+      right.error.name === left.name &&
+      right.error.message === left.message;
+    const commands = await minimizeFailingCommands(
+      artifact.commands,
+      async (candidate) => {
+        const result = await this.run(
+          { name: artifact.scenario, commands: candidate },
+          artifact.seed,
+        );
+        return sameFailure(baseline.error, result);
+      },
+      runLimit,
+    );
+    const result = await this.run({ name: artifact.scenario, commands }, artifact.seed);
+    if (!sameFailure(baseline.error, result)) {
+      throw new Error('Minimized trace did not preserve the original failure');
+    }
+    return result;
   }
 
   async matrix(
