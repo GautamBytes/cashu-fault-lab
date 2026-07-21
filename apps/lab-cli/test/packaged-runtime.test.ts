@@ -265,6 +265,76 @@ describe('PackagedLabRuntime', () => {
     ).toHaveLength(1);
   });
 
+  it('recovers across receiver restart mid-swap with one credit and one redemption', async () => {
+    const runtime = new PackagedLabRuntime();
+    const result = await runtime.run(
+      await scenario('crash-recovery/receiver-restart-mid-swap.json'),
+      'packaged-receiver-restart',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'merchant_credited',
+      ),
+    ).toHaveLength(1);
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'redemption_started',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('recovers across sender restart mid-delivery with one credit and no second swap', async () => {
+    const runtime = new PackagedLabRuntime();
+    const result = await runtime.run(
+      await scenario('crash-recovery/sender-restart-mid-delivery.json'),
+      'packaged-sender-restart',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'merchant_credited',
+      ),
+    ).toHaveLength(1);
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'redemption_started',
+      ),
+    ).toHaveLength(1);
+    const restarts = result.artifact.history.filter(
+      (event) => event.phase === 'completed' && event.event === 'restart',
+    );
+    expect(restarts).toHaveLength(2);
+    const restarted = (value: unknown): unknown =>
+      typeof value === 'object' && value !== null ? Reflect.get(value, 'restarted') : undefined;
+    expect(restarts.map((event) => restarted(event.data)).sort()).toEqual(['receiver', 'sender']);
+  });
+
+  it('recovers a lost mint response through an active NUT-19 cache hit', async () => {
+    const result = await new PackagedLabRuntime().run(
+      await scenario('crash-recovery/nut19-cache-hit-recovery.json'),
+      'packaged-nut19',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(result.artifact.componentVersions).toMatchObject({
+      'lab-cli': '0.0.0',
+      'scenario-runner': '0.0.0',
+    });
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'merchant_credited',
+      ),
+    ).toHaveLength(1);
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'redemption_started',
+      ),
+    ).toHaveLength(1);
+  });
+
   it.each([
     'security/redirect-leak.json',
     'security/ssrf.json',
@@ -295,6 +365,56 @@ describe('PackagedLabRuntime', () => {
         (event) => event.phase === 'observation' && event.event === 'delivery_attempted',
       ),
     ).toHaveLength(2);
+  });
+
+  it('rejects a delivery as expired after virtual time advances past the validity window', async () => {
+    const result = await new PackagedLabRuntime().run(
+      await scenario('conformance/created-expired.json'),
+      'packaged-expiry',
+    );
+
+    expect(result.status).toBe('passed');
+    const receipt = result.artifact.history.find(
+      (event) => event.phase === 'observation' && event.event === 'receipt_observed',
+    )?.data;
+    expect(receipt).toMatchObject({ status: 'rejected', detailCode: 'expired' });
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'redemption_started',
+      ),
+    ).toHaveLength(0);
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'merchant_credited',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it.each([
+    ['conformance/conflict-delivery.json', 'DELIVERY_CONFLICT'],
+    ['conformance/conflict-proof.json', 'PROOF_CONFLICT'],
+    ['conformance/conflict-single-use.json', 'SINGLE_USE_CONFLICT'],
+  ])('rejects conformance conflict lane %s without second settlement', async (path, code) => {
+    const result = await new PackagedLabRuntime().run(await scenario(path), `packaged:${path}`);
+
+    expect(result.status).toBe('passed');
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'merchant_credited',
+      ),
+    ).toHaveLength(1);
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'redemption_started',
+      ),
+    ).toHaveLength(1);
+    const completions = result.artifact.history.filter(
+      (event) => event.phase === 'completed' && event.event === 'send',
+    );
+    const outcome = completions[1]?.data;
+    const rejectedCode =
+      typeof outcome === 'object' && outcome !== null ? Reflect.get(outcome, 'rejectedCode') : '';
+    expect(rejectedCode).toBe(code);
   });
 
   it('shrinks a failing artifact to a smaller reproducing command set', async () => {

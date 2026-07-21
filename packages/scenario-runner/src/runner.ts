@@ -47,6 +47,7 @@ export interface ScenarioDriver {
   send(sender: string, requestId: string): Promise<DriverSendResult>;
   restart(component: string): Promise<void>;
   clearFaults(target?: string): Promise<void>;
+  advanceTime?(milliseconds: number): Promise<void>;
 }
 
 export interface FailureArtifact {
@@ -56,6 +57,8 @@ export interface FailureArtifact {
   readonly commands: readonly ScenarioCommand[];
   readonly history: readonly HistoryEvent[];
   readonly capabilities: Readonly<Record<string, unknown>>;
+  readonly componentVersions?: Readonly<Record<string, string>>;
+  readonly imageDigests?: Readonly<Record<string, string>>;
 }
 
 export interface ScenarioError {
@@ -92,6 +95,49 @@ function capabilitiesView(
   const sanitized = redact(value);
   if (typeof sanitized !== 'object' || sanitized === null || Array.isArray(sanitized)) return {};
   return sanitized as Readonly<Record<string, unknown>>;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function metadataRecord(value: unknown): Readonly<Record<string, string>> {
+  if (!isRecord(value)) return {};
+  const result: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === 'string' && item.length > 0) result[key] = item;
+  }
+  return result;
+}
+
+function versionedComponent(value: unknown, prefix?: string): readonly [string, string][] {
+  if (!isRecord(value)) return [];
+  const implementation = value.implementation;
+  const version = value.version;
+  if (typeof implementation !== 'string' || implementation.length === 0) return [];
+  if (typeof version !== 'string' || version.length === 0) return [];
+  return [[prefix ? `${prefix}/${implementation}` : implementation, version]];
+}
+
+function componentVersionsFromCapabilities(
+  capabilities: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, string>> {
+  const result: Record<string, string> = {
+    ...metadataRecord(capabilities.componentVersions),
+  };
+  for (const [key, version] of versionedComponent(capabilities)) result[key] = version;
+  for (const role of ['sender', 'receiver'] as const) {
+    for (const [key, version] of versionedComponent(capabilities[role], role)) {
+      result[key] = version;
+    }
+  }
+  return result;
+}
+
+function imageDigestsFromCapabilities(
+  capabilities: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, string>> {
+  return metadataRecord(capabilities.imageDigests);
 }
 
 export class ScenarioRunner {
@@ -174,6 +220,8 @@ export class ScenarioRunner {
       commands: structuredClone(spec.commands),
       history: history.snapshot(),
       capabilities,
+      componentVersions: componentVersionsFromCapabilities(capabilities),
+      imageDigests: imageDigestsFromCapabilities(capabilities),
     };
     return failure
       ? { status: 'failed', artifact, error: failure }
@@ -240,6 +288,7 @@ export class ScenarioRunner {
         return { oracle, value: { restarted: command.component } };
       case 'advance_time':
         scheduler.advanceBy(command.milliseconds);
+        if (this.#driver.advanceTime) await this.#driver.advanceTime(command.milliseconds);
         return { oracle, value: { now: scheduler.now } };
       case 'clear_faults':
         await this.#driver.clearFaults(command.target);

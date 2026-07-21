@@ -12,6 +12,9 @@ export { runReferenceHttpScenario } from './reference-http-lane.js';
 export { runReferenceNostrScenario } from './reference-nostr-lane.js';
 export { runReferenceCrashScenario } from './reference-crash-lane.js';
 export { runReferenceSecurityScenario } from './reference-security-lane.js';
+export { runReferenceExpiryScenario } from './reference-expiry-lane.js';
+export { runReferenceConflictScenario } from './reference-conflict-lane.js';
+export { runReferenceNut19Scenario } from './reference-nut19-lane.js';
 export { runExternalDeliveryPair, type ExternalDeliveryPairInput } from './external-pair.js';
 export {
   DirectExternalFaultController,

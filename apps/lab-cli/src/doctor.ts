@@ -98,6 +98,59 @@ async function versionCheck(
   }
 }
 
+async function nodeVersionCheck(probe: DoctorProbes): Promise<DoctorCheck> {
+  try {
+    const { stdout } = await probe.execFile('node', ['--version']);
+    const trimmed = stdout.trim();
+    const match = trimmed.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+    if (!match) {
+      return { name: 'node', status: 'warn', detail: `unexpected version: ${truncate(trimmed)}` };
+    }
+    const major = Number(match[1]);
+    if (major !== 24) {
+      return {
+        name: 'node',
+        status: 'fail',
+        detail: `requires Node 24.x; found ${trimmed}`,
+      };
+    }
+    return { name: 'node', status: 'ok', detail: trimmed };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'command failed';
+    return { name: 'node', status: 'fail', detail: truncate(reason) };
+  }
+}
+
+async function dockerDaemonCheck(probe: DoctorProbes): Promise<DoctorCheck> {
+  try {
+    const { stdout } = await probe.execFile('docker', ['info', '--format', '{{.ServerVersion}}']);
+    const version = stdout.trim();
+    return {
+      name: 'docker daemon',
+      status: 'ok',
+      detail: version.length > 0 ? `server ${truncate(version)}` : 'reachable',
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'command failed';
+    return { name: 'docker daemon', status: 'fail', detail: truncate(reason) };
+  }
+}
+
+function testcontainersCheck(dockerDaemon: DoctorCheck): DoctorCheck {
+  if (dockerDaemon.status === 'ok') {
+    return {
+      name: 'testcontainers',
+      status: 'ok',
+      detail: 'Docker daemon reachable for PostgreSQL/Testcontainers lanes',
+    };
+  }
+  return {
+    name: 'testcontainers',
+    status: 'fail',
+    detail: 'Docker daemon unavailable for PostgreSQL/Testcontainers lanes',
+  };
+}
+
 async function portChecks(
   probe: DoctorProbes,
   ports: readonly { readonly label: string; readonly port: number }[],
@@ -120,11 +173,14 @@ export async function runDoctor(
 ): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
   checks.push(...envCheck(probes.env));
-  checks.push(await versionCheck(probes, 'node', ['--version'], /^v\d+\.\d+\.\d+$/, 'node'));
+  checks.push(await nodeVersionCheck(probes));
   checks.push(await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm'));
   checks.push(
     await versionCheck(probes, 'docker', ['--version'], /^Docker version \d+\.\d+/, 'docker'),
   );
+  const dockerDaemon = await dockerDaemonCheck(probes);
+  checks.push(dockerDaemon);
+  checks.push(testcontainersCheck(dockerDaemon));
   checks.push(
     await versionCheck(probes, 'cargo', ['--version'], /^cargo \d+\.\d+/, 'cargo (CDK adapter)'),
   );

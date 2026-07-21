@@ -1,0 +1,9 @@
+{
+  "name": "expiry-created-expired",
+  "description": "Advances virtual time past the delivery validity window before the first send. Verifies the receiver rejects the delivery as expired, never starts mint redemption, and never credits the merchant.",
+  "commands": [
+    { "type": "advance_time", "milliseconds": 1000000 },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

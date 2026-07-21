@@ -1,0 +1,17 @@
+{
+  "name": "crash-recovery-sender-restart-mid-delivery",
+  "description": "Mint commits the swap but drops the response. Receiver restarts and recovers via NUT-09, then sender restarts and resumes the in-flight delivery, converging on the settled receipt without a second mint swap.",
+  "commands": [
+    {
+      "type": "configure_fault",
+      "target": "mint",
+      "rule": { "kind": "timeout_after_commit", "occurrence": 1 }
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "restart", "component": "receiver" },
+    { "type": "clear_faults", "target": "mint" },
+    { "type": "restart", "component": "sender" },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

@@ -199,6 +199,14 @@ function failureView(result: ScenarioRunResult): ReportFailure | undefined {
 export function createReport(input: ReportInput): ReportDocument {
   const artifact = input.result.artifact;
   const failure = failureView(input.result);
+  const componentVersions = {
+    ...(artifact.componentVersions ?? {}),
+    ...(input.componentVersions ?? {}),
+  };
+  const imageDigests = {
+    ...(artifact.imageDigests ?? {}),
+    ...(input.imageDigests ?? {}),
+  };
   return {
     schemaVersion: 1,
     scenarioId: artifact.scenario,
@@ -208,8 +216,8 @@ export function createReport(input: ReportInput): ReportDocument {
     commands: artifact.commands.map(commandView),
     timeline: artifact.history.map(timelineView),
     capabilities: capabilitiesView(artifact.capabilities),
-    componentVersions: metadata(input.componentVersions, 'version'),
-    imageDigests: metadata(input.imageDigests, 'digest'),
+    componentVersions: metadata(componentVersions, 'version'),
+    imageDigests: metadata(imageDigests, 'digest'),
     ...(failure ? { failure } : {}),
   };
 }
