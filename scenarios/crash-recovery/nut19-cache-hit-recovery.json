@@ -1,0 +1,15 @@
+{
+  "name": "nut19-cache-hit-recovery",
+  "description": "Mint commits the swap and drops the response. Receiver restart replays the byte-identical NUT-19 cached swap request inside TTL and settles without NUT-09 restore or double credit.",
+  "commands": [
+    {
+      "type": "configure_fault",
+      "target": "mint",
+      "rule": { "kind": "timeout_after_commit", "occurrence": 1 }
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "restart", "component": "receiver" },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

@@ -564,5 +564,6 @@ describe('lab CLI', () => {
     const report = JSON.parse(setup.stdout()) as { ok: boolean; checks: { name: string }[] };
     expect(report.ok).toBe(true);
     expect(report.checks.some((c) => c.name === 'node')).toBe(true);
+    expect(report.checks.some((c) => c.name === 'testcontainers')).toBe(true);
   });
 });

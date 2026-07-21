@@ -12,6 +12,9 @@ import {
   runReferenceNostrScenario,
   runReferenceCrashScenario,
   runReferenceSecurityScenario,
+  runReferenceExpiryScenario,
+  runReferenceConflictScenario,
+  runReferenceNut19Scenario,
   type FailureArtifact,
   type ExternalFaultController,
   type MatrixCaseResult,
@@ -127,8 +130,29 @@ const participants: readonly MatrixParticipant[] = [
   { id: 'cdk', capabilities: upstreamCapabilities('cdk', '0.17.3') },
 ];
 
+const packagedComponentVersions: Readonly<Record<string, string>> = {
+  'adapter-contract': '0.0.0',
+  'delivery-core': '0.0.0',
+  'lab-cli': '0.0.0',
+  oracle: '0.0.0',
+  report: '0.0.0',
+  'scenario-runner': '0.0.0',
+};
+
+function withPackagedMetadata(result: ScenarioRunResult): ScenarioRunResult {
+  const artifact = {
+    ...result.artifact,
+    componentVersions: {
+      ...packagedComponentVersions,
+      ...(result.artifact.componentVersions ?? {}),
+    },
+    imageDigests: result.artifact.imageDigests ?? {},
+  };
+  return result.status === 'failed' ? { ...result, artifact } : { ...result, artifact };
+}
+
 function failedScenario(scenario: ScenarioSpec, seed: string, message: string): ScenarioRunResult {
-  return {
+  return withPackagedMetadata({
     status: 'failed',
     error: { name: 'Error', message },
     artifact: {
@@ -139,7 +163,7 @@ function failedScenario(scenario: ScenarioSpec, seed: string, message: string): 
       history: [],
       capabilities: {},
     },
-  };
+  });
 }
 
 export class PackagedLabRuntime implements LabRuntime {
@@ -220,7 +244,7 @@ export class PackagedLabRuntime implements LabRuntime {
         senderAlias: senderAliases[0]!,
         requestAlias: requestAliases[0]!,
       });
-      return new ScenarioRunner(driver).run(scenario, seed);
+      return withPackagedMetadata(await new ScenarioRunner(driver).run(scenario, seed));
     }
 
     if (selection.sender !== 'reference-ts' || selection.receiver !== 'reference-ts') {
@@ -235,22 +259,35 @@ export class PackagedLabRuntime implements LabRuntime {
       scenario.name === 'http-request-lost' ||
       scenario.name === 'http-duplicate-storm'
     ) {
-      return runReferenceHttpScenario(scenario, seed);
+      return withPackagedMetadata(await runReferenceHttpScenario(scenario, seed));
     }
     if (scenario.name === 'nostr-response-lost') {
-      return runReferenceNostrScenario(scenario, seed, 'nostr');
+      return withPackagedMetadata(await runReferenceNostrScenario(scenario, seed, 'nostr'));
     }
     if (
       scenario.name === 'http-nostr-fallback' ||
       scenario.name === 'cross-transport-duplicate-storm'
     ) {
-      return runReferenceNostrScenario(scenario, seed, 'cross');
+      return withPackagedMetadata(await runReferenceNostrScenario(scenario, seed, 'cross'));
     }
-    if (scenario.name === 'crash-recovery-mint-response-lost') {
-      return runReferenceCrashScenario(scenario, seed);
+    if (
+      scenario.name === 'crash-recovery-mint-response-lost' ||
+      scenario.name === 'crash-recovery-receiver-restart-mid-swap' ||
+      scenario.name === 'crash-recovery-sender-restart-mid-delivery'
+    ) {
+      return withPackagedMetadata(await runReferenceCrashScenario(scenario, seed));
+    }
+    if (scenario.name === 'expiry-created-expired') {
+      return withPackagedMetadata(await runReferenceExpiryScenario(scenario, seed));
+    }
+    if (scenario.name.startsWith('conflict-')) {
+      return withPackagedMetadata(await runReferenceConflictScenario(scenario, seed));
+    }
+    if (scenario.name === 'nut19-cache-hit-recovery') {
+      return withPackagedMetadata(await runReferenceNut19Scenario(scenario, seed));
     }
     if (scenario.name.startsWith('security-')) {
-      return runReferenceSecurityScenario(scenario, seed);
+      return withPackagedMetadata(await runReferenceSecurityScenario(scenario, seed));
     }
     return failedScenario(scenario, seed, `Unsupported packaged scenario: ${scenario.name}`);
   }

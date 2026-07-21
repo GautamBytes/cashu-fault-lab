@@ -1,0 +1,9 @@
+{
+  "name": "conflict-proof",
+  "description": "Sends a delivery that settles and consumes proof set A, then sends a second delivery with a new delivery ID reusing the same proofs. Verifies the receiver rejects the second delivery with PROOF_CONFLICT and never starts a second mint swap or credits the merchant twice.",
+  "commands": [
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

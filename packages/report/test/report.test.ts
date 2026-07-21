@@ -129,6 +129,22 @@ describe('allowlist report rendering', () => {
     expect(junit).toContain('<failure');
   });
 
+  it('uses artifact-level component versions and image digests by default', () => {
+    const resultWithMetadata: ScenarioRunResult = {
+      ...result,
+      artifact: {
+        ...result.artifact,
+        componentVersions: { receiver: '1.2.3' },
+        imageDigests: { mint: `sha256:${'d'.repeat(64)}` },
+      },
+    };
+
+    expect(createReport({ result: resultWithMetadata })).toMatchObject({
+      componentVersions: { receiver: '1.2.3' },
+      imageDigests: { mint: `sha256:${'d'.repeat(64)}` },
+    });
+  });
+
   it('renders self-contained HTML without executable scenario markup', () => {
     const html = renderHtml({ result });
     expectSecretFree(html);

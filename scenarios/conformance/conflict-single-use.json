@@ -1,0 +1,9 @@
+{
+  "name": "conflict-single-use",
+  "description": "Sends a delivery that settles and claims a single-use request, then sends a second delivery with a new delivery ID and new proofs under the same request. Verifies the receiver rejects the second delivery with SINGLE_USE_CONFLICT and never starts a second mint swap or credits the merchant twice.",
+  "commands": [
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

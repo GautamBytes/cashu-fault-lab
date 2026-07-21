@@ -43,7 +43,7 @@ import { seededProtocolId, seededSecret } from './seeded-fixture.js';
 const now = 1_784_399_400;
 const requestId = 'AAECAwQFBgcICQoLDA0ODw';
 
-class CrashVerifier implements ProofVerifier {
+class Nut19Verifier implements ProofVerifier {
   async inspect(input: InspectProofs): Promise<InspectProofsResult> {
     const proofClaimIds = input.payload.proofs.map((proof) =>
       createHash('sha256').update(`claim:${proof.secret}`).digest('hex'),
@@ -57,9 +57,11 @@ class CrashVerifier implements ProofVerifier {
   }
 }
 
-class CrashMint implements MintGateway {
+class Nut19Mint implements MintGateway {
   mode: 'success' | 'timeout_after_commit' = 'success';
   swapCalls = 0;
+  nut19ReplayCalls = 0;
+  readonly swapRequests: string[] = [];
   readonly committed = new Map<string, SwapResult>();
 
   async prepareSwap(draft: SwapPlanDraft): Promise<ExactSwapPlan> {
@@ -72,19 +74,20 @@ class CrashMint implements MintGateway {
           amount: draft.expectedAmount,
           id: '00aa',
           B_: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
-          secret: 'packaged-crash-replacement',
+          secret: 'packaged-nut19-replacement',
           blindingFactor: '11'.repeat(32),
         },
       ],
-      recovery: { nut09: true, nut19Replay: false, nut19ReplayUntil: null },
+      recovery: { nut09: false, nut19Replay: true, nut19ReplayUntil: now + 300 },
     });
   }
 
   async swap(plan: ExactSwapPlan): Promise<SwapResult> {
     this.swapCalls += 1;
+    this.swapRequests.push(plan.serializedRequest);
     const result = {
-      replacementPlanHash: `replacement:${plan.deliveryId}`,
-      replacementProofs: [`replacement-proof:${plan.deliveryId}`],
+      replacementPlanHash: `nut19-replacement:${plan.deliveryId}`,
+      replacementProofs: [`nut19-replacement-proof:${plan.deliveryId}`],
     } satisfies SwapResult;
     this.committed.set(plan.deliveryId, result);
     if (this.mode === 'timeout_after_commit') {
@@ -94,17 +97,25 @@ class CrashMint implements MintGateway {
   }
 
   async restore(plan: ExactSwapPlan): Promise<RestoreResult> {
+    if (
+      !plan.recovery.nut19Replay ||
+      now > (plan.recovery.nut19ReplayUntil ?? Number.MAX_SAFE_INTEGER)
+    ) {
+      return { kind: 'not_found' };
+    }
+    this.nut19ReplayCalls += 1;
+    this.swapRequests.push(plan.serializedRequest);
     const result = this.committed.get(plan.deliveryId);
-    return result ? { kind: 'recovered', result } : { kind: 'not_found' };
+    if (!result || this.swapRequests[0] !== plan.serializedRequest) return { kind: 'not_found' };
+    return { kind: 'recovered', result };
   }
 
   async proofStates(plan: ExactSwapPlan): Promise<readonly MintProofState[]> {
-    const state = this.committed.has(plan.deliveryId) ? 'SPENT' : 'UNSPENT';
-    return plan.proofYs.map(() => state);
+    return plan.proofYs.map(() => 'SPENT');
   }
 }
 
-class CrashWallet implements SenderWallet {
+class Nut19Wallet implements SenderWallet {
   constructor(private readonly proofs: readonly CashuProof[]) {}
 
   async reserveExact(): Promise<ReservedProofSet> {
@@ -125,20 +136,15 @@ class ReceiverTransport implements PaymentTransport {
   }
 }
 
-class ReferenceCrashDriver implements ScenarioDriver {
+class ReferenceNut19Driver implements ScenarioDriver {
   #seed = 'initial';
-  #deliveryId = seededProtocolId(this.#seed, 'crash-delivery');
+  #deliveryId = seededProtocolId(this.#seed, 'nut19-delivery');
   #proofs: readonly CashuProof[] = [
-    {
-      amount: 8,
-      id: '00aa',
-      secret: seededSecret(this.#seed, 'crash-proof'),
-      C: '02aa',
-    },
+    { amount: 8, id: '00aa', secret: seededSecret(this.#seed, 'nut19-proof'), C: '02aa' },
   ];
   #store = new MemoryReceiverStore();
-  #mint = new CrashMint();
-  #wallet = new CrashWallet(this.#proofs);
+  #mint = new Nut19Mint();
+  #wallet = new Nut19Wallet(this.#proofs);
   #state = new InMemorySenderState();
   #transport = this.#newTransport();
   #sendCount = 0;
@@ -148,7 +154,7 @@ class ReferenceCrashDriver implements ScenarioDriver {
     return {
       store: this.#store,
       mint: this.#mint,
-      verifier: new CrashVerifier(),
+      verifier: new Nut19Verifier(),
       now: () => now,
     } as const;
   }
@@ -159,13 +165,13 @@ class ReferenceCrashDriver implements ScenarioDriver {
 
   async reset(seed: string): Promise<void> {
     this.#seed = seed;
-    this.#deliveryId = seededProtocolId(seed, 'crash-delivery');
+    this.#deliveryId = seededProtocolId(seed, 'nut19-delivery');
     this.#proofs = [
-      { amount: 8, id: '00aa', secret: seededSecret(seed, 'crash-proof'), C: '02aa' },
+      { amount: 8, id: '00aa', secret: seededSecret(seed, 'nut19-proof'), C: '02aa' },
     ];
     this.#store = new MemoryReceiverStore();
-    this.#mint = new CrashMint();
-    this.#wallet = new CrashWallet(this.#proofs);
+    this.#mint = new Nut19Mint();
+    this.#wallet = new Nut19Wallet(this.#proofs);
     this.#state = new InMemorySenderState();
     this.#transport = this.#newTransport();
     this.#sendCount = 0;
@@ -185,14 +191,14 @@ class ReferenceCrashDriver implements ScenarioDriver {
       sender: 'reference-ts',
       receiver: 'reference-ts',
       transports: ['http'],
-      recovery: ['nut09'],
+      recovery: ['nut19'],
       evidenceTier: 'T0',
     };
   }
 
   async configureFault(target: string, rule: FaultRule): Promise<void> {
     if (target !== 'mint' || rule.kind !== 'timeout_after_commit') {
-      throw new Error('Unsupported crash fault');
+      throw new Error('Unsupported NUT-19 fault');
     }
     this.#mint.mode = 'timeout_after_commit';
   }
@@ -230,10 +236,11 @@ class ReferenceCrashDriver implements ScenarioDriver {
     this.#sendCount += 1;
     const senderRecord = await this.#state.get(this.#deliveryId);
     const receiverRecord = await this.#store.current(this.#deliveryId);
-    if (!senderRecord || !receiverRecord) throw new Error('Crash evidence is incomplete');
+    if (!senderRecord || !receiverRecord) throw new Error('NUT-19 evidence is incomplete');
     const observations: Observation[] = [];
-    if (this.#sendCount === 1)
+    if (this.#sendCount === 1) {
       observations.push({ type: 'request_observed', requestId, singleUse: true });
+    }
     observations.push({
       type: 'delivery_attempted',
       requestId,
@@ -259,8 +266,13 @@ class ReferenceCrashDriver implements ScenarioDriver {
       const receipt = outcome.receipt;
       if (receipt.status === 'settled') {
         const credits = await this.#store.credits();
-        if (credits.length !== 1 || !receiverRecord.replacementPlanHash) {
-          throw new Error('Recovered settlement evidence is incomplete');
+        if (
+          credits.length !== 1 ||
+          !receiverRecord.replacementPlanHash ||
+          this.#mint.nut19ReplayCalls !== 1 ||
+          this.#mint.swapRequests[0] !== this.#mint.swapRequests[1]
+        ) {
+          throw new Error('NUT-19 replay settlement evidence is incomplete');
         }
         observations.push(
           {
@@ -287,29 +299,19 @@ class ReferenceCrashDriver implements ScenarioDriver {
   }
 
   async restart(component: string): Promise<void> {
-    if (component === 'receiver') {
-      await recoverDelivery(this.#deliveryId, this.#deps());
-      this.#transport = this.#newTransport();
-      return;
-    }
-    if (component === 'sender') {
-      // The in-memory sender state survives a process restart in this lane;
-      // the next send() call will route through resumePayment to re-attempt
-      // delivery against the current receiver state.
-      return;
-    }
-    throw new Error('Unsupported restart component');
+    if (component !== 'receiver') throw new Error('Unsupported NUT-19 restart component');
+    await recoverDelivery(this.#deliveryId, this.#deps());
+    this.#transport = this.#newTransport();
   }
 
-  async clearFaults(target?: string): Promise<void> {
-    if (target !== undefined && target !== 'mint') throw new Error('Unsupported fault target');
+  async clearFaults(): Promise<void> {
     this.#mint.mode = 'success';
   }
 }
 
-export async function runReferenceCrashScenario(
+export async function runReferenceNut19Scenario(
   spec: ScenarioSpec,
   seed: string,
 ): Promise<ScenarioRunResult> {
-  return new ScenarioRunner(new ReferenceCrashDriver()).run(spec, seed);
+  return new ScenarioRunner(new ReferenceNut19Driver()).run(spec, seed);
 }

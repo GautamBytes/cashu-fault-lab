@@ -32,8 +32,8 @@ function healthyExec(
     Record<string, { readonly stdout: string; readonly stderr: string }>
   > = toolVersions,
 ): DoctorProbes['execFile'] {
-  return async (command) => {
-    const entry = table[command];
+  return async (command, args) => {
+    const entry = table[`${command} ${args.join(' ')}`] ?? table[command];
     if (!entry) throw new Error(`${command}: command not found`);
     return entry;
   };
@@ -147,6 +147,45 @@ describe('runDoctor', () => {
 
     const nodeCheck = report.checks.find((c) => c.name === 'node');
     expect(nodeCheck?.status).toBe('warn');
+  });
+
+  it('fails when Node is outside the supported 24.x engine range', async () => {
+    const report = await runDoctor({
+      env: healthyEnv,
+      execFile: healthyExec({
+        ...toolVersions,
+        node: { stdout: 'v22.18.0\n', stderr: '' },
+      }),
+      isPortFree: async () => true,
+    });
+
+    const nodeCheck = report.checks.find((c) => c.name === 'node');
+    expect(report.ok).toBe(false);
+    expect(nodeCheck?.status).toBe('fail');
+    expect(nodeCheck?.detail).toMatch(/requires Node 24/);
+  });
+
+  it('fails Docker-dependent readiness when the daemon is unreachable', async () => {
+    const report = await runDoctor({
+      env: healthyEnv,
+      execFile: async (command, args) => {
+        if (command === 'docker' && args[0] === 'info') throw new Error('daemon unavailable');
+        return healthyExec()(command, args);
+      },
+      isPortFree: async () => true,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.checks).toContainEqual({
+      name: 'docker daemon',
+      status: 'fail',
+      detail: 'daemon unavailable',
+    });
+    expect(report.checks).toContainEqual({
+      name: 'testcontainers',
+      status: 'fail',
+      detail: 'Docker daemon unavailable for PostgreSQL/Testcontainers lanes',
+    });
   });
 
   it('uses safe defaults when called without probes', async () => {
