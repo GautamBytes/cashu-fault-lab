@@ -11,6 +11,13 @@ async function scenario(path: string): Promise<ScenarioSpec> {
 }
 
 describe('PackagedLabRuntime', () => {
+  it('restarts one adapter service without converging its shared Compose dependencies', async () => {
+    const contents = await readFile(new URL('../src/packaged-runtime.ts', import.meta.url), 'utf8');
+
+    expect(contents).toContain("['compose', '-f', composeFile, 'restart', service]");
+    expect(contents).not.toContain("['compose', '-f', composeFile, 'up', '-d', '--wait', service]");
+  });
+
   it('starts the selected compose profile through the packaged service controller', async () => {
     const profiles: string[] = [];
     const runtime = new PackagedLabRuntime({

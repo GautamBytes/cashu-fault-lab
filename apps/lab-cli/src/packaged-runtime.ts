@@ -82,7 +82,6 @@ class DockerComposeServiceController implements LabServiceController {
       new URL('../../../infra/compose/wallet-adapters.compose.yml', import.meta.url),
     );
     await execFileAsync('docker', ['compose', '-f', composeFile, 'restart', service]);
-    await execFileAsync('docker', ['compose', '-f', composeFile, 'up', '-d', '--wait', service]);
   }
 }
 
