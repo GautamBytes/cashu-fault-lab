@@ -75,10 +75,19 @@ cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warning
 cargo test --manifest-path adapters/cdk/Cargo.toml
 ```
 
-Run the real cross-language sender lane against a started fake-wallet mint:
+Run the real recovery and cross-language sender lanes against each started fake-wallet mint:
 
 ```bash
 CFL_REAL_MINT_URL=http://127.0.0.1:3338 \
+  pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run \
+  test/docker-mint-e2e.test.ts
+CFL_REAL_MINT_URL=http://127.0.0.1:3338 \
+  pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run \
+  test/cross-language-docker.test.ts
+CFL_REAL_MINT_URL=http://127.0.0.1:8085 \
+  pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run \
+  test/docker-mint-e2e.test.ts
+CFL_REAL_MINT_URL=http://127.0.0.1:8085 \
   pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run \
   test/cross-language-docker.test.ts
 ```

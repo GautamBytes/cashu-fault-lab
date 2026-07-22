@@ -132,7 +132,19 @@ Start both pinned fake-wallet mints:
 pnpm lab up --profile lab
 ```
 
-Run one real-mint recovery test by setting `CFL_REAL_MINT_URL` to `http://127.0.0.1:3338` for Nutshell or `http://127.0.0.1:8085` for CDK.
+Run the funded recovery and cross-language lanes against each pinned mint:
+
+```bash
+CFL_REAL_MINT_URL=http://127.0.0.1:3338 \
+  pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/docker-mint-e2e.test.ts
+CFL_REAL_MINT_URL=http://127.0.0.1:3338 \
+  pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/cross-language-docker.test.ts
+
+CFL_REAL_MINT_URL=http://127.0.0.1:8085 \
+  pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/docker-mint-e2e.test.ts
+CFL_REAL_MINT_URL=http://127.0.0.1:8085 \
+  pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/cross-language-docker.test.ts
+```
 
 ## Repository map
 

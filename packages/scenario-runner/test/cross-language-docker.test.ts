@@ -70,6 +70,7 @@ class PaymentFaultProxy implements ExternalFaultController {
   #inbound = 0;
   #forwarded = 0;
   readonly #statuses: number[] = [];
+  readonly #errorBodies: string[] = [];
 
   constructor(target: string) {
     this.#target = target;
@@ -96,6 +97,7 @@ class PaymentFaultProxy implements ExternalFaultController {
     this.#inbound = 0;
     this.#forwarded = 0;
     this.#statuses.splice(0);
+    this.#errorBodies.splice(0);
   }
 
   async configure(target: string, rule: FaultRule): Promise<void> {
@@ -116,6 +118,7 @@ class PaymentFaultProxy implements ExternalFaultController {
       inbound: this.#inbound,
       forwarded: this.#forwarded,
       statuses: [...this.#statuses],
+      errorBodies: [...this.#errorBodies],
     };
   }
 
@@ -129,6 +132,9 @@ class PaymentFaultProxy implements ExternalFaultController {
     });
     this.#statuses.push(response.status);
     const responseBody = new Uint8Array(await response.arrayBuffer());
+    if (!response.ok) {
+      this.#errorBodies.push(new TextDecoder().decode(responseBody).slice(0, 512));
+    }
     return {
       status: response.status,
       headers: response.headers,
