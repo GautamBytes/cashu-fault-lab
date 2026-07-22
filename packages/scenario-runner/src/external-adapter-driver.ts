@@ -430,13 +430,23 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     if (component !== 'sender' && component !== 'receiver') return;
 
     const probe = async () => {
-      await this.#sender.capabilities();
-      await this.#receiver.capabilities();
+      await adapterCall('sender capability discovery', () => this.#sender.capabilities());
+      await adapterCall('receiver capability discovery', () => this.#receiver.capabilities());
       if (component !== 'receiver') return;
       for (const deliveryId of this.#redeemedDeliveries) {
-        const receipt = parseDeliveryReceipt(await this.#receiver.delivery(deliveryId));
+        const receiptView = await adapterCall('receiver delivery lookup', () =>
+          this.#receiver.delivery(deliveryId),
+        );
+        let receipt: DeliveryReceipt;
+        try {
+          receipt = parseDeliveryReceipt(receiptView);
+        } catch {
+          throw new Error('External receiver delivery receipt is invalid after restart');
+        }
         if (receipt.status !== 'settled') {
-          throw new Error('Receiver has not restored settled delivery state');
+          throw new Error(
+            `External receiver restored delivery with status ${receipt.status} after restart`,
+          );
         }
       }
     };
@@ -448,7 +458,10 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       } catch (error) {
         if (error instanceof AdapterNotApplicableError) throw error;
         if (attempt + 1 === this.#restartReadinessAttempts) {
-          throw new Error(`External ${component} adapter did not become ready after restart`);
+          const detail = error instanceof Error ? error.message : 'Unknown readiness failure';
+          throw new Error(
+            `External ${component} restart readiness failed after ${this.#restartReadinessAttempts} attempts: ${detail}`,
+          );
         }
         await this.#sleep(this.#restartReadinessDelayMs);
       }

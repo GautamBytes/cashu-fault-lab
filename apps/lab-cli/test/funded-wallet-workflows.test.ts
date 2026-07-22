@@ -33,6 +33,25 @@ describe('funded wallet workflow targets', () => {
     expect(contents).toContain('--adapters spec/examples/adapters.local.json');
   });
 
+  it('captures funded wallet diagnostics before destructive cleanup', async () => {
+    const contents = await readFile(
+      new URL('../../../.github/workflows/ci.yml', import.meta.url),
+      'utf8',
+    );
+
+    const diagnostics = contents.indexOf('name: Dump funded wallet diagnostics');
+    const cleanup = contents.indexOf('name: Stop funded wallet stack');
+    expect(diagnostics).toBeGreaterThan(-1);
+    expect(cleanup).toBeGreaterThan(diagnostics);
+    expect(contents).toContain('if: failure()');
+    expect(contents).toContain('ps --all');
+    expect(contents).toContain('restart_count={{.RestartCount}}');
+    expect(contents).toContain('state={{json .State}}');
+    expect(contents).toContain('logs --no-color --timestamps');
+    expect(contents).toContain('cashu-ts cashu-ts-postgres cdk lab-netns');
+    expect(contents).toContain('SELECT delivery_id, request_id, phase');
+  });
+
   it('mounts the cashu-ts Postgres 18 volume at the supported data root', async () => {
     const contents = await readFile(
       new URL('../../../infra/compose/wallet-adapters.compose.yml', import.meta.url),

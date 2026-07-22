@@ -1,4 +1,5 @@
 import {
+  AdapterClientError,
   type AdapterCapabilities,
   type AdapterClient,
   type CreateRequestInput,
@@ -81,7 +82,7 @@ class Receiver implements AdapterClient {
   async capabilities(): Promise<AdapterCapabilities> {
     if (this.capabilityFailures > 0) {
       this.capabilityFailures -= 1;
-      throw new Error('receiver is still restarting');
+      throw new AdapterClientError('ADAPTER_UNAVAILABLE', 'Adapter request failed');
     }
     return capability('receiver-wallet', 'receiver');
   }
@@ -114,7 +115,7 @@ class Receiver implements AdapterClient {
   async delivery(): Promise<DeliveryReceiptView> {
     if (this.deliveryFailures > 0) {
       this.deliveryFailures -= 1;
-      throw new Error('receiver delivery state is still restoring');
+      throw new AdapterClientError('ADAPTER_HTTP_STATUS', 'Adapter returned HTTP status 503');
     }
     return this.receipt();
   }
@@ -155,7 +156,7 @@ class Sender implements AdapterClient {
   async capabilities(): Promise<AdapterCapabilities> {
     if (this.availabilityFailures > 0) {
       this.availabilityFailures -= 1;
-      throw new Error('sender is unavailable during the shared restart');
+      throw new AdapterClientError('ADAPTER_UNAVAILABLE', 'Adapter request failed');
     }
     return capability('sender-wallet', 'sender');
   }
@@ -172,7 +173,7 @@ class Sender implements AdapterClient {
   async send(input: SendPaymentInput): Promise<DeliveryReceiptView> {
     if (this.availabilityFailures > 0) {
       this.availabilityFailures -= 1;
-      throw new Error('sender is unavailable during the shared restart');
+      throw new AdapterClientError('ADAPTER_UNAVAILABLE', 'Adapter request failed');
     }
     this.calls += 1;
     this.receiver.deliveryId = input.deliveryId ?? '';
@@ -426,5 +427,75 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(result.status).toBe('passed');
     expect(faults.restarts).toEqual(['receiver']);
     expect(waits).toEqual([25, 25, 25]);
+  });
+
+  it('reports the exact sender readiness probe failure after exhausting restart attempts', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    faults.onRestart = (component) => {
+      if (component === 'receiver') sender.availabilityFailures = 2;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessAttempts: 2,
+        sleep: async () => {},
+      }),
+    ).run(
+      {
+        name: 'external-restart-sender-diagnostics',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+        ],
+      },
+      'external-restart-sender-diagnostics',
+    );
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected restart readiness to fail');
+    expect(result.error.message).toBe(
+      'External receiver restart readiness failed after 2 attempts: External adapter sender capability discovery failed: ADAPTER_UNAVAILABLE Adapter request failed',
+    );
+  });
+
+  it('reports the exact receiver delivery probe failure after exhausting restart attempts', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    faults.onRestart = (component) => {
+      if (component === 'receiver') receiver.deliveryFailures = 2;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessAttempts: 2,
+        sleep: async () => {},
+      }),
+    ).run(
+      {
+        name: 'external-restart-delivery-diagnostics',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+        ],
+      },
+      'external-restart-delivery-diagnostics',
+    );
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected restart readiness to fail');
+    expect(result.error.message).toBe(
+      'External receiver restart readiness failed after 2 attempts: External adapter receiver delivery lookup failed: ADAPTER_HTTP_STATUS Adapter returned HTTP status 503',
+    );
   });
 });
