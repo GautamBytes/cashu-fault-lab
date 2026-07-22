@@ -31,11 +31,14 @@ function capability(id: string, role: 'sender' | 'receiver'): AdapterCapabilitie
 
 class Faults implements ExternalFaultController {
   readonly applied: Array<{ target: string; rule: FaultRule }> = [];
+  readonly restarts: string[] = [];
   forwards = 1;
   inbound = 1;
+  onRestart: ((component: string) => void) | undefined;
 
   async reset(): Promise<void> {
     this.applied.splice(0);
+    this.restarts.splice(0);
     this.forwards = 1;
     this.inbound = 1;
   }
@@ -54,10 +57,16 @@ class Faults implements ExternalFaultController {
   async evidence(): Promise<{ readonly inbound: number; readonly forwarded: number }> {
     return { inbound: this.inbound, forwarded: this.forwards };
   }
+
+  async restart(component: string): Promise<void> {
+    this.restarts.push(component);
+    this.onRestart?.(component);
+  }
 }
 
 class Receiver implements AdapterClient {
   deliveryId = '';
+  capabilityFailures = 0;
   readonly request: PaymentRequestView = {
     id: requestId,
     raw: 'creqAexternal',
@@ -69,6 +78,10 @@ class Receiver implements AdapterClient {
   };
 
   async capabilities(): Promise<AdapterCapabilities> {
+    if (this.capabilityFailures > 0) {
+      this.capabilityFailures -= 1;
+      throw new Error('receiver is still restarting');
+    }
     return capability('receiver-wallet', 'receiver');
   }
 
@@ -285,5 +298,43 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(observations.filter((event) => event.event === 'delivery_attempted')).toHaveLength(2);
     expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(1);
     expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(2);
+  });
+
+  it('waits for a restarted receiver adapter to become ready before the next command', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    const waits: number[] = [];
+    faults.onRestart = (component) => {
+      if (component === 'receiver') receiver.capabilityFailures = 2;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessDelayMs: 25,
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(
+      {
+        name: 'external-restart-readiness',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-restart-readiness',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(faults.restarts).toEqual(['receiver']);
+    expect(waits).toEqual([25, 25]);
   });
 });

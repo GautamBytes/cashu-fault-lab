@@ -38,6 +38,8 @@ export interface ExternalAdapterScenarioDriverOptions {
   readonly unit: string;
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
+  readonly restartReadinessAttempts?: number;
+  readonly restartReadinessDelayMs?: number;
   readonly transports?: readonly AdapterTransport[];
   readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly senderAlias?: string;
@@ -145,6 +147,8 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   readonly #transports: readonly AdapterTransport[];
   readonly #maxAttempts: number;
   readonly #retryDelayMs: number;
+  readonly #restartReadinessAttempts: number;
+  readonly #restartReadinessDelayMs: number;
   readonly #sleep: (milliseconds: number) => Promise<void>;
   readonly #senderAlias: string | undefined;
   readonly #requestAlias: string | undefined;
@@ -170,6 +174,14 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     }
     this.#maxAttempts = positiveSafeInteger(options.maxAttempts ?? 3, 'maxAttempts');
     this.#retryDelayMs = positiveSafeInteger(options.retryDelayMs ?? 100, 'retryDelayMs');
+    this.#restartReadinessAttempts = positiveSafeInteger(
+      options.restartReadinessAttempts ?? 20,
+      'restartReadinessAttempts',
+    );
+    this.#restartReadinessDelayMs = positiveSafeInteger(
+      options.restartReadinessDelayMs ?? 500,
+      'restartReadinessDelayMs',
+    );
     this.#sleep =
       options.sleep ??
       ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
@@ -391,6 +403,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     if (this.#faults.restart !== undefined) {
       await this.#faults.restart(_component);
     }
+    await this.#waitForRestartReadiness(_component);
   }
 
   async clearFaults(target?: string): Promise<void> {
@@ -398,6 +411,29 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       await this.#faults.clear(target);
     } catch {
       throw new Error('External fault cleanup failed');
+    }
+  }
+
+  async #waitForRestartReadiness(component: string): Promise<void> {
+    const probe =
+      component === 'sender'
+        ? () => this.#sender.capabilities()
+        : component === 'receiver'
+          ? () => this.#receiver.capabilities()
+          : undefined;
+    if (probe === undefined) return;
+
+    for (let attempt = 0; attempt < this.#restartReadinessAttempts; attempt += 1) {
+      try {
+        await probe();
+        return;
+      } catch (error) {
+        if (error instanceof AdapterNotApplicableError) throw error;
+        if (attempt + 1 === this.#restartReadinessAttempts) {
+          throw new Error(`External ${component} adapter did not become ready after restart`);
+        }
+        await this.#sleep(this.#restartReadinessDelayMs);
+      }
     }
   }
 }
