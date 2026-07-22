@@ -67,6 +67,7 @@ class Faults implements ExternalFaultController {
 class Receiver implements AdapterClient {
   deliveryId = '';
   capabilityFailures = 0;
+  deliveryFailures = 0;
   readonly request: PaymentRequestView = {
     id: requestId,
     raw: 'creqAexternal',
@@ -111,6 +112,10 @@ class Receiver implements AdapterClient {
   }
 
   async delivery(): Promise<DeliveryReceiptView> {
+    if (this.deliveryFailures > 0) {
+      this.deliveryFailures -= 1;
+      throw new Error('receiver delivery state is still restoring');
+    }
     return this.receipt();
   }
 
@@ -331,6 +336,44 @@ describe('ExternalAdapterScenarioDriver', () => {
         ],
       },
       'external-restart-readiness',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(faults.restarts).toEqual(['receiver']);
+    expect(waits).toEqual([25, 25]);
+  });
+
+  it('waits for a restarted receiver adapter to restore settled delivery state', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    const waits: number[] = [];
+    faults.onRestart = (component) => {
+      if (component === 'receiver') receiver.deliveryFailures = 2;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessDelayMs: 25,
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(
+      {
+        name: 'external-restart-durable-state',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-restart-durable-state',
     );
 
     expect(result.status).toBe('passed');

@@ -191,7 +191,7 @@ describe('PackagedLabRuntime', () => {
       evidence: expect.objectContaining({ tier: 'T1', credits: 1, seed: 'external-seed' }),
     });
     expect(fetchCalls).toContain('4101/v1/send');
-    expect(fetchCalls).toContain(`4102/v1/deliveries/${deliveryId}`);
+    expect(fetchCalls).toContain(`4102/v1/deliveries/${activeDeliveryId}`);
 
     const scenarioResult = await runtime.run(
       {

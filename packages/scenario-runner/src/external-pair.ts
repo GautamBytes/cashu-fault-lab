@@ -1,4 +1,5 @@
 import {
+  AdapterClientError,
   AdapterNotApplicableError,
   type AdapterClient,
   type AdapterTransport,
@@ -12,6 +13,7 @@ import {
   type DeliveryReceipt,
 } from '@cashu-fault-lab/delivery-core';
 import type { MatrixExecutionResult } from './matrix.js';
+import { seededProtocolId } from './seeded-fixture.js';
 
 const DELIVERY_PROFILE = 'delivery-v1';
 
@@ -23,10 +25,30 @@ export interface ExternalDeliveryPairInput {
   readonly amount: number;
   readonly unit: string;
   readonly transports?: readonly AdapterTransport[];
+  readonly maxAttempts?: number;
+  readonly retryDelayMs?: number;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
 }
 
 function failure(code: string, reason: string): MatrixExecutionResult {
   return { ok: false, code, reason };
+}
+
+function positiveSafeInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive safe integer`);
+  }
+  return value;
+}
+
+function executionFailure(stage: string, error: unknown): MatrixExecutionResult {
+  if (error instanceof AdapterClientError) {
+    return failure(
+      'ADAPTER_PAIR_EXECUTION',
+      `External adapter pair execution failed during ${stage}: ${error.code} ${error.message}`,
+    );
+  }
+  return failure('ADAPTER_PAIR_EXECUTION', 'External adapter pair execution failed');
 }
 
 function transportViewTypes(request: PaymentRequestView): ReadonlySet<AdapterTransport> {
@@ -84,6 +106,11 @@ export async function runExternalDeliveryPair(
   }
 
   try {
+    const maxAttempts = positiveSafeInteger(input.maxAttempts ?? 3, 'maxAttempts');
+    const retryDelayMs = positiveSafeInteger(input.retryDelayMs ?? 100, 'retryDelayMs');
+    const sleep =
+      input.sleep ??
+      ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     const transports: AdapterTransport[] = [...new Set(input.transports ?? (['http'] as const))];
     if (
       transports.length < 1 ||
@@ -93,6 +120,7 @@ export async function runExternalDeliveryPair(
     }
     await input.receiver.reset(input.seed);
     await input.sender.reset(input.seed);
+    const senderCapabilities = await input.sender.capabilities();
 
     const request = await input.receiver.createRequest({
       amount: input.amount,
@@ -108,9 +136,29 @@ export async function runExternalDeliveryPair(
       );
     }
 
-    const sent = parseDeliveryReceipt(await input.sender.send({ request: request.raw }));
+    const deliveryId = seededProtocolId(
+      input.seed,
+      `external-delivery:${senderCapabilities.implementation}:${request.id}`,
+    );
+    let sent: DeliveryReceipt | undefined;
+    let lastSendError: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        sent = parseDeliveryReceipt(await input.sender.send({ request: request.raw, deliveryId }));
+        break;
+      } catch (error) {
+        if (error instanceof AdapterNotApplicableError) throw error;
+        lastSendError = error;
+        if (attempt + 1 === maxAttempts) return executionFailure('sender send', lastSendError);
+        await sleep(Math.min(retryDelayMs * 2 ** attempt, 5_000));
+      }
+    }
+    if (sent === undefined) {
+      return failure('ADAPTER_PAIR_EXECUTION', 'External adapter pair execution failed');
+    }
     if (
       sent.requestId !== request.id ||
+      sent.deliveryId !== deliveryId ||
       sent.amount !== request.amount ||
       sent.unit !== request.unit
     ) {
@@ -189,6 +237,6 @@ export async function runExternalDeliveryPair(
     if (error instanceof AdapterNotApplicableError) {
       return { ok: null, reason: error.reason };
     }
-    return failure('ADAPTER_PAIR_EXECUTION', 'External adapter pair execution failed');
+    return executionFailure('setup or evidence collection', error);
   }
 }

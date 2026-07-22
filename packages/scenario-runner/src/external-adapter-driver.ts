@@ -1,4 +1,5 @@
 import {
+  AdapterClientError,
   AdapterNotApplicableError,
   type AdapterCapabilities,
   type AdapterTransport,
@@ -134,8 +135,15 @@ async function adapterCall<T>(label: string, operation: () => Promise<T>): Promi
     return await operation();
   } catch (error) {
     if (error instanceof AdapterNotApplicableError) throw error;
+    if (error instanceof AdapterClientError) {
+      throw new Error(`External adapter ${label} failed: ${error.code} ${error.message}`);
+    }
     throw new Error(`External adapter ${label} failed`);
   }
+}
+
+function adapterErrorHint(error: unknown): string {
+  return error instanceof AdapterClientError ? `: ${error.code} ${error.message}` : '';
 }
 
 export class ExternalAdapterScenarioDriver implements ScenarioDriver {
@@ -265,6 +273,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       `external-delivery:${senderCapabilities.implementation}:${request.id}`,
     );
     let sent: DeliveryReceipt | undefined;
+    let lastSendError: unknown;
     let sendAttempts = 0;
     for (; sendAttempts < this.#maxAttempts; sendAttempts += 1) {
       try {
@@ -273,8 +282,11 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
         break;
       } catch (error) {
         if (error instanceof AdapterNotApplicableError) throw error;
+        lastSendError = error;
         if (sendAttempts + 1 === this.#maxAttempts) {
-          throw new Error('External sender did not return a receipt after retry attempts');
+          throw new Error(
+            `External sender did not return a receipt after retry attempts${adapterErrorHint(lastSendError)}`,
+          );
         }
         await this.#sleep(Math.min(this.#retryDelayMs * 2 ** sendAttempts, 5_000));
       }
@@ -419,7 +431,15 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       component === 'sender'
         ? () => this.#sender.capabilities()
         : component === 'receiver'
-          ? () => this.#receiver.capabilities()
+          ? async () => {
+              await this.#receiver.capabilities();
+              for (const deliveryId of this.#redeemedDeliveries) {
+                const receipt = parseDeliveryReceipt(await this.#receiver.delivery(deliveryId));
+                if (receipt.status !== 'settled') {
+                  throw new Error('Receiver has not restored settled delivery state');
+                }
+              }
+            }
           : undefined;
     if (probe === undefined) return;
 
