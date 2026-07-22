@@ -1,7 +1,12 @@
-import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
+import {
+  PaymentRequest,
+  PaymentRequestTransportType,
+  type PaymentRequestTransport,
+} from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
   type AdapterCapabilities,
+  type AdapterTransport,
   type DeliveryReceiptView,
   type LedgerCreditView,
   type ProofEvidenceView,
@@ -38,7 +43,13 @@ export interface CashuTsWalletPort {
 }
 
 export interface CashuTsTransportPort {
-  post(target: string, body: Uint8Array): Promise<DeliveryReceiptView>;
+  send(target: CashuTsTransportTarget, body: Uint8Array): Promise<DeliveryReceiptView>;
+}
+
+export interface CashuTsTransportTarget {
+  readonly type: 'post' | 'nostr';
+  readonly target: string;
+  readonly tags?: readonly (readonly string[])[];
 }
 
 export interface CashuTsStoredDelivery {
@@ -46,6 +57,8 @@ export interface CashuTsStoredDelivery {
   readonly requestId: string;
   readonly requestFingerprint: string;
   readonly target: string;
+  readonly transports: readonly CashuTsTransportTarget[];
+  readonly attempts: number;
   readonly payloadBytes: Uint8Array;
   readonly payloadHash: string;
   readonly mint: string;
@@ -66,6 +79,10 @@ function cloneRecord(record: CashuTsStoredDelivery): CashuTsStoredDelivery {
   return {
     ...record,
     payloadBytes: Uint8Array.from(record.payloadBytes),
+    transports: record.transports.map((transport) => ({
+      ...transport,
+      ...(transport.tags === undefined ? {} : { tags: transport.tags.map((tag) => [...tag]) }),
+    })),
     ...(record.receipt === undefined ? {} : { receipt: structuredClone(record.receipt) }),
   };
 }
@@ -96,6 +113,7 @@ export interface FundedCashuTsOperationsOptions {
   readonly transport: CashuTsTransportPort;
   readonly store?: CashuTsDeliveryStore;
   readonly now: () => number;
+  readonly supportedTransports?: readonly AdapterTransport[];
 }
 
 interface ParsedRequest {
@@ -103,7 +121,7 @@ interface ParsedRequest {
   readonly amount: number;
   readonly unit: string;
   readonly mints: readonly string[];
-  readonly target: string;
+  readonly transports: readonly CashuTsTransportTarget[];
 }
 
 interface InflightSend {
@@ -132,6 +150,24 @@ function fingerprint(request: string, memo: string | null | undefined): string {
     .digest('hex');
 }
 
+function transportTarget(transport: PaymentRequestTransport): CashuTsTransportTarget | undefined {
+  if (transport.type === PaymentRequestTransportType.POST) {
+    return { type: 'post', target: transport.target };
+  }
+  if (transport.type === PaymentRequestTransportType.NOSTR) {
+    return {
+      type: 'nostr',
+      target: transport.target,
+      ...(transport.tags === undefined ? {} : { tags: transport.tags.map((tag) => [...tag]) }),
+    };
+  }
+  return undefined;
+}
+
+function adapterTransport(transport: CashuTsTransportTarget): AdapterTransport {
+  return transport.type === 'post' ? 'http' : 'nostr';
+}
+
 function parseRequest(encoded: string): ParsedRequest {
   let request: PaymentRequest;
   try {
@@ -139,7 +175,10 @@ function parseRequest(encoded: string): ParsedRequest {
   } catch {
     throw new Error('Cashu payment request is invalid');
   }
-  const transport = request.getTransport(PaymentRequestTransportType.POST);
+  const transports = (request.transport ?? []).flatMap((transport) => {
+    const target = transportTarget(transport);
+    return target === undefined ? [] : [target];
+  });
   if (
     request.id === undefined ||
     request.amount === undefined ||
@@ -147,7 +186,7 @@ function parseRequest(encoded: string): ParsedRequest {
     request.mints === undefined ||
     request.mints.length === 0 ||
     !request.singleUse ||
-    transport === undefined
+    transports.length === 0
   ) {
     throw new Error('Cashu payment request is incomplete');
   }
@@ -161,7 +200,7 @@ function parseRequest(encoded: string): ParsedRequest {
     amount,
     unit: request.unit,
     mints: request.mints.map(normalizeMintUrl),
-    target: transport.target,
+    transports,
   };
 }
 
@@ -179,11 +218,25 @@ function assertReceiptIdentity(receipt: DeliveryReceiptView, record: CashuTsStor
   }
 }
 
+function supportedTransports(
+  values: readonly AdapterTransport[] | undefined,
+): readonly AdapterTransport[] {
+  const transports: AdapterTransport[] = [...new Set(values ?? (['http'] as const))];
+  if (
+    transports.length < 1 ||
+    transports.some((transport) => transport !== 'http' && transport !== 'nostr')
+  ) {
+    throw new Error('Cashu funded adapter supported transports are invalid');
+  }
+  return transports;
+}
+
 export class FundedCashuTsOperations implements CashuTsAdapterOperations {
   readonly #wallet: CashuTsWalletPort;
   readonly #transport: CashuTsTransportPort;
   readonly #store: CashuTsDeliveryStore;
   readonly #now: () => number;
+  readonly #supportedTransports: readonly AdapterTransport[];
   readonly #inflight = new Map<string, InflightSend>();
   #seed = '';
   #ordinal = 0;
@@ -193,6 +246,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
     this.#transport = options.transport;
     this.#store = options.store ?? new MemoryCashuTsDeliveryStore();
     this.#now = options.now;
+    this.#supportedTransports = supportedTransports(options.supportedTransports);
   }
 
   async capabilities(): Promise<AdapterCapabilities> {
@@ -200,7 +254,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
       implementation: 'cashu-ts',
       version: '4.7.2',
       nuts: [3, 7, 18],
-      transports: ['http'],
+      transports: this.#supportedTransports,
       evidenceTier: 'T1',
       encodings: ['creqA', 'creqB'],
       profiles: [
@@ -215,7 +269,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
           name: 'nut26-nostr',
           roles: ['sender'],
           status: 'unsupported',
-          reason: 'Funded operations currently implement HTTP delivery only',
+          reason: 'Funded operations use NUT-18 NIP-17 delivery-v1, not upstream NUT-26',
         },
       ],
     };
@@ -232,7 +286,14 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
 
   async send(input: SendPaymentInput): Promise<DeliveryReceiptView> {
     if (this.#seed.length === 0) throw new Error('Cashu funded adapter must be reset first');
-    const request = parseRequest(input.request);
+    const parsed = parseRequest(input.request);
+    const transports = parsed.transports.filter((transport) =>
+      this.#supportedTransports.includes(adapterTransport(transport)),
+    );
+    if (transports.length === 0) {
+      throw new Error('Cashu payment request does not contain a supported transport');
+    }
+    const request: ParsedRequest = { ...parsed, transports };
     const requestFingerprint = fingerprint(input.request, input.memo);
     const deliveryId = input.deliveryId ?? protocolId(this.#seed, request.id, this.#ordinal++);
     parseProtocolId(deliveryId);
@@ -293,7 +354,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
         deliveryId,
         requestId: request.id,
         requestFingerprint,
-        target: request.target,
+        target: request.transports[0]!.target,
         payloadBytes,
         payloadHash: computePayloadHash({
           requestId: payload.id,
@@ -307,15 +368,26 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
         mint: payload.mint,
         unit: payload.unit,
         amount: request.amount,
+        transports: request.transports,
+        attempts: 0,
         settledMarked: false,
       };
       // Persist the proof-bearing exact bytes before the first network attempt.
       await this.#store.put(record);
     }
 
+    const selectedTarget =
+      record.transports[Math.min(record.attempts, record.transports.length - 1)]!;
+    record = {
+      ...record,
+      target: selectedTarget.target,
+      attempts: record.attempts + 1,
+    };
+    await this.#store.put(record);
+
     let receipt: DeliveryReceiptView;
     try {
-      receipt = await this.#transport.post(record.target, record.payloadBytes);
+      receipt = await this.#transport.send(selectedTarget, record.payloadBytes);
     } catch {
       throw new Error('Cashu payment delivery failed');
     }

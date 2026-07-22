@@ -21,7 +21,7 @@ import {
   secureEqual,
 } from '@cashu-fault-lab/delivery-core';
 import { ReceiverDomainError } from '@cashu-fault-lab/reference-receiver';
-import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply } from 'fastify';
 import { createHash } from 'node:crypto';
 
 const PAYMENT_BODY_LIMIT = 65_536;
@@ -192,6 +192,20 @@ export async function buildCashuTsAdapterServer(
     throw new Error('A control token is required outside explicit test mode');
   }
   const app = Fastify({ logger: false, bodyLimit: 16_384 });
+  app.setErrorHandler<FastifyError>((error, _request, reply) => {
+    if (reply.sent) return;
+    if (error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500) {
+      void reply.code(error.statusCode).send({
+        code: error.code || 'BAD_REQUEST',
+        message: error.message,
+      });
+      return;
+    }
+    void reply.code(500).send({
+      code: 'INTERNAL_ERROR',
+      message: 'Internal server error',
+    });
+  });
   let seed: string | undefined;
   let requestOrdinal = 0;
 

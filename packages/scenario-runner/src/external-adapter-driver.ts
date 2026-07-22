@@ -1,6 +1,7 @@
 import {
   AdapterNotApplicableError,
   type AdapterCapabilities,
+  type AdapterTransport,
   type AdapterClient,
   type LedgerCreditView,
   type PaymentRequestView,
@@ -37,6 +38,7 @@ export interface ExternalAdapterScenarioDriverOptions {
   readonly unit: string;
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
+  readonly transports?: readonly AdapterTransport[];
   readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly senderAlias?: string;
   readonly requestAlias?: string;
@@ -80,6 +82,12 @@ function sameIdentity(left: DeliveryReceipt, right: DeliveryReceipt): boolean {
     left.mint === right.mint &&
     left.unit === right.unit &&
     left.amount === right.amount
+  );
+}
+
+function transportViewTypes(request: PaymentRequestView): ReadonlySet<AdapterTransport> {
+  return new Set(
+    request.transports.map((transport) => (transport.type === 'post' ? 'http' : 'nostr')),
   );
 }
 
@@ -134,6 +142,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   readonly #faults: ExternalFaultController;
   readonly #amount: number;
   readonly #unit: string;
+  readonly #transports: readonly AdapterTransport[];
   readonly #maxAttempts: number;
   readonly #retryDelayMs: number;
   readonly #sleep: (milliseconds: number) => Promise<void>;
@@ -151,6 +160,13 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#amount = positiveSafeInteger(options.amount, 'amount');
     if (options.unit.length === 0) throw new Error('unit is required');
     this.#unit = options.unit;
+    this.#transports = [...new Set(options.transports ?? (['http'] as const))];
+    if (
+      this.#transports.length < 1 ||
+      this.#transports.some((transport) => transport !== 'http' && transport !== 'nostr')
+    ) {
+      throw new Error('External scenario transports are invalid');
+    }
     this.#maxAttempts = positiveSafeInteger(options.maxAttempts ?? 3, 'maxAttempts');
     this.#retryDelayMs = positiveSafeInteger(options.retryDelayMs ?? 100, 'retryDelayMs');
     this.#sleep =
@@ -172,7 +188,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       this.#receiver.createRequest({
         amount: this.#amount,
         unit: this.#unit,
-        transports: ['http'],
+        transports: this.#transports,
         singleUse: true,
         expiresIn: 900,
       }),
@@ -181,7 +197,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       request.amount !== this.#amount ||
       request.unit !== this.#unit ||
       !request.singleUse ||
-      !request.transports.some((transport) => transport.type === 'post')
+      this.#transports.some((transport) => !transportViewTypes(request).has(transport))
     ) {
       throw new Error('External receiver request does not match the scenario payment');
     }
@@ -204,7 +220,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
         implementation: this.#receiverCapabilities.implementation,
         version: this.#receiverCapabilities.version,
       },
-      transport: 'http',
+      transports: this.#transports,
       evidenceTier: 'T1',
     };
   }
@@ -292,14 +308,19 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       Math.max(faultEvidence.inbound, faultEvidence.forwarded),
       'transport attempts',
     );
-    const deliveryObservation = {
-      type: 'delivery_attempted',
-      requestId: observed.requestId,
-      deliveryId: observed.deliveryId,
-      payloadHash: observed.payloadHash,
-      proofSetHash: proof.proofSetHash,
-      transport: 'http',
-    } as const;
+    const deliveryObservation = (transport: AdapterTransport) =>
+      ({
+        type: 'delivery_attempted',
+        requestId: observed.requestId,
+        deliveryId: observed.deliveryId,
+        payloadHash: observed.payloadHash,
+        proofSetHash: proof.proofSetHash,
+        transport,
+      }) as const;
+    const deliveryObservations =
+      this.#transports.length === 1
+        ? Array.from({ length: transportAttempts }, () => deliveryObservation(this.#transports[0]!))
+        : this.#transports.map((transport) => deliveryObservation(transport));
     const creditId = publicHash('external-credit', [
       credit.requestId,
       credit.deliveryId,
@@ -313,7 +334,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     ]);
     const observations: Observation[] = [
       { type: 'request_observed', requestId: request.id, singleUse: request.singleUse },
-      ...Array.from({ length: transportAttempts }, () => deliveryObservation),
+      ...deliveryObservations,
       {
         type: 'redemption_started',
         deliveryId: observed.deliveryId,

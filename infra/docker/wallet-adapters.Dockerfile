@@ -6,6 +6,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm exec turbo run build \
     --filter=@cashu-fault-lab/adapter-cashu-ts \
+    --filter=@cashu-fault-lab/nostr-fault-relay \
     --filter=@cashu-fault-lab/reference-receiver \
     --filter=@cashu-fault-lab/http-fault-gateway
 
@@ -17,6 +18,7 @@ COPY --from=node-build /app/node_modules ./node_modules
 COPY --from=node-build /app/adapters/cashu-ts ./adapters/cashu-ts
 COPY --from=node-build /app/apps ./apps
 COPY --from=node-build /app/packages ./packages
+COPY --from=node-build /app/infra ./infra
 COPY --from=node-build /app/spec ./spec
 USER node
 

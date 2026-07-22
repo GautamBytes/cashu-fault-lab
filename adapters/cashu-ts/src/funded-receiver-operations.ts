@@ -2,8 +2,10 @@ import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
   type AdapterCapabilities,
+  type AdapterTransport,
   type CreateRequestInput,
   type DeliveryReceiptView,
+  type EvidenceTier,
   type LedgerCreditView,
   type PaymentRequestView,
   type ProofEvidenceView,
@@ -30,21 +32,29 @@ import {
   FundedCashuTsOperations,
   type FundedCashuTsOperationsOptions,
 } from './funded-operations.js';
+import { CashuTsNostrReceiver } from './nostr-receiver.js';
 import type { CashuTsAdapterOperations } from './server.js';
 
 const CASHU_TS_VERSION = '4.7.2';
 
-type ResettableReceiverStore = ReceiverStore & { reset(): Promise<void> };
+export type ResettableReceiverStore = ReceiverStore & { reset(): Promise<void> };
+export type TieredReceiverStore = ResettableReceiverStore & {
+  readonly receiverEvidenceTier: 'T3';
+};
 
 export interface FundedCashuTsReceiverOperationsOptions {
   readonly mintUrl: string;
-  readonly paymentTarget: string;
+  readonly paymentTarget?: string;
   readonly now: () => number;
   readonly proofClaimKey?: Uint8Array;
   readonly fetch?: MintFetch;
   readonly store?: ResettableReceiverStore;
   readonly mint?: MintGateway;
   readonly verifier?: ProofVerifier;
+  readonly receiverNostrPrivateKey?: Uint8Array;
+  readonly nostrRelayUrls?: readonly string[];
+  readonly nostrTimeoutMs?: number;
+  readonly nostrPollIntervalMs?: number;
 }
 
 export interface FundedCashuTsDualRoleOperationsOptions {
@@ -102,20 +112,28 @@ function proofVerifier(options: FundedCashuTsReceiverOperationsOptions): ProofVe
   });
 }
 
+function evidenceTier(store: ResettableReceiverStore): EvidenceTier {
+  return 'receiverEvidenceTier' in store && store.receiverEvidenceTier === 'T3' ? 'T3' : 'T1';
+}
+
 export class FundedCashuTsReceiverOperations {
   readonly #store: ResettableReceiverStore;
   readonly #mintUrl: string;
-  readonly #paymentTarget: string;
+  readonly #paymentTarget: string | undefined;
   readonly #now: () => number;
   readonly #accept: AcceptDeliveryDependencies;
+  readonly #evidenceTier: EvidenceTier;
+  readonly #nostr: CashuTsNostrReceiver | undefined;
   #seed = '';
   #ordinal = 0;
 
   constructor(options: FundedCashuTsReceiverOperationsOptions) {
     this.#store = options.store ?? new MemoryReceiverStore();
     this.#mintUrl = normalizeMintUrl(options.mintUrl);
-    this.#paymentTarget = paymentTarget(options.paymentTarget);
+    this.#paymentTarget =
+      options.paymentTarget === undefined ? undefined : paymentTarget(options.paymentTarget);
     this.#now = options.now;
+    this.#evidenceTier = evidenceTier(this.#store);
     this.#accept = {
       store: this.#store,
       mint:
@@ -127,15 +145,38 @@ export class FundedCashuTsReceiverOperations {
       verifier: proofVerifier(options),
       now: options.now,
     };
+    if (
+      (options.receiverNostrPrivateKey === undefined) !==
+      (options.nostrRelayUrls === undefined)
+    ) {
+      throw new Error('cashu-ts Nostr receiver requires both a private key and relay URLs');
+    }
+    this.#nostr =
+      options.receiverNostrPrivateKey === undefined || options.nostrRelayUrls === undefined
+        ? undefined
+        : new CashuTsNostrReceiver({
+            receiverPrivateKey: options.receiverNostrPrivateKey,
+            relayUrls: options.nostrRelayUrls,
+            accept: this.#accept,
+            now: options.now,
+            ...(options.nostrTimeoutMs === undefined ? {} : { timeoutMs: options.nostrTimeoutMs }),
+            ...(options.nostrPollIntervalMs === undefined
+              ? {}
+              : { pollIntervalMs: options.nostrPollIntervalMs }),
+          });
+    if (this.#paymentTarget === undefined && this.#nostr === undefined) {
+      throw new Error('cashu-ts receiver requires at least one payment transport');
+    }
   }
 
   async capabilities(): Promise<AdapterCapabilities> {
+    const transports = this.#transports();
     return {
       implementation: 'cashu-ts',
       version: CASHU_TS_VERSION,
       nuts: [2, 3, 7, 9, 12, 18, 19],
-      transports: ['http'],
-      evidenceTier: 'T1',
+      transports,
+      evidenceTier: this.#evidenceTier,
       encodings: ['creqA'],
       profiles: [
         { name: 'delivery-v1', roles: ['receiver'], status: 'supported' },
@@ -149,7 +190,7 @@ export class FundedCashuTsReceiverOperations {
           name: 'nut26-nostr',
           roles: ['receiver'],
           status: 'unsupported',
-          reason: 'Funded receiver operations currently implement HTTP delivery only',
+          reason: 'Funded receiver operations use NUT-18 NIP-17 delivery-v1, not upstream NUT-26',
         },
       ],
     };
@@ -158,8 +199,17 @@ export class FundedCashuTsReceiverOperations {
   async reset(seed: string): Promise<void> {
     if (seed.length === 0) throw new Error('cashu-ts receiver seed is required');
     await this.#store.reset();
+    this.#nostr?.reset();
     this.#seed = seed;
     this.#ordinal = 0;
+  }
+
+  startNostr(): void {
+    this.#nostr?.start();
+  }
+
+  stopNostr(): void {
+    this.#nostr?.stop();
   }
 
   async createRequest(input: CreateRequestInput): Promise<PaymentRequestView> {
@@ -168,8 +218,8 @@ export class FundedCashuTsReceiverOperations {
       input.amount < 1 ||
       input.unit.length === 0 ||
       !input.singleUse ||
-      input.transports.length !== 1 ||
-      input.transports[0] !== 'http'
+      input.transports.length === 0 ||
+      input.transports.some((transport) => !this.#transports().includes(transport))
     ) {
       throw new Error('cashu-ts receiver request is unsupported');
     }
@@ -188,8 +238,11 @@ export class FundedCashuTsReceiverOperations {
       singleUse: true,
       expiresAt,
     });
+    const transports = input.transports.map((transport) =>
+      this.#paymentRequestTransport(transport),
+    );
     const request = new PaymentRequest(
-      [{ type: PaymentRequestTransportType.POST, target: this.#paymentTarget, tags: [] }],
+      transports,
       id,
       input.amount,
       input.unit,
@@ -204,7 +257,11 @@ export class FundedCashuTsReceiverOperations {
       unit: input.unit,
       singleUse: true,
       expiresAt,
-      transports: [{ type: 'post', target: this.#paymentTarget }],
+      transports: transports.map((transport) => ({
+        type: transport.type,
+        target: transport.target,
+        ...(transport.tags === undefined ? {} : { tags: transport.tags }),
+      })),
     };
   }
 
@@ -214,6 +271,7 @@ export class FundedCashuTsReceiverOperations {
 
   async delivery(deliveryId: string): Promise<DeliveryReceiptView> {
     parseProtocolId(deliveryId);
+    await this.#nostr?.poll();
     const record = await this.#store.current(deliveryId);
     if (record === undefined) {
       throw new AdapterNotApplicableError('No receiver delivery has been observed');
@@ -222,6 +280,7 @@ export class FundedCashuTsReceiverOperations {
   }
 
   async ledger(): Promise<readonly LedgerCreditView[]> {
+    await this.#nostr?.poll();
     return (await this.#store.credits()).map((credit) => ({
       requestId: credit.requestId,
       deliveryId: credit.deliveryId,
@@ -233,6 +292,7 @@ export class FundedCashuTsReceiverOperations {
   }
 
   async proofs(): Promise<readonly ProofEvidenceView[]> {
+    await this.#nostr?.poll();
     const plans = await this.#store.settlementPlans();
     const records = await Promise.all(plans.map((plan) => this.#store.current(plan.deliveryId)));
     return records.flatMap((record): readonly ProofEvidenceView[] =>
@@ -253,6 +313,30 @@ export class FundedCashuTsReceiverOperations {
           ],
     );
   }
+
+  #transports(): readonly AdapterTransport[] {
+    return [
+      ...(this.#paymentTarget === undefined ? [] : (['http'] as const)),
+      ...(this.#nostr === undefined ? [] : (['nostr'] as const)),
+    ];
+  }
+
+  #paymentRequestTransport(transport: AdapterTransport) {
+    if (transport === 'http') {
+      if (this.#paymentTarget === undefined) {
+        throw new Error('cashu-ts HTTP receiver target is not configured');
+      }
+      return { type: PaymentRequestTransportType.POST, target: this.#paymentTarget, tags: [] };
+    }
+    if (this.#nostr === undefined) {
+      throw new Error('cashu-ts Nostr receiver target is not configured');
+    }
+    return {
+      type: PaymentRequestTransportType.NOSTR,
+      target: this.#nostr.target,
+      tags: [['n', '17']],
+    };
+  }
 }
 
 export class FundedCashuTsDualRoleOperations implements CashuTsAdapterOperations {
@@ -268,11 +352,13 @@ export class FundedCashuTsDualRoleOperations implements CashuTsAdapterOperations
   }
 
   async capabilities(): Promise<AdapterCapabilities> {
+    const receiver = await this.#receiver.capabilities();
+    const sender = await this.#sender.capabilities();
     return {
       implementation: 'cashu-ts',
       version: CASHU_TS_VERSION,
       nuts: [2, 3, 7, 9, 12, 18, 19],
-      transports: ['http'],
+      transports: [...new Set([...sender.transports, ...receiver.transports])],
       evidenceTier: 'T1',
       encodings: ['creqA', 'creqB'],
       profiles: [
@@ -287,7 +373,7 @@ export class FundedCashuTsDualRoleOperations implements CashuTsAdapterOperations
           name: 'nut26-nostr',
           roles: ['sender', 'receiver'],
           status: 'unsupported',
-          reason: 'Funded operations currently implement HTTP delivery only',
+          reason: 'Funded operations use NUT-18 NIP-17 delivery-v1, not upstream NUT-26',
         },
       ],
     };

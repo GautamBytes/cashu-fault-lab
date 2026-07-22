@@ -35,6 +35,7 @@ services:
       - '127.0.0.1:${CFL_CDK_ADAPTER_PORT:-4102}:4102'
       - '127.0.0.1:${CFL_REFERENCE_RECEIVER_PORT:-4200}:4200'
       - '127.0.0.1:${CFL_HTTP_FAULT_GATEWAY_PORT:-4300}:4300'
+      - '127.0.0.1:${CFL_NOSTR_FAULT_RELAY_PORT:-4400}:4400'
 
   reference-receiver:
     build:
@@ -94,6 +95,36 @@ services:
     init: true
     network_mode: service:lab-netns
 
+  cashu-ts-postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: cashu_fault_lab
+      POSTGRES_USER: cashu
+      POSTGRES_PASSWORD: ${CFL_POSTGRES_PASSWORD:-cashu-local-development-only}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cashu -d cashu_fault_lab']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    networks: [cashu-fault-lab-mints]
+    volumes:
+      - cashu-fault-lab-cashu-ts-postgres:/var/lib/postgresql/data
+
+  nostr-fault-relay:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/nostr-fault-relay/dist/bin.js']
+    environment:
+      CFL_NOSTR_FAULT_RELAY_HOST: 0.0.0.0
+      CFL_NOSTR_FAULT_RELAY_PORT: 4400
+    depends_on:
+      lab-netns:
+        condition: service_healthy
+    init: true
+    network_mode: service:lab-netns
+
   cashu-ts:
     build:
       context: ../..
@@ -106,11 +137,21 @@ services:
       CFL_CASHU_TS_FUNDING_AMOUNT: ${CFL_WALLET_FUNDING_AMOUNT:-64}
       CFL_CASHU_TS_HOST: 0.0.0.0
       CFL_CASHU_TS_MINT_URL: http://127.0.0.1:3338
+      CFL_CASHU_TS_NOSTR_RECEIVER_KEY: ${CFL_CASHU_TS_NOSTR_RECEIVER_KEY:-IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI}
+      CFL_CASHU_TS_NOSTR_RELAYS: ws://127.0.0.1:4400
+      CFL_CASHU_TS_NOSTR_SENDER_KEY: ${CFL_CASHU_TS_NOSTR_SENDER_KEY:-ERERERERERERERERERERERERERERERERERERERERERE}
       CFL_CASHU_TS_PAYMENT_TARGET: http://127.0.0.1:4101/pay
       CFL_CASHU_TS_PORT: 4101
+      CFL_CASHU_TS_RECEIVER_DATABASE_URL: postgresql://cashu:${CFL_POSTGRES_PASSWORD:-cashu-local-development-only}@cashu-ts-postgres:5432/cashu_fault_lab
+      CFL_CASHU_TS_RECEIVER_STATE_KEY: ${CFL_CASHU_TS_RECEIVER_STATE_KEY:-BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc}
+      CFL_CASHU_TS_RECEIVER_TENANT_ID: cashu-ts-local
     depends_on:
       http-fault-gateway:
         condition: service_healthy
+      cashu-ts-postgres:
+        condition: service_healthy
+      nostr-fault-relay:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -157,3 +198,4 @@ networks:
 volumes:
   cashu-fault-lab-nutshell:
   cashu-fault-lab-redis:
+  cashu-fault-lab-cashu-ts-postgres:

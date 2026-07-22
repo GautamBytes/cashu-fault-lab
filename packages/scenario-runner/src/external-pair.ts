@@ -1,6 +1,7 @@
 import {
   AdapterNotApplicableError,
   type AdapterClient,
+  type AdapterTransport,
   type LedgerCreditView,
   type PaymentRequestView,
   type ProofEvidenceView,
@@ -21,18 +22,29 @@ export interface ExternalDeliveryPairInput {
   readonly receiver: AdapterClient;
   readonly amount: number;
   readonly unit: string;
+  readonly transports?: readonly AdapterTransport[];
 }
 
 function failure(code: string, reason: string): MatrixExecutionResult {
   return { ok: false, code, reason };
 }
 
-function requestMatches(input: ExternalDeliveryPairInput, request: PaymentRequestView): boolean {
+function transportViewTypes(request: PaymentRequestView): ReadonlySet<AdapterTransport> {
+  return new Set(
+    request.transports.map((transport) => (transport.type === 'post' ? 'http' : 'nostr')),
+  );
+}
+
+function requestMatches(
+  input: ExternalDeliveryPairInput,
+  request: PaymentRequestView,
+  transports: readonly AdapterTransport[],
+): boolean {
   return (
     request.amount === input.amount &&
     request.unit === input.unit &&
     request.singleUse &&
-    request.transports.some((transport) => transport.type === 'post')
+    transports.every((transport) => transportViewTypes(request).has(transport))
   );
 }
 
@@ -72,17 +84,24 @@ export async function runExternalDeliveryPair(
   }
 
   try {
+    const transports: AdapterTransport[] = [...new Set(input.transports ?? (['http'] as const))];
+    if (
+      transports.length < 1 ||
+      transports.some((transport) => transport !== 'http' && transport !== 'nostr')
+    ) {
+      return failure('ADAPTER_TRANSPORT_SELECTION', 'External pair transport selection is invalid');
+    }
     await input.receiver.reset(input.seed);
     await input.sender.reset(input.seed);
 
     const request = await input.receiver.createRequest({
       amount: input.amount,
       unit: input.unit,
-      transports: ['http'],
+      transports,
       singleUse: true,
       expiresIn: 900,
     });
-    if (!requestMatches(input, request)) {
+    if (!requestMatches(input, request, transports)) {
       return failure(
         'ADAPTER_REQUEST_IDENTITY',
         'Receiver request does not match the requested payment',
@@ -162,6 +181,7 @@ export async function runExternalDeliveryPair(
         credits: credit.creditCount,
         proofSetHash: proof.proofSetHash,
         proofState: proof.state,
+        transports,
         seed: input.seed,
       },
     };
