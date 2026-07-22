@@ -1,4 +1,5 @@
 import {
+  AdapterClientError,
   type AdapterCapabilities,
   type AdapterClient,
   type CreateRequestInput,
@@ -31,11 +32,14 @@ function capability(id: string, role: 'sender' | 'receiver'): AdapterCapabilitie
 
 class Faults implements ExternalFaultController {
   readonly applied: Array<{ target: string; rule: FaultRule }> = [];
+  readonly restarts: string[] = [];
   forwards = 1;
   inbound = 1;
+  onRestart: ((component: string) => void) | undefined;
 
   async reset(): Promise<void> {
     this.applied.splice(0);
+    this.restarts.splice(0);
     this.forwards = 1;
     this.inbound = 1;
   }
@@ -54,10 +58,17 @@ class Faults implements ExternalFaultController {
   async evidence(): Promise<{ readonly inbound: number; readonly forwarded: number }> {
     return { inbound: this.inbound, forwarded: this.forwards };
   }
+
+  async restart(component: string): Promise<void> {
+    this.restarts.push(component);
+    this.onRestart?.(component);
+  }
 }
 
 class Receiver implements AdapterClient {
   deliveryId = '';
+  capabilityFailures = 0;
+  deliveryFailures = 0;
   readonly request: PaymentRequestView = {
     id: requestId,
     raw: 'creqAexternal',
@@ -69,6 +80,10 @@ class Receiver implements AdapterClient {
   };
 
   async capabilities(): Promise<AdapterCapabilities> {
+    if (this.capabilityFailures > 0) {
+      this.capabilityFailures -= 1;
+      throw new AdapterClientError('ADAPTER_UNAVAILABLE', 'Adapter request failed');
+    }
     return capability('receiver-wallet', 'receiver');
   }
 
@@ -98,6 +113,10 @@ class Receiver implements AdapterClient {
   }
 
   async delivery(): Promise<DeliveryReceiptView> {
+    if (this.deliveryFailures > 0) {
+      this.deliveryFailures -= 1;
+      throw new AdapterClientError('ADAPTER_HTTP_STATUS', 'Adapter returned HTTP status 503');
+    }
     return this.receipt();
   }
 
@@ -129,11 +148,16 @@ class Receiver implements AdapterClient {
 class Sender implements AdapterClient {
   calls = 0;
   failures = 0;
+  availabilityFailures = 0;
   readonly deliveryIds: string[] = [];
 
   constructor(private readonly receiver: Receiver) {}
 
   async capabilities(): Promise<AdapterCapabilities> {
+    if (this.availabilityFailures > 0) {
+      this.availabilityFailures -= 1;
+      throw new AdapterClientError('ADAPTER_UNAVAILABLE', 'Adapter request failed');
+    }
     return capability('sender-wallet', 'sender');
   }
 
@@ -147,6 +171,10 @@ class Sender implements AdapterClient {
   }
 
   async send(input: SendPaymentInput): Promise<DeliveryReceiptView> {
+    if (this.availabilityFailures > 0) {
+      this.availabilityFailures -= 1;
+      throw new AdapterClientError('ADAPTER_UNAVAILABLE', 'Adapter request failed');
+    }
     this.calls += 1;
     this.receiver.deliveryId = input.deliveryId ?? '';
     this.deliveryIds.push(this.receiver.deliveryId);
@@ -255,5 +283,219 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(observations.filter((event) => event.event === 'delivery_attempted')).toHaveLength(4);
     expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(1);
     expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(1);
+  });
+
+  it('reports one redemption transition across repeated send commands for the same delivery', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new Faults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(
+      {
+        name: 'external-repeat-send',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-repeat',
+    );
+
+    expect(result.status).toBe('passed');
+    const observations = result.artifact.history.filter((event) => event.phase === 'observation');
+    expect(observations.filter((event) => event.event === 'delivery_attempted')).toHaveLength(2);
+    expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(1);
+    expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(2);
+  });
+
+  it('waits for a restarted receiver adapter to become ready before the next command', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    const waits: number[] = [];
+    faults.onRestart = (component) => {
+      if (component === 'receiver') receiver.capabilityFailures = 2;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessDelayMs: 25,
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(
+      {
+        name: 'external-restart-readiness',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-restart-readiness',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(faults.restarts).toEqual(['receiver']);
+    expect(waits).toEqual([25, 25]);
+  });
+
+  it('waits for a restarted receiver adapter to restore settled delivery state', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    const waits: number[] = [];
+    faults.onRestart = (component) => {
+      if (component === 'receiver') receiver.deliveryFailures = 2;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessDelayMs: 25,
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(
+      {
+        name: 'external-restart-durable-state',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-restart-durable-state',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(faults.restarts).toEqual(['receiver']);
+    expect(waits).toEqual([25, 25]);
+  });
+
+  it('waits for the sender when a receiver restart disrupts the adapter pair', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    const waits: number[] = [];
+    faults.onRestart = (component) => {
+      if (component === 'receiver') sender.availabilityFailures = 3;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessDelayMs: 25,
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(
+      {
+        name: 'external-restart-pair-readiness',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-restart-pair-readiness',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(faults.restarts).toEqual(['receiver']);
+    expect(waits).toEqual([25, 25, 25]);
+  });
+
+  it('reports the exact sender readiness probe failure after exhausting restart attempts', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    faults.onRestart = (component) => {
+      if (component === 'receiver') sender.availabilityFailures = 2;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessAttempts: 2,
+        sleep: async () => {},
+      }),
+    ).run(
+      {
+        name: 'external-restart-sender-diagnostics',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+        ],
+      },
+      'external-restart-sender-diagnostics',
+    );
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected restart readiness to fail');
+    expect(result.error.message).toBe(
+      'External receiver restart readiness failed after 2 attempts: External adapter sender capability discovery failed: ADAPTER_UNAVAILABLE Adapter request failed',
+    );
+  });
+
+  it('reports the exact receiver delivery probe failure after exhausting restart attempts', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    faults.onRestart = (component) => {
+      if (component === 'receiver') receiver.deliveryFailures = 2;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessAttempts: 2,
+        sleep: async () => {},
+      }),
+    ).run(
+      {
+        name: 'external-restart-delivery-diagnostics',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+        ],
+      },
+      'external-restart-delivery-diagnostics',
+    );
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected restart readiness to fail');
+    expect(result.error.message).toBe(
+      'External receiver restart readiness failed after 2 attempts: External adapter receiver delivery lookup failed: ADAPTER_HTTP_STATUS Adapter returned HTTP status 503',
+    );
   });
 });

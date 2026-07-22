@@ -1,4 +1,5 @@
 import {
+  AdapterClientError,
   AdapterNotApplicableError,
   type AdapterCapabilities,
   type AdapterClient,
@@ -11,9 +12,10 @@ import {
 } from '@cashu-fault-lab/adapter-contract';
 import { describe, expect, it } from 'vitest';
 import { runExternalDeliveryPair } from '../src/external-pair.js';
+import { seededProtocolId } from '../src/seeded-fixture.js';
 
 const requestId = 'AAECAwQFBgcICQoLDA0ODw';
-const deliveryId = 'EBESExQVFhcYGRobHB0eHw';
+const deliveryId = seededProtocolId('pair-seed', `external-delivery:sender:${requestId}`);
 const payloadHash = 'a'.repeat(64);
 const proofSetHash = 'b'.repeat(64);
 
@@ -76,12 +78,14 @@ interface FakeOptions {
   readonly credits?: readonly LedgerCreditView[];
   readonly proofEvidence?: readonly ProofEvidenceView[];
   readonly sendError?: Error;
+  readonly sendErrors?: Error[];
 }
 
 class FakeAdapter implements AdapterClient {
   constructor(private readonly options: FakeOptions) {}
 
   async capabilities(): Promise<AdapterCapabilities> {
+    this.options.calls.push(`${this.options.role}.capabilities`);
     return capabilities(this.options.role, this.options.role);
   }
 
@@ -96,6 +100,8 @@ class FakeAdapter implements AdapterClient {
 
   async send(_input: SendPaymentInput): Promise<DeliveryReceiptView> {
     this.options.calls.push(`${this.options.role}.send`);
+    const nextError = this.options.sendErrors?.shift();
+    if (nextError) throw nextError;
     if (this.options.sendError) throw this.options.sendError;
     return this.options.sendReceipt ?? receipt;
   }
@@ -161,12 +167,41 @@ describe('runExternalDeliveryPair', () => {
     expect(fixture.calls).toEqual([
       'receiver.reset',
       'sender.reset',
+      'sender.capabilities',
       'receiver.request',
       'sender.send',
       'receiver.delivery',
       'receiver.ledger',
       'receiver.proofs',
     ]);
+  });
+
+  it('retries transient sender failures with one deterministic delivery id', async () => {
+    const fixture = pair({
+      sender: {
+        sendErrors: [
+          new AdapterClientError('ADAPTER_TIMEOUT', 'Adapter request timed out'),
+          new AdapterClientError('ADAPTER_UNAVAILABLE', 'Adapter request failed'),
+        ],
+      },
+    });
+    const waits: number[] = [];
+
+    const result = await runExternalDeliveryPair({
+      profile: 'delivery-v1',
+      seed: 'pair-seed',
+      sender: fixture.sender,
+      receiver: fixture.receiver,
+      amount: 8,
+      unit: 'sat',
+      sleep: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true, evidence: { deliveryId } });
+    expect(fixture.calls.filter((call) => call === 'sender.send')).toHaveLength(3);
+    expect(waits).toEqual([100, 200]);
   });
 
   it('reports an unsupported funded operation as not applicable', async () => {
@@ -266,6 +301,32 @@ describe('runExternalDeliveryPair', () => {
         unit: 'sat',
       }),
     ).resolves.toMatchObject({ ok: false, code: 'ADAPTER_RECEIPT_TRANSITION' });
+  });
+
+  it('keeps adapter client execution failures diagnostic but sanitized', async () => {
+    const fixture = pair({
+      sender: {
+        sendError: new AdapterClientError(
+          'ADAPTER_HTTP_STATUS',
+          'Adapter returned HTTP status 422 (SEND_FAILED)',
+        ),
+      },
+    });
+    await expect(
+      runExternalDeliveryPair({
+        profile: 'delivery-v1',
+        seed: 'pair-seed',
+        sender: fixture.sender,
+        receiver: fixture.receiver,
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      code: 'ADAPTER_PAIR_EXECUTION',
+      reason:
+        'External adapter pair execution failed during sender send: ADAPTER_HTTP_STATUS Adapter returned HTTP status 422 (SEND_FAILED)',
+    });
   });
 
   it('maps unexpected adapter errors to a stable execution failure', async () => {

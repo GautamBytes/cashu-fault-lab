@@ -505,6 +505,7 @@ describe('lab CLI', () => {
         })
       ).exitCode,
     ).toBe(1);
+    expect(setup.stderr()).toContain('Error: failed');
     expect(
       (
         await runCli(['node', 'cashu-fault-lab', 'replay', 'invalid.json'], {

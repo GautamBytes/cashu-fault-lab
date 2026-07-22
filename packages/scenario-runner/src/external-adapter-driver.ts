@@ -1,4 +1,5 @@
 import {
+  AdapterClientError,
   AdapterNotApplicableError,
   type AdapterCapabilities,
   type AdapterTransport,
@@ -38,6 +39,8 @@ export interface ExternalAdapterScenarioDriverOptions {
   readonly unit: string;
   readonly maxAttempts?: number;
   readonly retryDelayMs?: number;
+  readonly restartReadinessAttempts?: number;
+  readonly restartReadinessDelayMs?: number;
   readonly transports?: readonly AdapterTransport[];
   readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly senderAlias?: string;
@@ -132,8 +135,15 @@ async function adapterCall<T>(label: string, operation: () => Promise<T>): Promi
     return await operation();
   } catch (error) {
     if (error instanceof AdapterNotApplicableError) throw error;
+    if (error instanceof AdapterClientError) {
+      throw new Error(`External adapter ${label} failed: ${error.code} ${error.message}`);
+    }
     throw new Error(`External adapter ${label} failed`);
   }
+}
+
+function adapterErrorHint(error: unknown): string {
+  return error instanceof AdapterClientError ? `: ${error.code} ${error.message}` : '';
 }
 
 export class ExternalAdapterScenarioDriver implements ScenarioDriver {
@@ -145,6 +155,8 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   readonly #transports: readonly AdapterTransport[];
   readonly #maxAttempts: number;
   readonly #retryDelayMs: number;
+  readonly #restartReadinessAttempts: number;
+  readonly #restartReadinessDelayMs: number;
   readonly #sleep: (milliseconds: number) => Promise<void>;
   readonly #senderAlias: string | undefined;
   readonly #requestAlias: string | undefined;
@@ -152,6 +164,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   #request: PaymentRequestView | undefined;
   #senderCapabilities: AdapterCapabilities | undefined;
   #receiverCapabilities: AdapterCapabilities | undefined;
+  readonly #redeemedDeliveries = new Set<string>();
 
   constructor(options: ExternalAdapterScenarioDriverOptions) {
     this.#sender = options.sender;
@@ -169,6 +182,14 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     }
     this.#maxAttempts = positiveSafeInteger(options.maxAttempts ?? 3, 'maxAttempts');
     this.#retryDelayMs = positiveSafeInteger(options.retryDelayMs ?? 100, 'retryDelayMs');
+    this.#restartReadinessAttempts = positiveSafeInteger(
+      options.restartReadinessAttempts ?? 20,
+      'restartReadinessAttempts',
+    );
+    this.#restartReadinessDelayMs = positiveSafeInteger(
+      options.restartReadinessDelayMs ?? 500,
+      'restartReadinessDelayMs',
+    );
     this.#sleep =
       options.sleep ??
       ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
@@ -181,6 +202,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#request = undefined;
     this.#senderCapabilities = undefined;
     this.#receiverCapabilities = undefined;
+    this.#redeemedDeliveries.clear();
     await this.#faults.reset();
     await adapterCall('receiver reset', () => this.#receiver.reset(seed));
     await adapterCall('sender reset', () => this.#sender.reset(seed));
@@ -251,6 +273,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       `external-delivery:${senderCapabilities.implementation}:${request.id}`,
     );
     let sent: DeliveryReceipt | undefined;
+    let lastSendError: unknown;
     let sendAttempts = 0;
     for (; sendAttempts < this.#maxAttempts; sendAttempts += 1) {
       try {
@@ -259,8 +282,11 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
         break;
       } catch (error) {
         if (error instanceof AdapterNotApplicableError) throw error;
+        lastSendError = error;
         if (sendAttempts + 1 === this.#maxAttempts) {
-          throw new Error('External sender did not return a receipt after retry attempts');
+          throw new Error(
+            `External sender did not return a receipt after retry attempts${adapterErrorHint(lastSendError)}`,
+          );
         }
         await this.#sleep(Math.min(this.#retryDelayMs * 2 ** sendAttempts, 5_000));
       }
@@ -332,14 +358,20 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       creditId,
       proof.proofSetHash,
     ]);
+    const redemptionObservations: Observation[] = this.#redeemedDeliveries.has(observed.deliveryId)
+      ? []
+      : [
+          {
+            type: 'redemption_started',
+            deliveryId: observed.deliveryId,
+            proofSetHash: proof.proofSetHash,
+          },
+        ];
+    this.#redeemedDeliveries.add(observed.deliveryId);
     const observations: Observation[] = [
       { type: 'request_observed', requestId: request.id, singleUse: request.singleUse },
       ...deliveryObservations,
-      {
-        type: 'redemption_started',
-        deliveryId: observed.deliveryId,
-        proofSetHash: proof.proofSetHash,
-      },
+      ...redemptionObservations,
       { type: 'mint_proofs_state', proofSetHash: proof.proofSetHash, state: 'SPENT' },
       {
         type: 'receiver_settled',
@@ -383,6 +415,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     if (this.#faults.restart !== undefined) {
       await this.#faults.restart(_component);
     }
+    await this.#waitForRestartReadiness(_component);
   }
 
   async clearFaults(target?: string): Promise<void> {
@@ -390,6 +423,48 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       await this.#faults.clear(target);
     } catch {
       throw new Error('External fault cleanup failed');
+    }
+  }
+
+  async #waitForRestartReadiness(component: string): Promise<void> {
+    if (component !== 'sender' && component !== 'receiver') return;
+
+    const probe = async () => {
+      await adapterCall('sender capability discovery', () => this.#sender.capabilities());
+      await adapterCall('receiver capability discovery', () => this.#receiver.capabilities());
+      if (component !== 'receiver') return;
+      for (const deliveryId of this.#redeemedDeliveries) {
+        const receiptView = await adapterCall('receiver delivery lookup', () =>
+          this.#receiver.delivery(deliveryId),
+        );
+        let receipt: DeliveryReceipt;
+        try {
+          receipt = parseDeliveryReceipt(receiptView);
+        } catch {
+          throw new Error('External receiver delivery receipt is invalid after restart');
+        }
+        if (receipt.status !== 'settled') {
+          throw new Error(
+            `External receiver restored delivery with status ${receipt.status} after restart`,
+          );
+        }
+      }
+    };
+
+    for (let attempt = 0; attempt < this.#restartReadinessAttempts; attempt += 1) {
+      try {
+        await probe();
+        return;
+      } catch (error) {
+        if (error instanceof AdapterNotApplicableError) throw error;
+        if (attempt + 1 === this.#restartReadinessAttempts) {
+          const detail = error instanceof Error ? error.message : 'Unknown readiness failure';
+          throw new Error(
+            `External ${component} restart readiness failed after ${this.#restartReadinessAttempts} attempts: ${detail}`,
+          );
+        }
+        await this.#sleep(this.#restartReadinessDelayMs);
+      }
     }
   }
 }

@@ -32,9 +32,16 @@ import type { AdapterManifest } from './adapter-manifest.js';
 
 const execFileAsync = promisify(execFile);
 
+type CommandExecutor = (file: string, args: readonly string[]) => Promise<void>;
+
+const executeCommand: CommandExecutor = async (file, args) => {
+  await execFileAsync(file, [...args]);
+};
+
 export interface LabServiceController {
   up(profile: string): Promise<void>;
   down(profile: string): Promise<void>;
+  restart?(service: string): Promise<void>;
 }
 
 export interface PackagedLabRuntimeOptions {
@@ -44,7 +51,13 @@ export interface PackagedLabRuntimeOptions {
   readonly externalFaults?: ExternalFaultController;
 }
 
-class DockerComposeServiceController implements LabServiceController {
+export class DockerComposeServiceController implements LabServiceController {
+  readonly #execute: CommandExecutor;
+
+  constructor(execute: CommandExecutor = executeCommand) {
+    this.#execute = execute;
+  }
+
   async up(profile: string): Promise<void> {
     if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(profile)) {
       throw new Error('Compose profile is invalid');
@@ -52,7 +65,7 @@ class DockerComposeServiceController implements LabServiceController {
     const composeFile = fileURLToPath(
       new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
     );
-    await execFileAsync('docker', ['compose', '-f', composeFile, '--profile', profile, 'up', '-d']);
+    await this.#execute('docker', ['compose', '-f', composeFile, '--profile', profile, 'up', '-d']);
   }
 
   async down(profile: string): Promise<void> {
@@ -62,7 +75,7 @@ class DockerComposeServiceController implements LabServiceController {
     const composeFile = fileURLToPath(
       new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
     );
-    await execFileAsync('docker', [
+    await this.#execute('docker', [
       'compose',
       '-f',
       composeFile,
@@ -71,6 +84,16 @@ class DockerComposeServiceController implements LabServiceController {
       'down',
       '-v',
     ]);
+  }
+
+  async restart(service: string): Promise<void> {
+    if (!/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(service)) {
+      throw new Error('Compose service is invalid');
+    }
+    const composeFile = fileURLToPath(
+      new URL('../../../infra/compose/wallet-adapters.compose.yml', import.meta.url),
+    );
+    await this.#execute('docker', ['compose', '-f', composeFile, 'restart', service]);
   }
 }
 
@@ -177,6 +200,53 @@ function externalScenarioTransports(scenarioName: string): readonly AdapterTrans
   return ['http'];
 }
 
+class RestartableExternalFaultController implements ExternalFaultController {
+  readonly #base: ExternalFaultController;
+  readonly #services: LabServiceController;
+  readonly #components: Readonly<Record<string, string>>;
+
+  constructor(
+    base: ExternalFaultController,
+    services: LabServiceController,
+    components: Readonly<Record<string, string>>,
+  ) {
+    this.#base = base;
+    this.#services = services;
+    this.#components = components;
+  }
+
+  async reset(): Promise<void> {
+    await this.#base.reset();
+  }
+
+  async configure(target: string, rule: Parameters<ExternalFaultController['configure']>[1]) {
+    await this.#base.configure(target, rule);
+  }
+
+  async clear(target?: string): Promise<void> {
+    await this.#base.clear(target);
+  }
+
+  async evidence(): Promise<Awaited<ReturnType<ExternalFaultController['evidence']>>> {
+    return this.#base.evidence();
+  }
+
+  async restart(component: string): Promise<void> {
+    const service = this.#components[component];
+    if (service === undefined) {
+      if (this.#base.restart !== undefined) {
+        await this.#base.restart(component);
+        return;
+      }
+      throw new Error(`External restart component is not configured: ${component}`);
+    }
+    if (this.#services.restart === undefined) {
+      throw new Error('External service restart is not configured');
+    }
+    await this.#services.restart(service);
+  }
+}
+
 export class PackagedLabRuntime implements LabRuntime {
   readonly #services: LabServiceController;
   readonly #env: Readonly<Record<string, string | undefined>>;
@@ -189,9 +259,9 @@ export class PackagedLabRuntime implements LabRuntime {
     this.#fetch = options.fetch;
     const faultUrl = this.#env.CFL_HTTP_FAULT_GATEWAY_URL;
     const faultToken = this.#env.CFL_HTTP_FAULT_GATEWAY_TOKEN;
-    if ((faultUrl === undefined) !== (faultToken === undefined)) {
+    if (faultUrl !== undefined && faultToken === undefined) {
       throw new Error(
-        'CFL_HTTP_FAULT_GATEWAY_URL and CFL_HTTP_FAULT_GATEWAY_TOKEN must be configured together',
+        'CFL_HTTP_FAULT_GATEWAY_TOKEN is required when CFL_HTTP_FAULT_GATEWAY_URL is set',
       );
     }
     this.#externalFaults =
@@ -249,7 +319,10 @@ export class PackagedLabRuntime implements LabRuntime {
       const driver = new ExternalAdapterScenarioDriver({
         sender,
         receiver,
-        faults: this.#externalFaults,
+        faults: new RestartableExternalFaultController(this.#externalFaults, this.#services, {
+          sender: selection.sender,
+          receiver: selection.receiver,
+        }),
         amount: 8,
         unit: 'sat',
         transports: externalScenarioTransports(scenario.name),

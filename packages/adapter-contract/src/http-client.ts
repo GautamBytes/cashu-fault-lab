@@ -84,6 +84,12 @@ function unsupported(value: unknown): string | undefined {
   return record.reason;
 }
 
+function adapterErrorCode(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const code = (value as Readonly<Record<string, unknown>>).code;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/u.test(code) ? code : undefined;
+}
+
 async function boundedJson(response: Response, limit: number): Promise<unknown> {
   const declared = response.headers.get('content-length');
   if (declared !== null && Number(declared) > limit) {
@@ -198,9 +204,10 @@ export class HttpAdapterClient implements AdapterClient {
       );
     }
     if (!response.ok) {
+      const code = adapterErrorCode(value);
       throw new AdapterClientError(
         'ADAPTER_HTTP_STATUS',
-        `Adapter returned HTTP status ${response.status}`,
+        `Adapter returned HTTP status ${response.status}${code === undefined ? '' : ` (${code})`}`,
       );
     }
     const validation = validateAdapterResponse(responseOperation, value);

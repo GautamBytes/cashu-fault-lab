@@ -161,6 +161,22 @@ describe('HttpAdapterClient', () => {
     });
   });
 
+  it('includes safe adapter error codes without exposing error bodies', async () => {
+    const baseUrl = await serve((_request, response) => {
+      json(response, 422, {
+        code: 'SEND_FAILED',
+        message: 'raw wallet proof secret',
+      });
+    });
+    const client = new HttpAdapterClient({ baseUrl, token: 'token' });
+
+    const error = await client.send({ request: 'creqAexample' }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(AdapterClientError);
+    expect(error).toMatchObject({ code: 'ADAPTER_HTTP_STATUS' });
+    expect(String(error)).toContain('SEND_FAILED');
+    expect(String(error)).not.toContain('raw wallet proof secret');
+  });
+
   it('times out without exposing dependency errors', async () => {
     const baseUrl = await serve(() => {});
     const client = new HttpAdapterClient({ baseUrl, token: 'token', timeoutMs: 20 });
