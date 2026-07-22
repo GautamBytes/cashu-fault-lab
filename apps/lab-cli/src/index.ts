@@ -261,7 +261,10 @@ export async function runCli(
         io.stdout(
           `${result.status} ${result.artifact.scenario} seed=${result.artifact.seed} (${elapsed(start)})\n`,
         );
-        if (result.status === 'failed') exitCode = 1;
+        if (result.status === 'failed') {
+          io.stderr(`${result.error.name}: ${result.error.message}\n`);
+          exitCode = 1;
+        }
       },
     );
 
