@@ -147,11 +147,16 @@ class Receiver implements AdapterClient {
 class Sender implements AdapterClient {
   calls = 0;
   failures = 0;
+  availabilityFailures = 0;
   readonly deliveryIds: string[] = [];
 
   constructor(private readonly receiver: Receiver) {}
 
   async capabilities(): Promise<AdapterCapabilities> {
+    if (this.availabilityFailures > 0) {
+      this.availabilityFailures -= 1;
+      throw new Error('sender is unavailable during the shared restart');
+    }
     return capability('sender-wallet', 'sender');
   }
 
@@ -165,6 +170,10 @@ class Sender implements AdapterClient {
   }
 
   async send(input: SendPaymentInput): Promise<DeliveryReceiptView> {
+    if (this.availabilityFailures > 0) {
+      this.availabilityFailures -= 1;
+      throw new Error('sender is unavailable during the shared restart');
+    }
     this.calls += 1;
     this.receiver.deliveryId = input.deliveryId ?? '';
     this.deliveryIds.push(this.receiver.deliveryId);
@@ -379,5 +388,43 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(result.status).toBe('passed');
     expect(faults.restarts).toEqual(['receiver']);
     expect(waits).toEqual([25, 25]);
+  });
+
+  it('waits for the sender when a receiver restart disrupts the adapter pair', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    const waits: number[] = [];
+    faults.onRestart = (component) => {
+      if (component === 'receiver') sender.availabilityFailures = 3;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessDelayMs: 25,
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(
+      {
+        name: 'external-restart-pair-readiness',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-restart-pair-readiness',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(faults.restarts).toEqual(['receiver']);
+    expect(waits).toEqual([25, 25, 25]);
   });
 });

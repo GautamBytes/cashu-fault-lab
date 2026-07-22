@@ -427,21 +427,19 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   }
 
   async #waitForRestartReadiness(component: string): Promise<void> {
-    const probe =
-      component === 'sender'
-        ? () => this.#sender.capabilities()
-        : component === 'receiver'
-          ? async () => {
-              await this.#receiver.capabilities();
-              for (const deliveryId of this.#redeemedDeliveries) {
-                const receipt = parseDeliveryReceipt(await this.#receiver.delivery(deliveryId));
-                if (receipt.status !== 'settled') {
-                  throw new Error('Receiver has not restored settled delivery state');
-                }
-              }
-            }
-          : undefined;
-    if (probe === undefined) return;
+    if (component !== 'sender' && component !== 'receiver') return;
+
+    const probe = async () => {
+      await this.#sender.capabilities();
+      await this.#receiver.capabilities();
+      if (component !== 'receiver') return;
+      for (const deliveryId of this.#redeemedDeliveries) {
+        const receipt = parseDeliveryReceipt(await this.#receiver.delivery(deliveryId));
+        if (receipt.status !== 'settled') {
+          throw new Error('Receiver has not restored settled delivery state');
+        }
+      }
+    };
 
     for (let attempt = 0; attempt < this.#restartReadinessAttempts; attempt += 1) {
       try {
