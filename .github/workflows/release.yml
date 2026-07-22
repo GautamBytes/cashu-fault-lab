@@ -9,7 +9,64 @@ permissions:
   contents: read
 
 jobs:
+  real-mint:
+    name: Real mint — ${{ matrix.mint.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mint:
+          - name: Nutshell
+            compose_file: infra/compose/nutshell.compose.yml
+            url: http://127.0.0.1:3338
+          - name: CDK
+            compose_file: infra/compose/cdk-mint.compose.yml
+            url: http://127.0.0.1:8085
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Pin Rust toolchain
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup override set 1.97.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build --filter=@cashu-fault-lab/scenario-runner
+      - run: cargo build --manifest-path adapters/cdk/Cargo.toml
+      - name: Start ${{ matrix.mint.name }} fake-wallet mint
+        run: docker compose -f "${{ matrix.mint.compose_file }}" up -d
+      - name: Wait for ${{ matrix.mint.name }} fake-wallet mint
+        run: |
+          for i in $(seq 1 60); do
+            if curl --fail --silent "${{ matrix.mint.url }}/v1/info" >/dev/null 2>&1; then
+              echo "${{ matrix.mint.name }} mint ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "${{ matrix.mint.name }} mint did not become ready" && exit 1
+      - name: Real mint response-loss recovery
+        env:
+          CFL_REAL_MINT_URL: ${{ matrix.mint.url }}
+        run: pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/docker-mint-e2e.test.ts
+      - name: Prove funded cashu-ts and CDK sender fault handling against ${{ matrix.mint.name }}
+        env:
+          CFL_REAL_MINT_URL: ${{ matrix.mint.url }}
+        run: pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/cross-language-docker.test.ts
+      - name: Stop ${{ matrix.mint.name }} fake-wallet mint
+        if: always()
+        run: docker compose -f "${{ matrix.mint.compose_file }}" down -v
+
   release-gate:
+    needs: real-mint
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -39,17 +96,8 @@ jobs:
       - run: cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
       - run: cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path adapters/cdk/Cargo.toml
-      - name: Start Nutshell real-mint lane
-        run: docker compose -f infra/compose/nutshell.compose.yml up -d --wait
-      - name: Prove funded cashu-ts and CDK sender fault handling
-        env:
-          CFL_REAL_MINT_URL: http://127.0.0.1:3338
-        run: pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/cross-language-docker.test.ts
       - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1 --min-passes 2
       - run: node apps/lab-cli/dist/bin.js matrix --profile legacy-nut18
       - run: node apps/lab-cli/dist/bin.js matrix --profile nut26-nostr
       - run: node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/mint-response-lost.json --seed release
       - run: node apps/lab-cli/dist/bin.js run scenarios/concurrency/cross-transport-storm.json --seed release
-      - name: Stop Nutshell
-        if: always()
-        run: docker compose -f infra/compose/nutshell.compose.yml down -v

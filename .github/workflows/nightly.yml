@@ -61,10 +61,20 @@ jobs:
       - name: Full matrix
         run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1
 
-  cdk-mint:
-    name: Real mint — CDK
+  real-mint:
+    name: Real mint — ${{ matrix.mint.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mint:
+          - name: Nutshell
+            compose_file: infra/compose/nutshell.compose.yml
+            url: http://127.0.0.1:3338
+          - name: CDK
+            compose_file: infra/compose/cdk-mint.compose.yml
+            url: http://127.0.0.1:8085
     steps:
       - uses: actions/checkout@v6
         with:
@@ -83,25 +93,29 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec turbo run build --filter=@cashu-fault-lab/scenario-runner
       - run: cargo build --manifest-path adapters/cdk/Cargo.toml
-      - name: Start CDK fake-wallet mint
-        run: docker compose -f infra/compose/cdk-mint.compose.yml up -d
-      - name: Wait for CDK mint
+      - name: Start ${{ matrix.mint.name }} fake-wallet mint
+        run: docker compose -f "${{ matrix.mint.compose_file }}" up -d
+      - name: Wait for ${{ matrix.mint.name }} fake-wallet mint
         run: |
           for i in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:8085/v1/info >/dev/null 2>&1; then
-              echo "CDK mint ready"
+            if curl --fail --silent "${{ matrix.mint.url }}/v1/info" >/dev/null 2>&1; then
+              echo "${{ matrix.mint.name }} mint ready"
               exit 0
             fi
             sleep 2
           done
-          echo "CDK mint did not become ready" && exit 1
-      - name: Run cross-language delivery against CDK mint
+          echo "${{ matrix.mint.name }} mint did not become ready" && exit 1
+      - name: Real mint response-loss recovery
         env:
-          CFL_REAL_MINT_URL: http://127.0.0.1:8085
+          CFL_REAL_MINT_URL: ${{ matrix.mint.url }}
+        run: pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/docker-mint-e2e.test.ts
+      - name: Run cross-language delivery against ${{ matrix.mint.name }}
+        env:
+          CFL_REAL_MINT_URL: ${{ matrix.mint.url }}
         run: pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/cross-language-docker.test.ts
-      - name: Stop CDK mint
+      - name: Stop ${{ matrix.mint.name }} fake-wallet mint
         if: always()
-        run: docker compose -f infra/compose/cdk-mint.compose.yml down -v
+        run: docker compose -f "${{ matrix.mint.compose_file }}" down -v
 
   security:
     name: Security + fuzzing lanes
