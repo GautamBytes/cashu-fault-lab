@@ -68,6 +68,14 @@ describe('funded wallet workflow targets', () => {
       'utf8',
     );
 
+    const build = contents.indexOf('name: Build cashu-ts E2E dependencies');
+    const postgres = contents.indexOf('name: cashu-ts PostgreSQL receiver E2E');
+    const nostr = contents.indexOf('name: cashu-ts Nostr relay E2E');
+
+    expect(build).toBeGreaterThan(-1);
+    expect(postgres).toBeGreaterThan(build);
+    expect(nostr).toBeGreaterThan(build);
+    expect(contents).toContain('turbo run build --filter=@cashu-fault-lab/adapter-cashu-ts');
     expect(contents).toContain('CFL_POSTGRES_E2E');
     expect(contents).toContain('test/postgres-receiver-store.test.ts');
     expect(contents).toContain('CFL_NOSTR_RELAY_E2E');

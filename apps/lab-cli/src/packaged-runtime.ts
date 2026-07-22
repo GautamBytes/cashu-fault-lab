@@ -32,6 +32,12 @@ import type { AdapterManifest } from './adapter-manifest.js';
 
 const execFileAsync = promisify(execFile);
 
+type CommandExecutor = (file: string, args: readonly string[]) => Promise<void>;
+
+const executeCommand: CommandExecutor = async (file, args) => {
+  await execFileAsync(file, [...args]);
+};
+
 export interface LabServiceController {
   up(profile: string): Promise<void>;
   down(profile: string): Promise<void>;
@@ -45,7 +51,13 @@ export interface PackagedLabRuntimeOptions {
   readonly externalFaults?: ExternalFaultController;
 }
 
-class DockerComposeServiceController implements LabServiceController {
+export class DockerComposeServiceController implements LabServiceController {
+  readonly #execute: CommandExecutor;
+
+  constructor(execute: CommandExecutor = executeCommand) {
+    this.#execute = execute;
+  }
+
   async up(profile: string): Promise<void> {
     if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(profile)) {
       throw new Error('Compose profile is invalid');
@@ -53,7 +65,7 @@ class DockerComposeServiceController implements LabServiceController {
     const composeFile = fileURLToPath(
       new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
     );
-    await execFileAsync('docker', ['compose', '-f', composeFile, '--profile', profile, 'up', '-d']);
+    await this.#execute('docker', ['compose', '-f', composeFile, '--profile', profile, 'up', '-d']);
   }
 
   async down(profile: string): Promise<void> {
@@ -63,7 +75,7 @@ class DockerComposeServiceController implements LabServiceController {
     const composeFile = fileURLToPath(
       new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
     );
-    await execFileAsync('docker', [
+    await this.#execute('docker', [
       'compose',
       '-f',
       composeFile,
@@ -81,7 +93,7 @@ class DockerComposeServiceController implements LabServiceController {
     const composeFile = fileURLToPath(
       new URL('../../../infra/compose/wallet-adapters.compose.yml', import.meta.url),
     );
-    await execFileAsync('docker', ['compose', '-f', composeFile, 'restart', service]);
+    await this.#execute('docker', ['compose', '-f', composeFile, 'restart', service]);
   }
 }
 

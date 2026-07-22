@@ -77,6 +77,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build cashu-ts E2E dependencies
+        run: pnpm exec turbo run build --filter=@cashu-fault-lab/adapter-cashu-ts
       - name: cashu-ts PostgreSQL receiver E2E
         env:
           CFL_POSTGRES_E2E: '1'

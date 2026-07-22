@@ -2,7 +2,7 @@ import type { ScenarioSpec } from '@cashu-fault-lab/scenario-runner';
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
-import { PackagedLabRuntime } from '../src/packaged-runtime.js';
+import { DockerComposeServiceController, PackagedLabRuntime } from '../src/packaged-runtime.js';
 
 async function scenario(path: string): Promise<ScenarioSpec> {
   return JSON.parse(
@@ -12,10 +12,22 @@ async function scenario(path: string): Promise<ScenarioSpec> {
 
 describe('PackagedLabRuntime', () => {
   it('restarts one adapter service without converging its shared Compose dependencies', async () => {
-    const contents = await readFile(new URL('../src/packaged-runtime.ts', import.meta.url), 'utf8');
+    const invocations: Array<{ readonly file: string; readonly args: readonly string[] }> = [];
+    const services = new DockerComposeServiceController(async (file, args) => {
+      invocations.push({ file, args: [...args] });
+    });
 
-    expect(contents).toContain("['compose', '-f', composeFile, 'restart', service]");
-    expect(contents).not.toContain("['compose', '-f', composeFile, 'up', '-d', '--wait', service]");
+    await services.restart('cashu-ts');
+
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]?.file).toBe('docker');
+    expect(invocations[0]?.args).toEqual([
+      'compose',
+      '-f',
+      expect.stringMatching(/wallet-adapters\.compose\.yml$/u),
+      'restart',
+      'cashu-ts',
+    ]);
   });
 
   it('starts the selected compose profile through the packaged service controller', async () => {
