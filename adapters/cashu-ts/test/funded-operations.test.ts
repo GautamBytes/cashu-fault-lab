@@ -1,6 +1,11 @@
-import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
+import {
+  PaymentRequest,
+  PaymentRequestTransportType,
+  type PaymentRequestTransport,
+} from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
+  type AdapterTransport,
   type ProofEvidenceView,
 } from '@cashu-fault-lab/adapter-contract';
 import {
@@ -27,9 +32,14 @@ const proof: CashuProof = {
   C: `02${'11'.repeat(32)}`,
 };
 
-function encodedRequest(amount = 8): string {
+function encodedRequest(
+  amount = 8,
+  transports: PaymentRequestTransport[] = [
+    { type: PaymentRequestTransportType.POST, target: 'http://127.0.0.1:8181/pay' },
+  ],
+): string {
   return new PaymentRequest(
-    [{ type: PaymentRequestTransportType.POST, target: 'http://127.0.0.1:8181/pay' }],
+    transports,
     requestId,
     amount,
     'sat',
@@ -69,10 +79,15 @@ class Wallet implements CashuTsWalletPort {
 
 class Transport implements CashuTsTransportPort {
   readonly bodies: Uint8Array[] = [];
+  readonly targets: string[] = [];
   loseFirstResponse = false;
 
-  async post(_target: string, body: Uint8Array) {
+  async send(
+    target: { readonly type: 'post' | 'nostr'; readonly target: string },
+    body: Uint8Array,
+  ) {
     this.bodies.push(Uint8Array.from(body));
+    this.targets.push(`${target.type}:${target.target}`);
     const payload = parseDeliveryPayloadJson(body, now);
     if (this.loseFirstResponse && this.bodies.length === 1) {
       throw new Error('receiver accepted but response was lost');
@@ -100,10 +115,15 @@ class Transport implements CashuTsTransportPort {
   }
 }
 
-function fixture() {
+function fixture(supportedTransports?: readonly AdapterTransport[]) {
   const wallet = new Wallet();
   const transport = new Transport();
-  const operations = new FundedCashuTsOperations({ wallet, transport, now: () => now });
+  const operations = new FundedCashuTsOperations({
+    wallet,
+    transport,
+    now: () => now,
+    ...(supportedTransports === undefined ? {} : { supportedTransports }),
+  });
   return { wallet, transport, operations };
 }
 
@@ -173,6 +193,55 @@ describe('FundedCashuTsOperations', () => {
     expect(wallet.reserveCalls).toBe(1);
     expect(transport.bodies).toHaveLength(2);
     expect(Buffer.compare(transport.bodies[0]!, transport.bodies[1]!)).toBe(0);
+  });
+
+  it('falls back to the next Nostr transport without changing reservation or bytes', async () => {
+    const { wallet, transport, operations } = fixture(['http', 'nostr']);
+    transport.loseFirstResponse = true;
+    await operations.reset('nostr-fallback');
+    const request = encodedRequest(8, [
+      { type: PaymentRequestTransportType.POST, target: 'http://127.0.0.1:8181/pay' },
+      {
+        type: PaymentRequestTransportType.NOSTR,
+        target:
+          'nprofile1qqsqv9jxgu33waryc6rulmzy58qx22tdp8wraj4l78k35nvnu4d0w5qprpmhxue69uhkummnw3ezuamfdejj7q3q0lr8',
+        tags: [['n', '17']],
+      },
+    ]);
+
+    await expect(operations.send({ request, deliveryId })).rejects.toThrow(
+      'Cashu payment delivery failed',
+    );
+    await expect(operations.send({ request, deliveryId })).resolves.toMatchObject({
+      status: 'settled',
+    });
+
+    expect(wallet.reserveCalls).toBe(1);
+    expect(transport.targets).toEqual([
+      'post:http://127.0.0.1:8181/pay',
+      'nostr:nprofile1qqsqv9jxgu33waryc6rulmzy58qx22tdp8wraj4l78k35nvnu4d0w5qprpmhxue69uhkummnw3ezuamfdejj7q3q0lr8',
+    ]);
+    expect(Buffer.compare(transport.bodies[0]!, transport.bodies[1]!)).toBe(0);
+  });
+
+  it('rejects unsupported request transports before reserving proofs', async () => {
+    const { wallet, transport, operations } = fixture();
+    await operations.reset('unsupported-transport');
+    const request = encodedRequest(8, [
+      {
+        type: PaymentRequestTransportType.NOSTR,
+        target:
+          'nprofile1qqsqv9jxgu33waryc6rulmzy58qx22tdp8wraj4l78k35nvnu4d0w5qprpmhxue69uhkummnw3ezuamfdejj7q3q0lr8',
+        tags: [['n', '17']],
+      },
+    ]);
+
+    await expect(operations.send({ request, deliveryId })).rejects.toThrow(
+      'Cashu payment request does not contain a supported transport',
+    );
+
+    expect(wallet.reserveCalls).toBe(0);
+    expect(transport.bodies).toHaveLength(0);
   });
 
   it('rejects rebinding one delivery ID to a changed request', async () => {

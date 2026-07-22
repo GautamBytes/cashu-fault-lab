@@ -1,6 +1,6 @@
 # Cashu Fault Lab
 
-Cashu Fault Lab checks payment delivery across retries, duplicates, transport loss, and receiver recovery. Funded cashu-ts and CDK sender adapters now run against a real mint and the reference receiver at T1. Packaged synthetic lanes remain T0, while PostgreSQL integration tests verify durable receiver recovery at implemented crash boundaries.
+Cashu Fault Lab checks payment delivery across retries, duplicates, transport loss, and receiver recovery. Funded cashu-ts now has delivery-v1 sender and receiver paths over HTTP and NIP-17 Nostr, with optional PostgreSQL T3 receiver evidence. CDK remains a funded sender adapter against the reference receiver at T1. Packaged synthetic lanes remain T0, while PostgreSQL integration tests verify durable receiver evidence.
 
 This is not yet broad wallet certification. Independent wallet receiver adapters and the full named crash-boundary suite remain release-gated.
 
@@ -65,11 +65,11 @@ pnpm lab matrix --profile nut26-nostr
 
 `delivery-v1` runs configured receipt and idempotency pairs. `legacy-nut18` reports `N/A` until executable legacy receiver adapters are wired; pinned `creqA` vectors remain covered by adapter contract tests. `nut26-nostr` reports the pinned NIP-04/raw-key versus NIP-17/`nprofile` mismatch as an expected failure.
 
-Bundled cashu-ts 4.7.2 and CDK 0.17.3 adapters provide funded T1 HTTP sender operations. Both explicitly return `N/A` for receiver operations. The funded reference receiver supplies T1 ledger and proof-state evidence, but it is a lab implementation, not an independent wallet. Release therefore remains blocked until independent wallet receivers produce at least two qualifying pairs.
+Bundled cashu-ts 4.7.2 provides funded delivery-v1 sender and receiver operations. HTTP runs by default, NIP-17 Nostr is enabled with sender/receiver keys and relay URLs, and receiver evidence can be raised to T3 with PostgreSQL storage. CDK 0.17.3 remains a funded T1 HTTP sender and explicitly returns `N/A` for receiver operations. Release therefore remains blocked until independent wallet receivers produce at least two qualifying pairs.
 
 ## Run funded wallet integrations
 
-The local stack starts a pinned Nutshell mint, the cashu-ts and CDK sender adapters, the reference receiver, and the controllable HTTP fault gateway. All published ports bind to loopback.
+The local stack starts a pinned Nutshell mint, cashu-ts as a funded sender/receiver with PostgreSQL-backed receiver evidence and a local Nostr relay, the CDK sender adapter, the reference receiver, and the controllable HTTP fault gateway. All published ports bind to loopback.
 
 ```bash
 export CFL_CASHU_TS_TOKEN=lab-only-cashu-ts-token
@@ -94,17 +94,19 @@ pnpm lab report
 docker compose -f infra/compose/wallet-adapters.compose.yml down -v
 ```
 
-Use `--sender cdk` to exercise the Rust wallet implementation. The stack is ephemeral and test-only: sender reservations and the reference merchant ledger are memory-backed and reset through the adapter API.
+Use `--sender cdk` to exercise the Rust wallet implementation. The stack is ephemeral and test-only: sender reservations, the local Nostr relay, and receiver evidence stores are reset through the adapter and compose lifecycle.
 
 ## Current coverage
 
-| Area                                       | Developer-preview evidence                                                                                      | Release gap                                           |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| HTTP retry, response loss, and duplication | Real-mint T1 lane with cashu-ts and CDK senders plus the reference receiver                                     | Independent wallet receiver and durable sender state  |
-| NIP-17 and cross-transport convergence     | Packaged synthetic T0 lanes                                                                                     | Funded wallets and real relay                         |
-| Receiver persistence and recovery          | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, and concurrent-worker leasing | Every named process-crash boundary                    |
-| Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                    | Packaged end-to-end lanes with injected clock         |
-| Sender restart                             | Durable state/reservation ports and terminal-state reconciliation                                               | Bundled durable sender-store adapter and restart lane |
+| Area                                       | Developer-preview evidence                                                                                       | Release gap                                           |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| HTTP retry, response loss, and duplication | Real-mint T1 lane with cashu-ts/CDK senders plus the reference receiver; cashu-ts also has its own receiver path | Independent wallet receiver and durable sender state  |
+| Funded NIP-17 Nostr delivery               | cashu-ts sender/receiver E2E over the repo's real WebSocket relay                                                | Public relay hardening and broader wallet coverage    |
+| Durable receiver evidence                  | cashu-ts receiver can use PostgreSQL T3 credit/proof evidence                                                    | Named crash-boundary suite for external wallet pairs  |
+| NIP-17 and cross-transport convergence     | Packaged synthetic T0 lanes                                                                                      | Funded wallets and real relay                         |
+| Receiver persistence and recovery          | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, and concurrent-worker leasing  | Every named process-crash boundary                    |
+| Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                     | Packaged end-to-end lanes with injected clock         |
+| Sender restart                             | Durable state/reservation ports and terminal-state reconciliation                                                | Bundled durable sender-store adapter and restart lane |
 
 The packaged `mint-response-lost` scenario exercises recovery orchestration with in-memory fakes. Durable restart claims come only from PostgreSQL integration tests. Scenario artifacts are preview evidence; release-grade adapter/version/protocol-lock metadata remains part of the closed release gate.
 

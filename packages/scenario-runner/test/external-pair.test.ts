@@ -154,6 +154,7 @@ describe('runExternalDeliveryPair', () => {
         credits: 1,
         proofSetHash,
         proofState: 'spent',
+        transports: ['http'],
         seed: 'pair-seed',
       },
     });

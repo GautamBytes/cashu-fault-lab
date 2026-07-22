@@ -2,7 +2,7 @@ import {
   validateAdapterResponse,
   type DeliveryReceiptView,
 } from '@cashu-fault-lab/adapter-contract';
-import type { CashuTsTransportPort } from './funded-operations.js';
+import type { CashuTsTransportPort, CashuTsTransportTarget } from './funded-operations.js';
 
 const MAX_BODY_BYTES = 65_536;
 
@@ -75,6 +75,11 @@ export class CashuTsHttpTransport implements CashuTsTransportPort {
   constructor(options: CashuTsHttpTransportOptions = {}) {
     this.#timeoutMs = positiveInteger(options.timeoutMs ?? 5_000, 'timeoutMs');
     this.#fetch = options.fetch ?? fetch;
+  }
+
+  async send(destination: CashuTsTransportTarget, body: Uint8Array): Promise<DeliveryReceiptView> {
+    if (destination.type !== 'post') throw new Error('Cashu HTTP transport requires a POST target');
+    return this.post(destination.target, body);
   }
 
   async post(destination: string, body: Uint8Array): Promise<DeliveryReceiptView> {

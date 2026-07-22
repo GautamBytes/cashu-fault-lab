@@ -27,7 +27,15 @@
     "@cashu/cashu-ts": "4.7.2",
     "@cashu-fault-lab/adapter-contract": "workspace:*",
     "@cashu-fault-lab/delivery-core": "workspace:*",
+    "@cashu-fault-lab/nostr-delivery": "workspace:*",
     "@cashu-fault-lab/reference-receiver": "workspace:*",
-    "fastify": "5.10.0"
+    "fastify": "5.10.0",
+    "nostr-tools": "2.23.12",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@cashu-fault-lab/nostr-fault-relay": "workspace:*",
+    "@testcontainers/postgresql": "12.0.4",
+    "@types/pg": "8.20.0"
   }
 }

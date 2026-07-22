@@ -24,6 +24,7 @@ import type { CashuTsTransportPort, CashuTsWalletPort } from '../src/funded-oper
 const now = 1_784_399_400;
 const mintUrl = 'https://mint.example';
 const paymentTarget = 'http://127.0.0.1:4101/pay';
+const receiverNostrKey = Uint8Array.from(Buffer.from('22'.repeat(32), 'hex'));
 const requestId = 'AAECAwQFBgcICQoLDA0ODw';
 const deliveryId = 'EBESExQVFhcYGRobHB0eHw';
 const proofY = `02${'01'.repeat(32)}`;
@@ -212,7 +213,7 @@ describe('FundedCashuTsReceiverOperations', () => {
       sender: {
         wallet: new SenderWallet(),
         transport: {
-          async post(_target: string, body: Uint8Array) {
+          async send(_target: { readonly type: 'post' | 'nostr' }, body: Uint8Array) {
             return receiver.receive(body);
           },
         } satisfies CashuTsTransportPort,
@@ -260,7 +261,7 @@ describe('FundedCashuTsReceiverOperations', () => {
       sender: {
         wallet: new SenderWallet(),
         transport: {
-          async post(_target: string, body: Uint8Array) {
+          async send(_target: { readonly type: 'post' | 'nostr' }, body: Uint8Array) {
             return settledReceipt(body);
           },
         } satisfies CashuTsTransportPort,
@@ -304,6 +305,35 @@ describe('FundedCashuTsReceiverOperations', () => {
       proofs.filter((candidate) => candidate.deliveryId === overlappingSenderReceipt.delivery_id),
     ).toEqual([expect.objectContaining({ proofSetHash: 'b'.repeat(64), state: 'spent' })]);
     expect(receiverReceipt.delivery_id).toBe(overlappingSenderReceipt.delivery_id);
+  });
+
+  it('creates ordered HTTP and NIP-17 Nostr receiver transports when configured', async () => {
+    const store = new MemoryReceiverStore();
+    const receiver = new FundedCashuTsReceiverOperations({
+      store,
+      mintUrl,
+      paymentTarget,
+      mint: new FakeMint(),
+      verifier: new FakeVerifier(),
+      receiverNostrPrivateKey: receiverNostrKey,
+      nostrRelayUrls: ['ws://127.0.0.1:7777'],
+      now: () => now,
+    });
+    await receiver.reset('receiver-nostr-seed');
+
+    const request = await receiver.createRequest({
+      amount: 8,
+      unit: 'sat',
+      transports: ['http', 'nostr'],
+      singleUse: true,
+      expiresIn: 900,
+    });
+
+    expect(request.transports.map((transport) => transport.type)).toEqual(['post', 'nostr']);
+    expect(request.transports[1]).toMatchObject({ tags: [['n', '17']] });
+    const decoded = PaymentRequest.fromEncodedRequest(request.raw);
+    expect(decoded.getTransport(PaymentRequestTransportType.POST)?.target).toBe(paymentTarget);
+    expect(decoded.getTransport(PaymentRequestTransportType.NOSTR)?.tags).toEqual([['n', '17']]);
   });
 
   it('keeps control endpoints bearer-gated without requiring control auth on /pay', async () => {
@@ -377,6 +407,49 @@ describe('FundedCashuTsReceiverOperations', () => {
         message: 'Internal server error',
       });
       expect(payment.body).not.toContain('mint api key');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not expose unexpected operation internals from control routes', async () => {
+    const app = await buildCashuTsAdapterServer({
+      controlToken: 'control-token',
+      now: () => now,
+      operations: {
+        send: async () => {
+          throw new Error('raw wallet proof secret leaked in diagnostic');
+        },
+        delivery: async () => {
+          throw new Error('unused');
+        },
+        ledger: async () => [],
+        proofs: async () => [],
+      },
+    });
+    try {
+      const paymentRequest = new PaymentRequest(
+        [{ type: PaymentRequestTransportType.POST, target: paymentTarget }],
+        requestId,
+        8,
+        'sat',
+        [mintUrl],
+        undefined,
+        true,
+      );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/send',
+        headers: { authorization: 'Bearer control-token' },
+        payload: { request: paymentRequest.toEncodedCreqA() },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Internal server error',
+      });
+      expect(response.body).not.toContain('raw wallet proof secret');
     } finally {
       await app.close();
     }

@@ -1,4 +1,4 @@
-import type { AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
+import type { AdapterCapabilities, AdapterTransport } from '@cashu-fault-lab/adapter-contract';
 import {
   CompatibilityMatrix,
   DirectExternalFaultController,
@@ -166,6 +166,17 @@ function failedScenario(scenario: ScenarioSpec, seed: string, message: string): 
   });
 }
 
+function externalScenarioTransports(scenarioName: string): readonly AdapterTransport[] {
+  if (scenarioName === 'nostr-response-lost') return ['nostr'];
+  if (
+    scenarioName === 'http-nostr-fallback' ||
+    scenarioName === 'cross-transport-duplicate-storm'
+  ) {
+    return ['http', 'nostr'];
+  }
+  return ['http'];
+}
+
 export class PackagedLabRuntime implements LabRuntime {
   readonly #services: LabServiceController;
   readonly #env: Readonly<Record<string, string | undefined>>;
@@ -241,6 +252,7 @@ export class PackagedLabRuntime implements LabRuntime {
         faults: this.#externalFaults,
         amount: 8,
         unit: 'sat',
+        transports: externalScenarioTransports(scenario.name),
         senderAlias: senderAliases[0]!,
         requestAlias: requestAliases[0]!,
       });
