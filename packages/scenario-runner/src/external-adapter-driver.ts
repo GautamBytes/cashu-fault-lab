@@ -152,6 +152,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   #request: PaymentRequestView | undefined;
   #senderCapabilities: AdapterCapabilities | undefined;
   #receiverCapabilities: AdapterCapabilities | undefined;
+  readonly #redeemedDeliveries = new Set<string>();
 
   constructor(options: ExternalAdapterScenarioDriverOptions) {
     this.#sender = options.sender;
@@ -181,6 +182,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#request = undefined;
     this.#senderCapabilities = undefined;
     this.#receiverCapabilities = undefined;
+    this.#redeemedDeliveries.clear();
     await this.#faults.reset();
     await adapterCall('receiver reset', () => this.#receiver.reset(seed));
     await adapterCall('sender reset', () => this.#sender.reset(seed));
@@ -332,14 +334,20 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       creditId,
       proof.proofSetHash,
     ]);
+    const redemptionObservations: Observation[] = this.#redeemedDeliveries.has(observed.deliveryId)
+      ? []
+      : [
+          {
+            type: 'redemption_started',
+            deliveryId: observed.deliveryId,
+            proofSetHash: proof.proofSetHash,
+          },
+        ];
+    this.#redeemedDeliveries.add(observed.deliveryId);
     const observations: Observation[] = [
       { type: 'request_observed', requestId: request.id, singleUse: request.singleUse },
       ...deliveryObservations,
-      {
-        type: 'redemption_started',
-        deliveryId: observed.deliveryId,
-        proofSetHash: proof.proofSetHash,
-      },
+      ...redemptionObservations,
       { type: 'mint_proofs_state', proofSetHash: proof.proofSetHash, state: 'SPENT' },
       {
         type: 'receiver_settled',

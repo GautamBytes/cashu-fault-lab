@@ -90,6 +90,12 @@ pnpm lab run scenarios/retry/response-lost.json \
   --receiver reference-receiver \
   --seed funded-demo
 
+pnpm lab run scenarios/crash-recovery/external-receiver-restart-after-settlement.json \
+  --adapters spec/examples/adapters.local.json \
+  --sender cdk \
+  --receiver cashu-ts \
+  --seed funded-receiver-restart
+
 pnpm lab report
 docker compose -f infra/compose/wallet-adapters.compose.yml down -v
 ```
@@ -98,19 +104,19 @@ Use `--sender cdk` to exercise the Rust wallet implementation. The stack is ephe
 
 ## Current coverage
 
-| Area                                       | Developer-preview evidence                                                                                       | Release gap                                           |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| HTTP retry, response loss, and duplication | Real-mint T1 lane with cashu-ts/CDK senders plus the reference receiver; cashu-ts also has its own receiver path | Independent wallet receiver and durable sender state  |
-| Funded NIP-17 Nostr delivery               | cashu-ts sender/receiver E2E over the repo's real WebSocket relay                                                | Public relay hardening and broader wallet coverage    |
-| Durable receiver evidence                  | cashu-ts receiver can use PostgreSQL T3 credit/proof evidence                                                    | Named crash-boundary suite for external wallet pairs  |
-| NIP-17 and cross-transport convergence     | Packaged synthetic T0 lanes                                                                                      | Funded wallets and real relay                         |
-| Receiver persistence and recovery          | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, and concurrent-worker leasing  | Every named process-crash boundary                    |
-| Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                     | Packaged end-to-end lanes with injected clock         |
-| Sender restart                             | Durable state/reservation ports and terminal-state reconciliation                                                | Bundled durable sender-store adapter and restart lane |
+| Area                                       | Developer-preview evidence                                                                                                            | Release gap                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| HTTP retry, response loss, and duplication | Real-mint T1 lane with cashu-ts/CDK senders plus the reference receiver; cashu-ts also has its own receiver path                      | Independent wallet receiver and durable sender state |
+| Funded NIP-17 Nostr delivery               | cashu-ts sender/receiver E2E over the repo's real WebSocket relay                                                                     | Public relay hardening and broader wallet coverage   |
+| Durable receiver evidence                  | cashu-ts receiver can use PostgreSQL T3 credit/proof evidence                                                                         | Named crash-boundary suite for external wallet pairs |
+| NIP-17 and cross-transport convergence     | Packaged synthetic T0 lanes                                                                                                           | Funded wallets and real relay                        |
+| Receiver persistence and recovery          | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, and concurrent-worker leasing                       | Every named process-crash boundary                   |
+| Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                                          | Packaged end-to-end lanes with injected clock        |
+| Sender restart                             | Durable state/reservation ports, terminal-state reconciliation, encrypted PostgreSQL sender state, and external receiver restart lane | Durable cashu-ts sender reservation/session wiring   |
 
 The packaged `mint-response-lost` scenario exercises recovery orchestration with in-memory fakes. Durable restart claims come only from PostgreSQL integration tests. Scenario artifacts are preview evidence; release-grade adapter/version/protocol-lock metadata remains part of the closed release gate.
 
-`SenderState.withDeliveryLock` is a correctness boundary for sender adapters. Durable implementations must serialize one delivery across processes and bind the callback's `get`/`create`/`save` operations to the same lock or database session; nested lock acquisition is forbidden. The bundled in-memory state provides only process-local serialization.
+`SenderState.withDeliveryLock` is a correctness boundary for sender adapters. Durable implementations must serialize one delivery across processes and bind the callback's `get`/`create`/`save` operations to the same lock or database session; nested lock acquisition is forbidden. The bundled in-memory state provides process-local serialization. `PostgresSenderState` provides cross-process delivery locks and AES-256-GCM encrypted records when initialized with a 32-byte state key and `migratePostgresSenderState(pool)`.
 
 ## Security lanes
 

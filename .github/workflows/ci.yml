@@ -55,6 +55,58 @@ jobs:
       - run: node apps/lab-cli/dist/bin.js run scenarios/security/malformed-input.json --seed pr-security
       - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1
 
+  funded-wallet-matrix:
+    name: Funded external wallet matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build lab CLI
+        run: pnpm exec turbo run build --filter=@cashu-fault-lab/lab-cli
+      - name: Start funded wallet stack
+        env:
+          CFL_CASHU_TS_TOKEN: lab-only-cashu-ts-token
+          CFL_CDK_TOKEN: lab-only-cdk-token
+          CFL_REFERENCE_RECEIVER_TOKEN: lab-only-receiver-token
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: lab-only-fault-token
+          CFL_REFERENCE_RECEIVER_CLAIM_KEY: ERERERERERERERERERERERERERERERERERERERERERE
+        run: docker compose -f infra/compose/wallet-adapters.compose.yml up --build -d --wait
+      - name: Funded external delivery-v1 matrix
+        env:
+          CFL_CASHU_TS_TOKEN: lab-only-cashu-ts-token
+          CFL_CDK_TOKEN: lab-only-cdk-token
+          CFL_REFERENCE_RECEIVER_TOKEN: lab-only-receiver-token
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: lab-only-fault-token
+          CFL_HTTP_FAULT_GATEWAY_URL: http://127.0.0.1:4300
+        run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1 --adapters spec/examples/adapters.local.json --min-passes 2
+      - name: External receiver restart after settlement
+        env:
+          CFL_CASHU_TS_TOKEN: lab-only-cashu-ts-token
+          CFL_CDK_TOKEN: lab-only-cdk-token
+          CFL_REFERENCE_RECEIVER_TOKEN: lab-only-receiver-token
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: lab-only-fault-token
+          CFL_REFERENCE_RECEIVER_CLAIM_KEY: ERERERERERERERERERERERERERERERERERERERERERE
+        run: node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/external-receiver-restart-after-settlement.json --seed ci-external-receiver-restart --sender cdk --receiver cashu-ts --adapters spec/examples/adapters.local.json
+      - name: Stop funded wallet stack
+        if: always()
+        env:
+          CFL_CASHU_TS_TOKEN: lab-only-cashu-ts-token
+          CFL_CDK_TOKEN: lab-only-cdk-token
+          CFL_REFERENCE_RECEIVER_TOKEN: lab-only-receiver-token
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: lab-only-fault-token
+          CFL_REFERENCE_RECEIVER_CLAIM_KEY: ERERERERERERERERERERERERERERERERERERERERERE
+        run: docker compose -f infra/compose/wallet-adapters.compose.yml down -v
+
   real-mint:
     name: Real mint — ${{ matrix.mint.name }}
     runs-on: ubuntu-latest

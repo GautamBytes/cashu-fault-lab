@@ -1,0 +1,10 @@
+{
+  "name": "external-receiver-restart-after-settlement",
+  "description": "An external receiver adapter settles a delivery, restarts, then accepts the same delivery again without creating a second merchant credit.",
+  "commands": [
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "restart", "component": "receiver" },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

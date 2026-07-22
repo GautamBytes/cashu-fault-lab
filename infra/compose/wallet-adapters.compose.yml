@@ -108,7 +108,7 @@ services:
       retries: 20
     networks: [cashu-fault-lab-mints]
     volumes:
-      - cashu-fault-lab-cashu-ts-postgres:/var/lib/postgresql/data
+      - cashu-fault-lab-cashu-ts-postgres:/var/lib/postgresql
 
   nostr-fault-relay:
     build:

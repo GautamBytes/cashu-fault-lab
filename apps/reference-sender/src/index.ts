@@ -14,6 +14,13 @@ export {
   type SenderState,
   type SenderStateOperations,
 } from './state.js';
+export {
+  PostgresSenderState,
+  createPostgresSenderState,
+  migratePostgresSenderState,
+  type CreatePostgresSenderStateOptions,
+  type PostgresSenderStateOptions,
+} from './postgres-state.js';
 export type { PaymentTransport, TransportResult, TransportTarget } from './ports/transport.js';
 export type { ReservedProofSet, ReservePayment, SenderWallet } from './ports/wallet.js';
 export {

@@ -68,6 +68,20 @@ describe('PackagedLabRuntime', () => {
     expect(await evidence('seed-a')).toEqual(await evidence('seed-a'));
   });
 
+  it('allows a compose-only fault gateway token without enabling HTTP fault injection', async () => {
+    const runtime = new PackagedLabRuntime({
+      env: { CFL_HTTP_FAULT_GATEWAY_TOKEN: 'compose-only-fault-token' },
+    });
+
+    await expect(runtime.matrix('delivery-v1', 'compose-token')).resolves.toContainEqual(
+      expect.objectContaining({
+        sender: 'reference-ts',
+        receiver: 'reference-ts',
+        status: 'passed',
+      }),
+    );
+  });
+
   it('executes discovered external sender and receiver adapters', async () => {
     const requestId = 'AAECAwQFBgcICQoLDA0ODw';
     const deliveryId = 'EBESExQVFhcYGRobHB0eHw';
@@ -196,6 +210,133 @@ describe('PackagedLabRuntime', () => {
     );
     expect(scenarioResult.status).toBe('passed');
     expect(scenarioResult.artifact.capabilities).toMatchObject({ evidenceTier: 'T1' });
+  });
+
+  it('maps external restart commands to the selected adapter services', async () => {
+    const requestId = 'AAECAwQFBgcICQoLDA0ODw';
+    let activeDeliveryId = 'EBESExQVFhcYGRobHB0eHw';
+    const receipt = () =>
+      ({
+        profile: 'cashu-delivery-v1',
+        request_id: requestId,
+        delivery_id: activeDeliveryId,
+        payload_hash: 'a'.repeat(64),
+        status: 'settled',
+        status_version: 2,
+        mint: 'https://mint.example',
+        unit: 'sat',
+        amount: 8,
+        detail_code: 'settled',
+      }) as const;
+    const manifest: AdapterManifest = {
+      schemaVersion: 1,
+      adapters: [
+        { id: 'wallet-sender', url: 'http://127.0.0.1:4101', tokenEnv: 'SENDER_TOKEN' },
+        { id: 'wallet-receiver', url: 'http://127.0.0.1:4102', tokenEnv: 'RECEIVER_TOKEN' },
+      ],
+    };
+    const restarted: string[] = [];
+    const services = {
+      up: async () => {},
+      down: async () => {},
+      restart: async (serviceId: string) => void restarted.push(serviceId),
+    };
+    const fakeFetch: typeof fetch = async (input, init) => {
+      const url = new URL(typeof input === 'string' ? input : input.toString());
+      const sender = url.port === '4101';
+      const body = (() => {
+        if (url.pathname === '/v1/capabilities') {
+          return {
+            implementation: sender ? 'wallet-sender' : 'wallet-receiver',
+            version: '1.0.0',
+            nuts: [3, 7, 18],
+            transports: ['http'],
+            evidenceTier: 'T1',
+            encodings: ['creqA'],
+            profiles: [
+              {
+                name: 'delivery-v1',
+                roles: [sender ? 'sender' : 'receiver'],
+                status: 'supported',
+              },
+            ],
+          };
+        }
+        if (url.pathname === '/v1/reset') return { ok: true };
+        if (url.pathname === '/v1/requests') {
+          return {
+            id: requestId,
+            raw: 'creqAexample',
+            amount: 8,
+            unit: 'sat',
+            singleUse: true,
+            expiresAt: 1_784_400_300,
+            transports: [{ type: 'post', target: 'http://127.0.0.1:4102/pay' }],
+          };
+        }
+        if (url.pathname === '/v1/send') {
+          const input = JSON.parse(String(init?.body)) as { readonly deliveryId?: string };
+          activeDeliveryId = input.deliveryId ?? activeDeliveryId;
+          return receipt();
+        }
+        if (url.pathname.startsWith('/v1/deliveries/')) return receipt();
+        if (url.pathname === '/v1/ledger') {
+          return [
+            {
+              requestId,
+              deliveryId: activeDeliveryId,
+              amount: 8,
+              unit: 'sat',
+              creditCount: 1,
+              createdAt: 1_784_399_401,
+            },
+          ];
+        }
+        if (url.pathname === '/v1/proofs') {
+          return [
+            {
+              deliveryId: activeDeliveryId,
+              proofSetHash: 'b'.repeat(64),
+              inputYs: [`02${'01'.repeat(32)}`],
+              state: 'spent',
+            },
+          ];
+        }
+        throw new Error(`Unexpected adapter request: ${url.pathname} ${String(init?.method)}`);
+      })();
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    const runtime = new PackagedLabRuntime({
+      services,
+      env: { SENDER_TOKEN: 'sender-secret', RECEIVER_TOKEN: 'receiver-secret' },
+      fetch: fakeFetch,
+    });
+
+    const result = await runtime.run(
+      {
+        name: 'external-restart-plumbing',
+        commands: [
+          { type: 'send', sender: 'logical-sender', requestId: 'logical-request' },
+          { type: 'restart', component: 'receiver' },
+          { type: 'restart', component: 'sender' },
+          { type: 'send', sender: 'logical-sender', requestId: 'logical-request' },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-restart-seed',
+      {
+        sender: 'wallet-sender',
+        receiver: 'wallet-receiver',
+        adapterManifest: manifest,
+      },
+    );
+
+    if (result.status === 'failed') throw new Error(result.error.message);
+    expect(result.status).toBe('passed');
+    expect(restarted).toEqual(['wallet-receiver', 'wallet-sender']);
   });
 
   it('fails closed for adapters without a runnable delivery-v1 profile', async () => {

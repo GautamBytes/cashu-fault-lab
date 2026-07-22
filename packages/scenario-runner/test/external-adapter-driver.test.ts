@@ -256,4 +256,34 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(1);
     expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(1);
   });
+
+  it('reports one redemption transition across repeated send commands for the same delivery', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new Faults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(
+      {
+        name: 'external-repeat-send',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-repeat',
+    );
+
+    expect(result.status).toBe('passed');
+    const observations = result.artifact.history.filter((event) => event.phase === 'observation');
+    expect(observations.filter((event) => event.event === 'delivery_attempted')).toHaveLength(2);
+    expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(1);
+    expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(2);
+  });
 });

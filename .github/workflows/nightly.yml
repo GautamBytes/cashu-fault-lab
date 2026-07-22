@@ -61,6 +61,31 @@ jobs:
       - name: Full matrix
         run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1
 
+  cashu-ts-e2es:
+    name: cashu-ts PostgreSQL + Nostr E2Es
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: cashu-ts PostgreSQL receiver E2E
+        env:
+          CFL_POSTGRES_E2E: '1'
+        run: pnpm --filter @cashu-fault-lab/adapter-cashu-ts exec vitest run test/postgres-receiver-store.test.ts
+      - name: cashu-ts Nostr relay E2E
+        env:
+          CFL_NOSTR_RELAY_E2E: '1'
+        run: pnpm --filter @cashu-fault-lab/adapter-cashu-ts exec vitest run test/nostr-relay-e2e.test.ts
+
   real-mint:
     name: Real mint — ${{ matrix.mint.name }}
     runs-on: ubuntu-latest
