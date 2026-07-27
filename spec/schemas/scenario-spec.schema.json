@@ -21,6 +21,8 @@
       "oneOf": [
         { "$ref": "#/$defs/configure_fault" },
         { "$ref": "#/$defs/send" },
+        { "$ref": "#/$defs/start_send" },
+        { "$ref": "#/$defs/await_send" },
         { "$ref": "#/$defs/restart" },
         { "$ref": "#/$defs/advance_time" },
         { "$ref": "#/$defs/clear_faults" },
@@ -57,6 +59,26 @@
         "type": { "const": "send" },
         "sender": { "type": "string", "minLength": 1, "maxLength": 64 },
         "requestId": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "start_send": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operationId", "sender", "requestId"],
+      "properties": {
+        "type": { "const": "start_send" },
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sender": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "requestId": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "await_send": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operationId"],
+      "properties": {
+        "type": { "const": "await_send" },
+        "operationId": { "type": "string", "minLength": 1, "maxLength": 64 }
       }
     },
     "restart": {

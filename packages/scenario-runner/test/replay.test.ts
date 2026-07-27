@@ -106,4 +106,62 @@ describe('scenario replay', () => {
     );
     expect(minimized).toEqual([{ type: 'send', sender: 'sender-a', requestId: 'request-1' }]);
   });
+
+  it('does not evaluate shrink candidates that break start/await dependencies', async () => {
+    const commands: ScenarioSpec['commands'] = [
+      { type: 'start_send', operationId: 'op-1', sender: 'sender-a', requestId: 'request-1' },
+      { type: 'advance_time', milliseconds: 250 },
+      { type: 'await_send', operationId: 'op-1' },
+    ];
+    let invalidCandidateEvaluated = false;
+
+    const minimized = await minimizeFailingCommands(
+      commands,
+      async (candidate) => {
+        const hasStart = candidate.some(
+          (command) => command.type === 'start_send' && command.operationId === 'op-1',
+        );
+        const hasAwait = candidate.some(
+          (command) => command.type === 'await_send' && command.operationId === 'op-1',
+        );
+        if (hasStart !== hasAwait) invalidCandidateEvaluated = true;
+        return hasStart && hasAwait;
+      },
+      20,
+    );
+
+    expect(invalidCandidateEvaluated).toBe(false);
+    expect(minimized).toEqual([
+      { type: 'start_send', operationId: 'op-1', sender: 'sender-a', requestId: 'request-1' },
+      { type: 'await_send', operationId: 'op-1' },
+    ]);
+  });
+
+  it('minimizes virtual-time command values while preserving the failure', async () => {
+    const commands: ScenarioSpec['commands'] = [
+      { type: 'start_send', operationId: 'op-1', sender: 'sender-a', requestId: 'request-1' },
+      { type: 'advance_time', milliseconds: 1_000 },
+      { type: 'await_send', operationId: 'op-1' },
+    ];
+
+    const minimized = await minimizeFailingCommands(
+      commands,
+      async (candidate) => {
+        const hasStart = candidate.some((command) => command.type === 'start_send');
+        const hasAwait = candidate.some((command) => command.type === 'await_send');
+        const advanced = candidate.reduce(
+          (sum, command) => (command.type === 'advance_time' ? sum + command.milliseconds : sum),
+          0,
+        );
+        return hasStart && hasAwait && advanced >= 250;
+      },
+      40,
+    );
+
+    expect(minimized).toEqual([
+      { type: 'start_send', operationId: 'op-1', sender: 'sender-a', requestId: 'request-1' },
+      { type: 'advance_time', milliseconds: 250 },
+      { type: 'await_send', operationId: 'op-1' },
+    ]);
+  });
 });

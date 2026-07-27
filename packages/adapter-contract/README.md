@@ -15,6 +15,8 @@ Defines the language-neutral 7-route HTTP contract that every wallet adapter mus
 - **Validation** — `validateAdapterRequest`, `validateAdapterResponse` (AJV-based)
 - **Schemas** — Loaded from `spec/schemas/` at import time
 
+Adapter capabilities may declare optional `durability` as `process-local` or `persistent`. Persistent senders are expected to recover sender delivery state across process replacement for the same deterministic run.
+
 ## Routes defined
 
 | Method | Route                | Purpose                         |

@@ -47,3 +47,15 @@ export {
   type PayloadFingerprintInput,
   type ProofSetFingerprintInput,
 } from './fingerprint.js';
+export {
+  CrashBoundaryHit,
+  createOneShotCrashCheckpoint,
+  noopCrashCheckpoint,
+  receiverCrashBoundaries,
+  senderCrashBoundaries,
+  type CrashBoundary,
+  type CrashCheckpoint,
+  type OneShotCrashCheckpointOptions,
+  type ReceiverCrashBoundary,
+  type SenderCrashBoundary,
+} from './crash-boundary.js';

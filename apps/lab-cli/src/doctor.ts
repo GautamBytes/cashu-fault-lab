@@ -35,6 +35,13 @@ const REQUIRED_ENV_VARS = [
 
 const OPTIONAL_ENV_VARS = ['CFL_HTTP_FAULT_GATEWAY_URL'] as const;
 
+const SENDER_DURABILITY_ENV_VARS = [
+  'CFL_CASHU_TS_SENDER_DATABASE_URL',
+  'CFL_CASHU_TS_SENDER_RUN_ID',
+  'CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION',
+  'CFL_CASHU_TS_SENDER_STATE_KEYS',
+] as const;
+
 const DEFAULT_PORTS: readonly { readonly label: string; readonly port: number }[] = [
   { label: 'nutshell-mint', port: 3338 },
   { label: 'cashu-ts-adapter', port: 4101 },
@@ -79,6 +86,72 @@ function envCheck(env: Readonly<Record<string, string | undefined>>): DoctorChec
     }
   }
   return checks;
+}
+
+function senderDurabilityEnvCheck(env: Readonly<Record<string, string | undefined>>): DoctorCheck {
+  const configured = SENDER_DURABILITY_ENV_VARS.some((name) => {
+    const value = env[name];
+    return value !== undefined && value.trim().length > 0;
+  });
+  if (!configured) {
+    return {
+      name: 'cashu-ts sender durability',
+      status: 'warn',
+      detail: 'not configured (process-local sender state)',
+    };
+  }
+  for (const name of SENDER_DURABILITY_ENV_VARS) {
+    const value = env[name];
+    if (value === undefined || value.trim().length === 0) {
+      return { name: 'cashu-ts sender durability', status: 'fail', detail: `missing ${name}` };
+    }
+  }
+  try {
+    const url = new URL(env.CFL_CASHU_TS_SENDER_DATABASE_URL!);
+    if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
+      throw new Error('database URL must use postgres:// or postgresql://');
+    }
+    if (url.hash.length > 0) throw new Error('database URL cannot contain a fragment');
+    const runId = env.CFL_CASHU_TS_SENDER_RUN_ID!;
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u.test(runId)) {
+      throw new Error('run ID is invalid');
+    }
+    const active = Number(env.CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION);
+    if (!Number.isSafeInteger(active) || active < 1) {
+      throw new Error('active key version must be a positive integer');
+    }
+    const versions = new Set<number>();
+    for (const entry of env.CFL_CASHU_TS_SENDER_STATE_KEYS!.split(',')) {
+      const [versionText, keyText, extra] = entry.trim().split(':');
+      if (
+        extra !== undefined ||
+        versionText === undefined ||
+        keyText === undefined ||
+        !/^[1-9]\d*$/u.test(versionText) ||
+        !/^[A-Za-z0-9_-]+={0,2}$/u.test(keyText)
+      ) {
+        throw new Error('state key map is malformed');
+      }
+      const version = Number(versionText);
+      if (versions.has(version)) throw new Error('state key version is duplicate');
+      versions.add(version);
+      if (Buffer.from(keyText, 'base64url').byteLength !== 32) {
+        throw new Error('state keys must decode to 32 bytes');
+      }
+    }
+    if (!versions.has(active)) throw new Error('active key version is not readable');
+    return {
+      name: 'cashu-ts sender durability',
+      status: 'ok',
+      detail: `PostgreSQL sender state configured for run ${runId}`,
+    };
+  } catch (error) {
+    return {
+      name: 'cashu-ts sender durability',
+      status: 'fail',
+      detail: error instanceof Error ? truncate(error.message) : 'invalid configuration',
+    };
+  }
 }
 
 const EXEC_TIMEOUT_MS = 5_000;
@@ -262,6 +335,7 @@ export async function runDoctor(
   const checks: DoctorCheck[] = [];
   const environmentChecks = envCheck(probes.env);
   checks.push(...environmentChecks);
+  checks.push(senderDurabilityEnvCheck(probes.env));
   const node = await nodeVersionCheck(probes);
   checks.push(node);
   const pnpm = await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm');

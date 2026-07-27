@@ -29,6 +29,13 @@ export type ScenarioCommand =
       readonly rule: FaultRule;
     }
   | { readonly type: 'send'; readonly sender: string; readonly requestId: string }
+  | {
+      readonly type: 'start_send';
+      readonly operationId: string;
+      readonly sender: string;
+      readonly requestId: string;
+    }
+  | { readonly type: 'await_send'; readonly operationId: string }
   | { readonly type: 'restart'; readonly component: string }
   | { readonly type: 'advance_time'; readonly milliseconds: number }
   | { readonly type: 'clear_faults'; readonly target?: string }
@@ -53,6 +60,14 @@ export interface ScenarioDriver {
   restart(component: string): Promise<void>;
   clearFaults(target?: string): Promise<void>;
   advanceTime?(milliseconds: number): Promise<void>;
+}
+
+interface PendingSendOperation {
+  readonly result: Promise<
+    | { readonly ok: true; readonly value: DriverSendResult }
+    | { readonly ok: false; readonly error: unknown }
+  >;
+  awaited: boolean;
 }
 
 export interface FailureArtifact {
@@ -179,6 +194,7 @@ export class ScenarioRunner {
 
     const scheduler = new VirtualScheduler();
     const history = new HistoryRecorder(() => scheduler.now);
+    const operations = new Map<string, PendingSendOperation>();
     let oracle = emptyOracleModel();
     let capabilities: Readonly<Record<string, unknown>> = {};
     let failure: ScenarioError | undefined;
@@ -200,7 +216,14 @@ export class ScenarioRunner {
           data: command,
         });
         try {
-          const completion = await this.#execute(command, scheduler, history, commandIndex, oracle);
+          const completion = await this.#execute(
+            command,
+            scheduler,
+            history,
+            commandIndex,
+            oracle,
+            operations,
+          );
           oracle = completion.oracle;
           assertSafety(oracle);
           history.record({
@@ -221,6 +244,18 @@ export class ScenarioRunner {
             outcome: 'failed',
             data: failure,
           });
+          break;
+        }
+      }
+    }
+
+    if (!failure) {
+      for (const [operationId, operation] of operations) {
+        if (!operation.awaited) {
+          failure = {
+            name: 'Error',
+            message: `Scenario operation ${operationId} was not awaited`,
+          };
           break;
         }
       }
@@ -307,6 +342,7 @@ export class ScenarioRunner {
     history: HistoryRecorder,
     commandIndex: number,
     oracle: OracleModel,
+    operations: Map<string, PendingSendOperation>,
   ): Promise<{ readonly oracle: OracleModel; readonly value: unknown }> {
     switch (command.type) {
       case 'configure_fault':
@@ -314,18 +350,33 @@ export class ScenarioRunner {
         return { oracle, value: { configured: true } };
       case 'send': {
         const result = await this.#driver.send(command.sender, command.requestId);
-        let nextOracle = oracle;
-        for (const observation of result.observations) {
-          history.record({
-            phase: 'observation',
-            actor: 'oracle',
-            event: observation.type,
-            commandIndex,
-            data: observation,
-          });
-          nextOracle = applyObservation(nextOracle, observation);
+        return this.#completeSend(result, history, commandIndex, oracle);
+      }
+      case 'start_send': {
+        this.#assertOperationId(command.operationId);
+        if (operations.has(command.operationId)) {
+          throw new Error(`Scenario operation ${command.operationId} has already started`);
         }
-        return { oracle: nextOracle, value: result.value };
+        const result = this.#driver.send(command.sender, command.requestId).then(
+          (value) => ({ ok: true as const, value }),
+          (error: unknown) => ({ ok: false as const, error }),
+        );
+        operations.set(command.operationId, { result, awaited: false });
+        return { oracle, value: { started: command.operationId } };
+      }
+      case 'await_send': {
+        this.#assertOperationId(command.operationId);
+        const operation = operations.get(command.operationId);
+        if (operation === undefined) {
+          throw new Error(`Scenario operation ${command.operationId} was not started`);
+        }
+        if (operation.awaited) {
+          throw new Error(`Scenario operation ${command.operationId} was already awaited`);
+        }
+        operation.awaited = true;
+        const result = await operation.result;
+        if (!result.ok) throw result.error;
+        return this.#completeSend(result.value, history, commandIndex, oracle);
       }
       case 'restart':
         await this.#driver.restart(command.component);
@@ -344,9 +395,35 @@ export class ScenarioRunner {
   }
 
   #actor(command: ScenarioCommand): string {
-    if (command.type === 'send') return command.sender;
+    if (command.type === 'send' || command.type === 'start_send') return command.sender;
     if (command.type === 'restart') return command.component;
     if (command.type === 'configure_fault') return command.target;
     return 'runner';
+  }
+
+  #completeSend(
+    result: DriverSendResult,
+    history: HistoryRecorder,
+    commandIndex: number,
+    oracle: OracleModel,
+  ): { readonly oracle: OracleModel; readonly value: unknown } {
+    let nextOracle = oracle;
+    for (const observation of result.observations) {
+      history.record({
+        phase: 'observation',
+        actor: 'oracle',
+        event: observation.type,
+        commandIndex,
+        data: observation,
+      });
+      nextOracle = applyObservation(nextOracle, observation);
+    }
+    return { oracle: nextOracle, value: result.value };
+  }
+
+  #assertOperationId(value: string): void {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new Error('Scenario operation ID is required');
+    }
   }
 }

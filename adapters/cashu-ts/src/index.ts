@@ -50,3 +50,13 @@ export {
   type CreatePostgresReceiverStoreOptions,
   type ResettablePostgresReceiverStoreOptions,
 } from './postgres-receiver-store.js';
+export {
+  PostgresCashuTsSenderStore,
+  createPostgresCashuTsSenderStore,
+  migratePostgresCashuTsSenderStore,
+  parseCashuTsSenderStateKeys,
+  type CashuTsSenderStateKeyRing,
+  type CreatePostgresCashuTsSenderStoreOptions,
+  type ParseCashuTsSenderStateKeysInput,
+  type PostgresCashuTsSenderStoreOptions,
+} from './postgres-sender-store.js';

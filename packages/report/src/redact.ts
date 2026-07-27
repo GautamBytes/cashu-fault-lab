@@ -125,6 +125,15 @@ function commandView(
       };
     case 'send':
       return { type: command.type, sender: command.sender, requestId: command.requestId };
+    case 'start_send':
+      return {
+        type: command.type,
+        operationId: command.operationId,
+        sender: command.sender,
+        requestId: command.requestId,
+      };
+    case 'await_send':
+      return { type: command.type, operationId: command.operationId };
     case 'restart':
       return { type: command.type, component: command.component };
     case 'advance_time':

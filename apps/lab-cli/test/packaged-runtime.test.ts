@@ -151,6 +151,20 @@ describe('PackagedLabRuntime', () => {
     );
   });
 
+  it('allows a compose-only fault gateway token without enabling HTTP fault injection', async () => {
+    const runtime = new PackagedLabRuntime({
+      env: { CFL_HTTP_FAULT_GATEWAY_TOKEN: 'compose-only-fault-token' },
+    });
+
+    await expect(runtime.matrix('delivery-v1', 'compose-token')).resolves.toContainEqual(
+      expect.objectContaining({
+        sender: 'reference-ts',
+        receiver: 'reference-ts',
+        status: 'passed',
+      }),
+    );
+  });
+
   it('executes discovered external sender and receiver adapters', async () => {
     const requestId = 'AAECAwQFBgcICQoLDA0ODw';
     const deliveryId = 'EBESExQVFhcYGRobHB0eHw';

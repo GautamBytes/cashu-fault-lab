@@ -53,6 +53,13 @@ export class VirtualScheduler {
     };
   }
 
+  sleep(milliseconds: number): Promise<void> {
+    assertTime(milliseconds, 'Sleep duration');
+    return new Promise((resolve) => {
+      this.schedule(milliseconds, resolve);
+    });
+  }
+
   advanceBy(milliseconds: number, executionLimit = 10_000): void {
     assertTime(milliseconds, 'Advance time');
     this.#advanceTo(this.#now + milliseconds, executionLimit);

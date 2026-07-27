@@ -16,6 +16,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   FundedCashuTsOperations,
+  MemoryCashuTsDeliveryStore,
   type CashuTsTransportPort,
   type CashuTsWalletPort,
   type ReservedCashuTsProofs,
@@ -77,6 +78,24 @@ class Wallet implements CashuTsWalletPort {
   }
 }
 
+class UninitializedWallet implements CashuTsWalletPort {
+  async reset(): Promise<void> {
+    throw new Error('replacement process must not reset the wallet');
+  }
+
+  async reserve(): Promise<ReservedCashuTsProofs> {
+    throw new Error('replacement process must not reserve new proofs');
+  }
+
+  async markSettled(): Promise<void> {
+    throw new Error('replacement process must not need process-local reservation state');
+  }
+
+  async evidence(): Promise<ProofEvidenceView> {
+    throw new Error('replacement process must use durable proof evidence');
+  }
+}
+
 class Transport implements CashuTsTransportPort {
   readonly bodies: Uint8Array[] = [];
   readonly targets: string[] = [];
@@ -118,13 +137,15 @@ class Transport implements CashuTsTransportPort {
 function fixture(supportedTransports?: readonly AdapterTransport[]) {
   const wallet = new Wallet();
   const transport = new Transport();
+  const store = new MemoryCashuTsDeliveryStore();
   const operations = new FundedCashuTsOperations({
     wallet,
     transport,
+    store,
     now: () => now,
     ...(supportedTransports === undefined ? {} : { supportedTransports }),
   });
-  return { wallet, transport, operations };
+  return { wallet, transport, store, operations };
 }
 
 describe('FundedCashuTsOperations', () => {
@@ -197,6 +218,73 @@ describe('FundedCashuTsOperations', () => {
     expect(wallet.reserveCalls).toBe(1);
     expect(transport.bodies).toHaveLength(2);
     expect(Buffer.compare(transport.bodies[0]!, transport.bodies[1]!)).toBe(0);
+  });
+
+  it('replays persisted bytes after process replacement without reset or new reservation', async () => {
+    const { transport, store, operations } = fixture();
+    transport.loseFirstResponse = true;
+    await operations.reset('process-replacement');
+
+    await expect(operations.send({ request: encodedRequest(), deliveryId })).rejects.toThrow(
+      'Cashu payment delivery failed',
+    );
+
+    const replacementTransport = new Transport();
+    const replacement = new FundedCashuTsOperations({
+      wallet: new UninitializedWallet(),
+      transport: replacementTransport,
+      store,
+      now: () => now,
+    });
+
+    await expect(
+      replacement.send({ request: encodedRequest(), deliveryId }),
+    ).resolves.toMatchObject({
+      status: 'settled',
+    });
+    await expect(replacement.proofs()).resolves.toEqual([
+      expect.objectContaining({ deliveryId, state: 'spent' }),
+    ]);
+    expect(replacementTransport.bodies).toHaveLength(1);
+    expect(Buffer.compare(transport.bodies[0]!, replacementTransport.bodies[0]!)).toBe(0);
+  });
+
+  it('can crash after payload persistence and replay without a new reservation', async () => {
+    const { wallet, transport, store } = fixture();
+    const hits: string[] = [];
+    const operations = new FundedCashuTsOperations({
+      wallet,
+      transport,
+      store,
+      now: () => now,
+      crashCheckpoint: {
+        async hit(boundary: string, selectedDeliveryId: string): Promise<void> {
+          hits.push(`${boundary}:${selectedDeliveryId}`);
+          if (boundary === 'sender_after_payload_persistence_before_network_send') {
+            throw new Error('simulated crash');
+          }
+        },
+      },
+    });
+    await operations.reset('checkpoint-crash');
+
+    await expect(operations.send({ request: encodedRequest(), deliveryId })).rejects.toThrow(
+      'simulated crash',
+    );
+    await expect(operations.send({ request: encodedRequest(), deliveryId })).resolves.toMatchObject(
+      {
+        status: 'settled',
+      },
+    );
+
+    expect(hits).toEqual([
+      `sender_before_proof_reservation:${deliveryId}`,
+      `sender_after_reservation_before_payload_persistence:${deliveryId}`,
+      `sender_after_payload_persistence_before_network_send:${deliveryId}`,
+      `sender_after_send_before_response:${deliveryId}`,
+    ]);
+    expect(wallet.reserveCalls).toBe(1);
+    expect(transport.bodies).toHaveLength(1);
   });
 
   it('falls back to the next Nostr transport without changing reservation or bytes', async () => {
