@@ -5,6 +5,7 @@ import {
   type AdapterRoleCapability,
   type AdapterTransport,
 } from '@cashu-fault-lab/adapter-contract';
+import { renderHtml, renderJson } from '@cashu-fault-lab/report';
 import {
   CompatibilityMatrix,
   DirectExternalFaultController,
@@ -31,23 +32,40 @@ import {
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import { execFile } from 'node:child_process';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import type { LabRuntime, LabSelection } from './index.js';
+import type {
+  LabDemoOptions,
+  LabDemoResult,
+  LabRuntime,
+  LabSelection,
+  LabUpResult,
+} from './index.js';
 import { ExternalAdapterRegistry } from './adapter-registry.js';
 import type { AdapterManifest } from './adapter-manifest.js';
+import { ensureReferenceRuntimeEnv } from './runtime-env.js';
 
 const execFileAsync = promisify(execFile);
 
-type CommandExecutor = (file: string, args: readonly string[]) => Promise<void>;
+type CommandExecutor = (
+  file: string,
+  args: readonly string[],
+) => Promise<{ readonly stdout: string; readonly stderr: string } | void>;
 
 const executeCommand: CommandExecutor = async (file, args) => {
-  await execFileAsync(file, [...args]);
+  return await execFileAsync(file, [...args]);
 };
 
+export interface ServiceControlOptions {
+  readonly envFile?: string;
+}
+
 export interface LabServiceController {
-  up(profile: string): Promise<void>;
-  down(profile: string): Promise<void>;
+  up(profile: string, options?: ServiceControlOptions): Promise<void>;
+  down(profile: string, options?: ServiceControlOptions): Promise<void>;
+  isUp?(profile: string, options?: ServiceControlOptions): Promise<boolean>;
   restart?(service: string): Promise<void>;
 }
 
@@ -56,6 +74,7 @@ export interface PackagedLabRuntimeOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly fetch?: typeof fetch;
   readonly externalFaults?: ExternalFaultController;
+  readonly runtimeRoot?: string;
 }
 
 export class DockerComposeServiceController implements LabServiceController {
@@ -65,32 +84,60 @@ export class DockerComposeServiceController implements LabServiceController {
     this.#execute = execute;
   }
 
-  async up(profile: string): Promise<void> {
+  #composeArgs(profile: string, options: ServiceControlOptions = {}): readonly string[] {
     if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(profile)) {
       throw new Error('Compose profile is invalid');
+    }
+    if (profile === 'lab') {
+      if (options.envFile === undefined) {
+        throw new Error('Reference lab compose requires an env file');
+      }
+      const composeFile = fileURLToPath(
+        new URL('../../../infra/compose/wallet-adapters.compose.yml', import.meta.url),
+      );
+      return ['compose', '--env-file', options.envFile, '-f', composeFile];
     }
     const composeFile = fileURLToPath(
       new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
     );
-    await this.#execute('docker', ['compose', '-f', composeFile, '--profile', profile, 'up', '-d']);
+    return ['compose', '-f', composeFile, '--profile', profile];
   }
 
-  async down(profile: string): Promise<void> {
-    if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(profile)) {
-      throw new Error('Compose profile is invalid');
-    }
-    const composeFile = fileURLToPath(
-      new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
-    );
+  async up(profile: string, options: ServiceControlOptions = {}): Promise<void> {
+    const base = this.#composeArgs(profile, options);
     await this.#execute('docker', [
-      'compose',
-      '-f',
-      composeFile,
-      '--profile',
-      profile,
-      'down',
-      '-v',
+      ...base,
+      'up',
+      ...(profile === 'lab' ? ['--build'] : []),
+      '-d',
+      ...(profile === 'lab' ? ['--wait'] : []),
     ]);
+  }
+
+  async down(profile: string, options: ServiceControlOptions = {}): Promise<void> {
+    const base = this.#composeArgs(profile, options);
+    await this.#execute('docker', [...base, 'down', '-v']);
+  }
+
+  async isUp(profile: string, options: ServiceControlOptions = {}): Promise<boolean> {
+    const base = this.#composeArgs(profile, options);
+    try {
+      const result = await this.#execute('docker', [
+        ...base,
+        'ps',
+        '--services',
+        '--filter',
+        'status=running',
+      ]);
+      const stdout = result?.stdout ?? '';
+      return profile === 'lab'
+        ? ['cashu-ts', 'cdk', 'reference-receiver'].every((service) =>
+            stdout.split(/\s+/u).includes(service),
+          )
+        : stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
   }
 
   async restart(service: string): Promise<void> {
@@ -169,6 +216,15 @@ const packagedComponentVersions: Readonly<Record<string, string>> = {
   'scenario-runner': '0.0.0',
 };
 
+const referenceServices = [
+  { name: 'Nutshell mint', url: 'http://127.0.0.1:3338' },
+  { name: 'cashu-ts adapter', url: 'http://127.0.0.1:4101' },
+  { name: 'CDK adapter', url: 'http://127.0.0.1:4102' },
+  { name: 'Reference receiver', url: 'http://127.0.0.1:4200' },
+  { name: 'HTTP fault gateway', url: 'http://127.0.0.1:4300' },
+  { name: 'Nostr fault relay', url: 'ws://127.0.0.1:4400' },
+] as const;
+
 function withPackagedMetadata(result: ScenarioRunResult): ScenarioRunResult {
   const artifact = {
     ...result.artifact,
@@ -197,6 +253,25 @@ function failedScenario(scenario: ScenarioSpec, seed: string, message: string): 
       ),
     },
   });
+}
+
+function secretValues(env: Readonly<Record<string, string>>): readonly string[] {
+  return Object.entries(env)
+    .filter(([name, value]) => /TOKEN|KEY|PASSWORD/u.test(name) && value.length >= 8)
+    .flatMap(([name, value]) =>
+      name.endsWith('STATE_KEYS')
+        ? value.split(',').map((entry) => entry.split(':').at(-1) ?? '')
+        : [value],
+    )
+    .filter((value) => value.length >= 8);
+}
+
+function assertNoSecretLeak(contents: string, env: Readonly<Record<string, string>>): void {
+  for (const secret of secretValues(env)) {
+    if (contents.includes(secret)) {
+      throw new Error('Generated runtime secret leaked into demo output');
+    }
+  }
 }
 
 function externalScenarioTransports(scenarioName: string): readonly AdapterTransport[] {
@@ -259,14 +334,16 @@ class RestartableExternalFaultController implements ExternalFaultController {
 
 export class PackagedLabRuntime implements LabRuntime {
   readonly #services: LabServiceController;
-  readonly #env: Readonly<Record<string, string | undefined>>;
+  #env: Readonly<Record<string, string | undefined>>;
   readonly #fetch: typeof fetch | undefined;
-  readonly #externalFaults: ExternalFaultController;
+  readonly #externalFaults: ExternalFaultController | undefined;
+  readonly #runtimeRoot: string;
 
   constructor(options: PackagedLabRuntimeOptions = {}) {
     this.#services = options.services ?? new DockerComposeServiceController();
     this.#env = options.env ?? process.env;
     this.#fetch = options.fetch;
+    this.#runtimeRoot = options.runtimeRoot ?? process.cwd();
     const faultUrl = this.#env.CFL_HTTP_FAULT_GATEWAY_URL;
     const faultToken = this.#env.CFL_HTTP_FAULT_GATEWAY_TOKEN;
     if (faultUrl !== undefined && faultToken === undefined) {
@@ -274,23 +351,116 @@ export class PackagedLabRuntime implements LabRuntime {
         'CFL_HTTP_FAULT_GATEWAY_TOKEN is required when CFL_HTTP_FAULT_GATEWAY_URL is set',
       );
     }
-    this.#externalFaults =
-      options.externalFaults ??
-      (faultUrl !== undefined && faultToken !== undefined
-        ? new HttpExternalFaultController({
-            baseUrl: faultUrl,
-            token: faultToken,
-            ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
-          })
-        : new DirectExternalFaultController());
+    this.#externalFaults = options.externalFaults;
   }
 
-  async up(profile: string): Promise<void> {
-    await this.#services.up(profile);
+  #faultController(): ExternalFaultController {
+    if (this.#externalFaults !== undefined) return this.#externalFaults;
+    const faultUrl = this.#env.CFL_HTTP_FAULT_GATEWAY_URL;
+    const faultToken = this.#env.CFL_HTTP_FAULT_GATEWAY_TOKEN;
+    return faultUrl !== undefined && faultToken !== undefined
+      ? new HttpExternalFaultController({
+          baseUrl: faultUrl,
+          token: faultToken,
+          ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
+        })
+      : new DirectExternalFaultController();
+  }
+
+  async #referenceEnv() {
+    const runtimeEnv = await ensureReferenceRuntimeEnv(this.#runtimeRoot);
+    this.#env = { ...this.#env, ...runtimeEnv.env };
+    return runtimeEnv;
+  }
+
+  async up(profile: string): Promise<LabUpResult> {
+    if (profile !== 'lab') {
+      await this.#services.up(profile);
+      return { profile, envFile: '', services: [] };
+    }
+    const runtimeEnv = await this.#referenceEnv();
+    const alreadyRunning = this.#services.isUp
+      ? await this.#services.isUp(profile, { envFile: runtimeEnv.path })
+      : false;
+    if (!alreadyRunning) await this.#services.up(profile, { envFile: runtimeEnv.path });
+    return { profile, envFile: runtimeEnv.path, services: referenceServices };
   }
 
   async down(profile: string): Promise<void> {
-    await this.#services.down(profile);
+    if (profile !== 'lab') {
+      await this.#services.down(profile);
+      return;
+    }
+    const runtimeEnv = await this.#referenceEnv();
+    await this.#services.down(profile, { envFile: runtimeEnv.path });
+  }
+
+  async demo(options: LabDemoOptions = {}): Promise<LabDemoResult> {
+    const seed = options.seed ?? 'cashu-fault-lab-demo';
+    const runtimeEnv = await this.#referenceEnv();
+    const alreadyRunning = this.#services.isUp
+      ? await this.#services.isUp('lab', { envFile: runtimeEnv.path })
+      : false;
+    let startedStack = false;
+    if (!alreadyRunning) {
+      await this.#services.up('lab', { envFile: runtimeEnv.path });
+      startedStack = true;
+    }
+
+    const reportsDirectory = join(
+      this.#runtimeRoot,
+      '.cashu-fault-lab',
+      'runtime',
+      'reference',
+      'reports',
+    );
+    const artifactPath = options.artifactPath ?? join(reportsDirectory, 'demo.json');
+    const reportPath = options.reportPath ?? join(reportsDirectory, 'demo.html');
+    let result!: ScenarioRunResult;
+    try {
+      const scenarioPath = fileURLToPath(
+        new URL('../../../scenarios/retry/response-lost.json', import.meta.url),
+      );
+      const spec = JSON.parse(await readFile(scenarioPath, 'utf8')) as ScenarioSpec;
+      const manifest: AdapterManifest = {
+        schemaVersion: 1,
+        adapters: [
+          { id: 'cashu-ts', url: 'http://127.0.0.1:4101', tokenEnv: 'CFL_CASHU_TS_TOKEN' },
+          {
+            id: 'reference-receiver',
+            url: 'http://127.0.0.1:4200',
+            tokenEnv: 'CFL_REFERENCE_RECEIVER_TOKEN',
+          },
+        ],
+      };
+      result = await this.run(spec, seed, {
+        sender: 'cashu-ts',
+        receiver: 'reference-receiver',
+        adapterManifest: manifest,
+      });
+      const evidence = renderJson({ result });
+      const report = renderHtml({ result });
+      assertNoSecretLeak(evidence, runtimeEnv.env);
+      assertNoSecretLeak(report, runtimeEnv.env);
+      await mkdir(dirname(artifactPath), { recursive: true, mode: 0o700 });
+      await mkdir(dirname(reportPath), { recursive: true, mode: 0o700 });
+      await writeFile(artifactPath, evidence, { encoding: 'utf8', mode: 0o600 });
+      await writeFile(reportPath, report, { encoding: 'utf8', mode: 0o600 });
+    } finally {
+      if (startedStack && options.keep !== true) {
+        await this.#services.down('lab', { envFile: runtimeEnv.path });
+      }
+    }
+
+    return {
+      status: result.status,
+      result,
+      artifactPath,
+      reportPath,
+      startedStack,
+      keptStack: alreadyRunning || options.keep === true,
+      generatedEnv: runtimeEnv.env,
+    };
   }
 
   async run(
@@ -329,7 +499,7 @@ export class PackagedLabRuntime implements LabRuntime {
       const driver = new ExternalAdapterScenarioDriver({
         sender,
         receiver,
-        faults: new RestartableExternalFaultController(this.#externalFaults, this.#services, {
+        faults: new RestartableExternalFaultController(this.#faultController(), this.#services, {
           sender: selection.sender,
           receiver: selection.receiver,
         }),

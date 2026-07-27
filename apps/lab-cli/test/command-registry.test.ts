@@ -11,6 +11,8 @@ describe('CLI command registry', () => {
     expect([...byName.keys()]).toEqual([
       'up',
       'down',
+      'adapter init',
+      'demo',
       'run',
       'replay',
       'shrink',
@@ -43,6 +45,35 @@ describe('CLI command registry', () => {
       ]),
     });
 
+    expect(byName.get('adapter init')).toMatchObject({
+      usage: 'cashu-fault-lab adapter init --language <language> --name <name>',
+      options: expect.arrayContaining([
+        expect.objectContaining({
+          flags: '--language <language>',
+          choices: ['typescript', 'rust', 'python'],
+        }),
+        expect.objectContaining({
+          flags: '--role <role>',
+          choices: ['sender', 'receiver', 'both'],
+        }),
+        expect.objectContaining({ flags: '--output <path>' }),
+      ]),
+      artifacts: expect.arrayContaining(['<output>/adapter-manifest.json', '<output>/Dockerfile']),
+    });
+
+    expect(byName.get('demo')).toMatchObject({
+      summary: 'Run the response-loss recovery demo against the reference stack',
+      options: expect.arrayContaining([
+        expect.objectContaining({ flags: '--keep' }),
+        expect.objectContaining({ flags: '--artifact <path>' }),
+        expect.objectContaining({ flags: '--report <path>' }),
+      ]),
+      artifacts: expect.arrayContaining([
+        '.cashu-fault-lab/runtime/reference/reports/demo.json',
+        '.cashu-fault-lab/runtime/reference/reports/demo.html',
+      ]),
+    });
+
     expect(byName.get('doctor')).toMatchObject({
       env: expect.arrayContaining(['CFL_REAL_MINT_URL']),
       modes: expect.arrayContaining(['text', 'json']),
@@ -55,6 +86,8 @@ describe('CLI command registry', () => {
 
     expect(docs).toContain('## `cashu-fault-lab run <scenario>`');
     expect(docs).toContain('Artifacts: `artifacts/latest.json`');
+    expect(docs).toContain('## `cashu-fault-lab adapter init --language <language> --name <name>`');
+    expect(docs).toContain('## `cashu-fault-lab demo`');
     expect(docs).toContain('## `cashu-fault-lab doctor`');
     expect(docs).toContain('Environment: `CFL_REAL_MINT_URL`');
   });

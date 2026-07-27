@@ -21,6 +21,7 @@ import { Command, CommanderError, Option } from 'commander';
 import { chmod, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
+import { registerAdapterCommands } from './commands/adapter.js';
 import { registerLifecycleCommands } from './commands/lifecycle.js';
 import {
   LabDiagnosticError,
@@ -38,9 +39,38 @@ export interface LabSelection {
   readonly adapterManifest?: AdapterManifest;
 }
 
+export interface LabServiceInfo {
+  readonly name: string;
+  readonly url: string;
+}
+
+export interface LabUpResult {
+  readonly profile: string;
+  readonly envFile: string;
+  readonly services: readonly LabServiceInfo[];
+}
+
+export interface LabDemoOptions {
+  readonly keep?: boolean;
+  readonly seed?: string;
+  readonly artifactPath?: string;
+  readonly reportPath?: string;
+}
+
+export interface LabDemoResult {
+  readonly status: ScenarioRunResult['status'];
+  readonly result: ScenarioRunResult;
+  readonly artifactPath: string;
+  readonly reportPath: string;
+  readonly startedStack: boolean;
+  readonly keptStack: boolean;
+  readonly generatedEnv: Readonly<Record<string, string>>;
+}
+
 export interface LabRuntime {
-  up(profile: string): Promise<void>;
+  up(profile: string): Promise<LabUpResult | void>;
   down(profile: string): Promise<void>;
+  demo(options: LabDemoOptions): Promise<LabDemoResult>;
   run(scenario: ScenarioSpec, seed: string, selection?: LabSelection): Promise<ScenarioRunResult>;
   replay(artifact: FailureArtifact): Promise<ScenarioRunResult>;
   shrink(artifact: FailureArtifact, runLimit?: number): Promise<ScenarioRunResult>;
@@ -144,6 +174,21 @@ function safeError(error: unknown): string {
     .replace(/\b(?:cashu[AB]|nsec1)[A-Za-z0-9_-]+/gi, '[REDACTED]');
 }
 
+function redactGeneratedSecrets(value: string, env: Readonly<Record<string, string>> = {}): string {
+  let redacted = value;
+  for (const [name, secret] of Object.entries(env)) {
+    if (!/TOKEN|KEY|PASSWORD/u.test(name) || secret.length < 8) continue;
+    redacted = redacted.split(secret).join('[REDACTED]');
+    if (name.endsWith('STATE_KEYS')) {
+      for (const entry of secret.split(',')) {
+        const key = entry.split(':').at(-1) ?? '';
+        if (key.length >= 8) redacted = redacted.split(key).join('[REDACTED]');
+      }
+    }
+  }
+  return redacted;
+}
+
 async function maybeWrite(io: CliIo, path: string | undefined, value: string): Promise<void> {
   if (path) await io.writeText(path, value);
 }
@@ -220,6 +265,37 @@ export async function runCli(
       exitCode = code;
     },
   });
+  registerAdapterCommands(program, { io });
+
+  program
+    .command('demo')
+    .description('Run the response-loss recovery demo against the reference stack')
+    .option('--keep', 'leave a stack started by this command running', false)
+    .option('--seed <seed>', 'deterministic demo seed', 'cashu-fault-lab-demo')
+    .option('--artifact <path>', 'write JSON evidence to this path')
+    .option('--report <path>', 'write HTML report to this path')
+    .action(
+      async (options: { keep: boolean; seed: string; artifact?: string; report?: string }) => {
+        const result = await runtime.demo({
+          keep: options.keep,
+          seed: options.seed,
+          ...(options.artifact === undefined ? {} : { artifactPath: options.artifact }),
+          ...(options.report === undefined ? {} : { reportPath: options.report }),
+        });
+        io.stdout(
+          `demo ${result.status} seed=${result.result.artifact.seed} report=${result.reportPath}\n`,
+        );
+        if (result.result.status === 'failed') {
+          io.stderr(
+            `${redactGeneratedSecrets(
+              `${result.result.error.name}: ${result.result.error.message}`,
+              result.generatedEnv,
+            )}\n`,
+          );
+          exitCode = 1;
+        }
+      },
+    );
 
   program
     .command('run')

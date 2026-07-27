@@ -47,7 +47,7 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
       examples: ['cashu-fault-lab up --profile lab'],
       env: [],
       modes: ['text'],
-      artifacts: [],
+      artifacts: ['.cashu-fault-lab/runtime/reference/secrets.env'],
       exitCodes: COMMON_EXIT_CODES,
     },
     {
@@ -62,6 +62,63 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
       env: [],
       modes: ['text'],
       artifacts: [],
+      exitCodes: COMMON_EXIT_CODES,
+    },
+    {
+      name: 'adapter init',
+      usage: 'cashu-fault-lab adapter init --language <language> --name <name>',
+      summary: 'Scaffold a standalone wallet adapter project',
+      arguments: [],
+      options: [
+        {
+          flags: '--language <language>',
+          description: 'Template language.',
+          choices: ['typescript', 'rust', 'python'],
+        },
+        { flags: '--name <name>', description: 'Adapter project name.' },
+        {
+          flags: '--role <role>',
+          description: 'Adapter role.',
+          defaultValue: 'both',
+          choices: ['sender', 'receiver', 'both'],
+        },
+        { flags: '--output <path>', description: 'Output directory.', defaultValue: '<name>' },
+      ],
+      examples: [
+        'cashu-fault-lab adapter init --language rust --name my-wallet',
+        'cashu-fault-lab adapter init --language python --name receive-only --role receiver --output ./receive-only',
+      ],
+      env: [],
+      modes: ['text'],
+      artifacts: [
+        '<output>/adapter-manifest.json',
+        '<output>/Dockerfile',
+        '<output>/.github/workflows/ci.yml',
+      ],
+      exitCodes: COMMON_EXIT_CODES,
+    },
+    {
+      name: 'demo',
+      usage: 'cashu-fault-lab demo',
+      summary: 'Run the response-loss recovery demo against the reference stack',
+      arguments: [],
+      options: [
+        { flags: '--keep', description: 'Leave a stack started by this command running.' },
+        {
+          flags: '--seed <seed>',
+          description: 'Deterministic demo seed.',
+          defaultValue: 'cashu-fault-lab-demo',
+        },
+        { flags: '--artifact <path>', description: 'Write JSON evidence to this path.' },
+        { flags: '--report <path>', description: 'Write HTML report to this path.' },
+      ],
+      examples: ['cashu-fault-lab demo', 'cashu-fault-lab demo --keep'],
+      env: [],
+      modes: ['text'],
+      artifacts: [
+        '.cashu-fault-lab/runtime/reference/reports/demo.json',
+        '.cashu-fault-lab/runtime/reference/reports/demo.html',
+      ],
       exitCodes: COMMON_EXIT_CODES,
     },
     {

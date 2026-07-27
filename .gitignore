@@ -6,6 +6,7 @@ adapters/cdk/target/
 artifacts/
 graphify-out/
 .worktrees/
+.cashu-fault-lab/
 .env
 .env.*
 !.env.example

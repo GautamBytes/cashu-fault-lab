@@ -1,20 +1,26 @@
 # Cashu Fault Lab adapter template
 
-Copy this directory as a starting point for a new wallet adapter. Replace each `TODO` in
-`src/server.ts` with your wallet's real implementation.
+Prefer the CLI scaffolder for new standalone wallet adapters. This in-repository
+template remains as a TypeScript reference implementation for contributors
+working inside the monorepo.
 
 ## Quick start
 
 ```bash
-# Copy the template
-cp -r adapters/template adapters/my-wallet
+# Generate a standalone adapter project
+pnpm lab adapter init --language typescript --name my-wallet --output ./my-wallet
 
-# Fill in the route stubs
-# 1. Edit package.json — change name and bin
-# 2. Edit src/server.ts — replace implementation/version in capabilities
-# 3. Implement the route handlers one at a time
+# Then implement the generated route stubs one at a time.
+cd my-wallet
+pnpm install
+pnpm test
+pnpm build
+docker build .
+```
 
-# Install and verify
+For monorepo template maintenance:
+
+```bash
 pnpm install
 pnpm --filter @cashu-fault-lab/adapter-template test
 pnpm --filter @cashu-fault-lab/adapter-template typecheck

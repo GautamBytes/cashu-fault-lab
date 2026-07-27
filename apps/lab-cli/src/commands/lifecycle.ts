@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import type { DoctorProbes } from '../doctor.js';
 import { defaultDoctorProbes, runDoctor } from '../doctor.js';
+import { LabDiagnosticError } from '../diagnostics.js';
 import type { CliIo, CliOutcome, LabRuntime } from '../index.js';
 
 export interface LifecycleCommandContext {
@@ -21,8 +22,39 @@ export function registerLifecycleCommands(
     .description('Start the local lab services')
     .option('--profile <profile>', 'compose profile', 'lab')
     .action(async (options: { profile: string }) => {
-      await runtime.up(options.profile);
+      const startup = await runDoctor(doctorProbes ?? defaultDoctorProbes(), {
+        environment: false,
+        senderDurability: false,
+        cargo: false,
+        testTiers: false,
+        portConflict: 'warn',
+      });
+      const blocker = startup.checks.find((check) => check.status === 'fail');
+      if (blocker !== undefined) {
+        if (blocker.diagnostic !== undefined) throw new LabDiagnosticError(blocker.diagnostic);
+        throw new Error(`${blocker.name} is not ready: ${blocker.detail}`);
+      }
+      const portConflict = startup.checks.find(
+        (check) => check.status === 'warn' && check.diagnostic?.code === 'PORT_IN_USE',
+      );
+      let result: Awaited<ReturnType<LabRuntime['up']>>;
+      try {
+        result = await runtime.up(options.profile);
+      } catch (error) {
+        if (portConflict?.diagnostic !== undefined) {
+          throw new LabDiagnosticError(portConflict.diagnostic);
+        }
+        throw error;
+      }
       io.stdout(`started ${options.profile}\n`);
+      if (result !== undefined && result.envFile.length > 0) {
+        io.stdout(`env: ${result.envFile}\n`);
+      }
+      if (result !== undefined && result.services.length > 0) {
+        for (const service of result.services) {
+          io.stdout(`  ${service.name}: ${service.url}\n`);
+        }
+      }
     });
 
   program

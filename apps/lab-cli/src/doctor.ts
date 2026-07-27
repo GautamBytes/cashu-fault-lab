@@ -328,13 +328,14 @@ function testTierChecks(
 async function portChecks(
   probe: DoctorProbes,
   ports: readonly { readonly label: string; readonly port: number }[],
+  conflictStatus: 'warn' | 'fail',
 ): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
   for (const { label, port } of ports) {
     const free = await probe.isPortFree('127.0.0.1', port);
     checks.push({
       name: `port ${port} (${label})`,
-      status: free ? 'ok' : 'warn',
+      status: free ? 'ok' : conflictStatus,
       detail: free ? 'free' : 'in use (stop any running lab stack before funded lanes)',
       ...(free ? {} : { diagnostic: createDiagnostic('PORT_IN_USE') }),
     });
@@ -344,12 +345,21 @@ async function portChecks(
 
 export async function runDoctor(
   probes: DoctorProbes,
-  options: { readonly ports?: readonly { readonly label: string; readonly port: number }[] } = {},
+  options: {
+    readonly ports?: readonly { readonly label: string; readonly port: number }[];
+    readonly environment?: boolean;
+    readonly senderDurability?: boolean;
+    readonly cargo?: boolean;
+    readonly testTiers?: boolean;
+    readonly portConflict?: 'warn' | 'fail';
+  } = {},
 ): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
-  const environmentChecks = envCheck(probes.env);
+  const environmentChecks = options.environment === false ? [] : envCheck(probes.env);
   checks.push(...environmentChecks);
-  checks.push(senderDurabilityEnvCheck(probes.env));
+  if (options.senderDurability !== false) {
+    checks.push(senderDurabilityEnvCheck(probes.env));
+  }
   const node = await nodeVersionCheck(probes);
   checks.push(node);
   const pnpm = await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm');
@@ -369,16 +379,23 @@ export async function runDoctor(
   const dockerDaemon = await dockerDaemonCheck(probes);
   checks.push(dockerDaemon);
   checks.push(testcontainersCheck(dockerDaemon));
-  const cargo = await versionCheck(
-    probes,
-    'cargo',
-    ['--version'],
-    /^cargo \d+\.\d+/,
-    'cargo (CDK adapter)',
+  const cargo =
+    options.cargo === false
+      ? { name: 'cargo (CDK adapter)', status: 'ok' as const, detail: 'skipped for startup' }
+      : await versionCheck(
+          probes,
+          'cargo',
+          ['--version'],
+          /^cargo \d+\.\d+/,
+          'cargo (CDK adapter)',
+        );
+  if (options.cargo !== false) checks.push(cargo);
+  if (options.testTiers !== false) {
+    checks.push(...testTierChecks(node, pnpm, cargo, dockerDaemon, environmentChecks));
+  }
+  checks.push(
+    ...(await portChecks(probes, options.ports ?? DEFAULT_PORTS, options.portConflict ?? 'warn')),
   );
-  checks.push(cargo);
-  checks.push(...testTierChecks(node, pnpm, cargo, dockerDaemon, environmentChecks));
-  checks.push(...(await portChecks(probes, options.ports ?? DEFAULT_PORTS)));
   return { checks, ok: checks.every((check) => check.status !== 'fail') };
 }
 

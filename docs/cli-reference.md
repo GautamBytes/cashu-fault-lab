@@ -14,7 +14,7 @@ Options:
 
 Modes: `text`
 Environment: None
-Artifacts: None
+Artifacts: `.cashu-fault-lab/runtime/reference/secrets.env`
 
 Exit Codes:
 
@@ -47,6 +47,58 @@ Exit Codes:
 Examples:
 
 - `cashu-fault-lab down --profile lab`
+
+## `cashu-fault-lab adapter init --language <language> --name <name>`
+
+Scaffold a standalone wallet adapter project
+
+Options:
+
+- `--language <language>`: Template language. Choices: `typescript`, `rust`, `python`.
+- `--name <name>`: Adapter project name.
+- `--role <role>`: Adapter role. Default: `both`. Choices: `sender`, `receiver`, `both`.
+- `--output <path>`: Output directory. Default: `<name>`.
+
+Modes: `text`
+Environment: None
+Artifacts: `<output>/adapter-manifest.json`, `<output>/Dockerfile`, `<output>/.github/workflows/ci.yml`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab adapter init --language rust --name my-wallet`
+- `cashu-fault-lab adapter init --language python --name receive-only --role receiver --output ./receive-only`
+
+## `cashu-fault-lab demo`
+
+Run the response-loss recovery demo against the reference stack
+
+Options:
+
+- `--keep`: Leave a stack started by this command running.
+- `--seed <seed>`: Deterministic demo seed. Default: `cashu-fault-lab-demo`.
+- `--artifact <path>`: Write JSON evidence to this path.
+- `--report <path>`: Write HTML report to this path.
+
+Modes: `text`
+Environment: None
+Artifacts: `.cashu-fault-lab/runtime/reference/reports/demo.json`, `.cashu-fault-lab/runtime/reference/reports/demo.html`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab demo`
+- `cashu-fault-lab demo --keep`
 
 ## `cashu-fault-lab run <scenario>`
 

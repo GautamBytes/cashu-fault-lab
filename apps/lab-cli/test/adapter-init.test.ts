@@ -1,0 +1,150 @@
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { scaffoldAdapterProject, supportedAdapterLanguages } from '../src/adapter-init.js';
+
+const requiredRoutes = [
+  '/v1/capabilities',
+  '/v1/reset',
+  '/v1/requests',
+  '/v1/send',
+  '/v1/deliveries/',
+  '/v1/ledger',
+  '/v1/proofs',
+] as const;
+
+async function filesUnder(root: string): Promise<string[]> {
+  const entries: string[] = [];
+  const walk = async (directory: string, prefix = '') => {
+    for (const item of await readdir(directory, { withFileTypes: true })) {
+      const relative = prefix.length === 0 ? item.name : `${prefix}/${item.name}`;
+      const absolute = join(directory, item.name);
+      if (item.isDirectory()) await walk(absolute, relative);
+      else entries.push(relative);
+    }
+  };
+  await walk(root);
+  return entries.sort();
+}
+
+async function generatedText(root: string): Promise<string> {
+  const files = await filesUnder(root);
+  const chunks = await Promise.all(
+    files
+      .filter((file) => !file.endsWith('.lock'))
+      .map(async (file) => await readFile(join(root, file), 'utf8')),
+  );
+  return chunks.join('\n');
+}
+
+describe('adapter project scaffolding', () => {
+  it.each(supportedAdapterLanguages)(
+    'generates a standalone %s adapter project',
+    async (language) => {
+      const directory = await mkdtemp(join(tmpdir(), `cashu-${language}-adapter-`));
+      const output = join(directory, 'my-wallet');
+
+      try {
+        const result = await scaffoldAdapterProject({
+          language,
+          name: 'my-wallet',
+          role: 'both',
+          output,
+        });
+
+        expect(result.output).toBe(output);
+        const files = await filesUnder(output);
+        expect(files).toEqual(
+          expect.arrayContaining([
+            '.dockerignore',
+            '.env.example',
+            '.github/workflows/ci.yml',
+            'Dockerfile',
+            'README.md',
+            'adapter-manifest.json',
+          ]),
+        );
+        const text = await generatedText(output);
+        expect(text).not.toMatch(/@cashu-fault-lab|workspace:\*/u);
+        expect(text).toContain('/healthz');
+        expect(text).toContain('Bearer');
+        expect(text).toContain('not_applicable');
+        expect(text).toContain('501');
+        for (const route of requiredRoutes) {
+          expect(text).toContain(route);
+        }
+
+        const manifest = JSON.parse(
+          await readFile(join(output, 'adapter-manifest.json'), 'utf8'),
+        ) as {
+          readonly schemaVersion: number;
+          readonly adapters: readonly [{ readonly id: string; readonly tokenEnv: string }];
+        };
+        expect(manifest).toEqual({
+          schemaVersion: 1,
+          adapters: [
+            {
+              id: 'my-wallet',
+              url: 'http://127.0.0.1:4100',
+              tokenEnv: 'MY_WALLET_TOKEN',
+            },
+          ],
+        });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('writes role-specific default capabilities', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-rust-receiver-'));
+    const output = join(directory, 'receive-only');
+
+    try {
+      await scaffoldAdapterProject({
+        language: 'rust',
+        name: 'receive-only',
+        role: 'receiver',
+        output,
+      });
+
+      const text = await generatedText(output);
+      expect(text).toContain('receiver');
+      expect(text).not.toContain('"sender"');
+      expect(text).toContain('"tier":"T0"');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses invalid names and non-empty destinations without leaving a temp project', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-invalid-adapter-'));
+    const output = join(directory, 'occupied');
+    await writeFile(output, 'not a directory');
+
+    try {
+      await expect(
+        scaffoldAdapterProject({
+          language: 'typescript',
+          name: '../bad',
+          role: 'both',
+          output: join(directory, 'bad'),
+        }),
+      ).rejects.toThrow(/project name/i);
+      await expect(
+        scaffoldAdapterProject({
+          language: 'typescript',
+          name: 'occupied',
+          role: 'both',
+          output,
+        }),
+      ).rejects.toThrow(/non-empty|exists/i);
+
+      expect((await readdir(directory)).filter((entry) => entry.includes('.tmp-'))).toEqual([]);
+      await expect(stat(output)).resolves.toBeDefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});

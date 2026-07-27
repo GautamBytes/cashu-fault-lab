@@ -100,4 +100,4 @@ CFL_REAL_MINT_URL=http://127.0.0.1:8085 \
 
 For an external adapter process, register only its loopback origin and token environment-variable name in a schema-version 1 manifest. `spec/examples/adapters.local.json` is the runnable example; bearer values stay in the environment and out of manifests and reports.
 
-Copy `adapters/template/README.md` into a new adapter directory, then replace each checklist item with executable contract tests.
+Start new standalone adapters with `pnpm lab adapter init --language typescript --name my-wallet --output ./my-wallet`, choosing `typescript`, `rust`, or `python` as needed. The generated project includes contract route tests, a manifest, Dockerfile, health check, and CI example without importing private monorepo packages.
