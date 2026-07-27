@@ -153,13 +153,13 @@ describe('runDoctor', () => {
     const report = await runDoctor({
       env: healthyEnv,
       execFile: healthyExec(),
-      isPortFree: async (_host, port) => port !== 4300,
+      isPortFree: async (_host, port) => port !== 4400,
     });
 
     expect(report.ok).toBe(true);
-    const gateway = report.checks.find((c) => c.name === 'port 4300 (http-fault-gateway)');
-    expect(gateway?.status).toBe('warn');
-    expect(gateway?.detail).toMatch(/in use/);
+    const relay = report.checks.find((c) => c.name === 'port 4400 (nostr-fault-relay)');
+    expect(relay?.status).toBe('warn');
+    expect(relay?.detail).toMatch(/in use/);
   });
 
   it('honors a custom port list', async () => {

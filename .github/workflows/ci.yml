@@ -110,6 +110,32 @@ jobs:
           pytest
           docker build .
 
+  reference-lab-demo:
+    name: Reference lab startup and demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build lab CLI
+        run: pnpm exec turbo run build --filter=@cashu-fault-lab/lab-cli
+      - name: Start reference lab with generated runtime secrets
+        run: node apps/lab-cli/dist/bin.js up
+      - name: Run packaged response-loss demo
+        run: node apps/lab-cli/dist/bin.js demo --seed ci-demo
+      - name: Stop reference lab
+        if: always()
+        run: node apps/lab-cli/dist/bin.js down
+
   funded-wallet-matrix:
     name: Funded external wallet matrix
     runs-on: ubuntu-latest

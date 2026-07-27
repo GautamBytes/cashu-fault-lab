@@ -66,6 +66,7 @@ export interface LabServiceController {
   up(profile: string, options?: ServiceControlOptions): Promise<void>;
   down(profile: string, options?: ServiceControlOptions): Promise<void>;
   isUp?(profile: string, options?: ServiceControlOptions): Promise<boolean>;
+  hasAny?(profile: string, options?: ServiceControlOptions): Promise<boolean>;
   restart?(service: string): Promise<void>;
 }
 
@@ -135,6 +136,16 @@ export class DockerComposeServiceController implements LabServiceController {
             stdout.split(/\s+/u).includes(service),
           )
         : stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  async hasAny(profile: string, options: ServiceControlOptions = {}): Promise<boolean> {
+    const base = this.#composeArgs(profile, options);
+    try {
+      const result = await this.#execute('docker', [...base, 'ps', '--services']);
+      return (result?.stdout ?? '').trim().length > 0;
     } catch {
       return false;
     }
@@ -274,6 +285,30 @@ function assertNoSecretLeak(contents: string, env: Readonly<Record<string, strin
   }
 }
 
+function redactSecrets(value: string, env: Readonly<Record<string, string>>): string {
+  let redacted = value
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [REDACTED]')
+    .replace(/\b(?:cashu[AB]|nsec1)[A-Za-z0-9_-]+/gi, '[REDACTED]');
+  for (const secret of secretValues(env)) {
+    redacted = redacted.split(secret).join('[REDACTED]');
+  }
+  return redacted;
+}
+
+function redactResultSecrets(
+  result: ScenarioRunResult,
+  env: Readonly<Record<string, string>>,
+): ScenarioRunResult {
+  if (result.status !== 'failed') return result;
+  return {
+    ...result,
+    error: {
+      name: redactSecrets(result.error.name, env),
+      message: redactSecrets(result.error.message, env),
+    },
+  };
+}
+
 function externalScenarioTransports(scenarioName: string): readonly AdapterTransport[] {
   if (scenarioName === 'nostr-response-lost') return ['nostr'];
   if (
@@ -401,6 +436,9 @@ export class PackagedLabRuntime implements LabRuntime {
     const alreadyRunning = this.#services.isUp
       ? await this.#services.isUp('lab', { envFile: runtimeEnv.path })
       : false;
+    const hadPreexistingStack = this.#services.hasAny
+      ? await this.#services.hasAny('lab', { envFile: runtimeEnv.path })
+      : alreadyRunning;
     let startedStack = false;
     if (!alreadyRunning) {
       await this.#services.up('lab', { envFile: runtimeEnv.path });
@@ -433,11 +471,14 @@ export class PackagedLabRuntime implements LabRuntime {
           },
         ],
       };
-      result = await this.run(spec, seed, {
-        sender: 'cashu-ts',
-        receiver: 'reference-receiver',
-        adapterManifest: manifest,
-      });
+      result = redactResultSecrets(
+        await this.run(spec, seed, {
+          sender: 'cashu-ts',
+          receiver: 'reference-receiver',
+          adapterManifest: manifest,
+        }),
+        runtimeEnv.env,
+      );
       const evidence = renderJson({ result });
       const report = renderHtml({ result });
       assertNoSecretLeak(evidence, runtimeEnv.env);
@@ -447,7 +488,7 @@ export class PackagedLabRuntime implements LabRuntime {
       await writeFile(artifactPath, evidence, { encoding: 'utf8', mode: 0o600 });
       await writeFile(reportPath, report, { encoding: 'utf8', mode: 0o600 });
     } finally {
-      if (startedStack && options.keep !== true) {
+      if (startedStack && !hadPreexistingStack && options.keep !== true) {
         await this.#services.down('lab', { envFile: runtimeEnv.path });
       }
     }
@@ -455,11 +496,11 @@ export class PackagedLabRuntime implements LabRuntime {
     return {
       status: result.status,
       result,
+      envFile: runtimeEnv.path,
       artifactPath,
       reportPath,
       startedStack,
-      keptStack: alreadyRunning || options.keep === true,
-      generatedEnv: runtimeEnv.env,
+      keptStack: alreadyRunning || hadPreexistingStack || options.keep === true,
     };
   }
 

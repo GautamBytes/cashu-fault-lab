@@ -50,6 +50,7 @@ const DEFAULT_PORTS: readonly { readonly label: string; readonly port: number }[
   { label: 'cdk-adapter', port: 4102 },
   { label: 'reference-receiver', port: 4200 },
   { label: 'http-fault-gateway', port: 4300 },
+  { label: 'nostr-fault-relay', port: 4400 },
 ];
 
 const ENV_TOKEN_PATTERN = /^[A-Za-z0-9._-]{4,512}$/;

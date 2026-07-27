@@ -60,11 +60,11 @@ export interface LabDemoOptions {
 export interface LabDemoResult {
   readonly status: ScenarioRunResult['status'];
   readonly result: ScenarioRunResult;
+  readonly envFile: string;
   readonly artifactPath: string;
   readonly reportPath: string;
   readonly startedStack: boolean;
   readonly keptStack: boolean;
-  readonly generatedEnv: Readonly<Record<string, string>>;
 }
 
 export interface LabRuntime {
@@ -174,21 +174,6 @@ function safeError(error: unknown): string {
     .replace(/\b(?:cashu[AB]|nsec1)[A-Za-z0-9_-]+/gi, '[REDACTED]');
 }
 
-function redactGeneratedSecrets(value: string, env: Readonly<Record<string, string>> = {}): string {
-  let redacted = value;
-  for (const [name, secret] of Object.entries(env)) {
-    if (!/TOKEN|KEY|PASSWORD/u.test(name) || secret.length < 8) continue;
-    redacted = redacted.split(secret).join('[REDACTED]');
-    if (name.endsWith('STATE_KEYS')) {
-      for (const entry of secret.split(',')) {
-        const key = entry.split(':').at(-1) ?? '';
-        if (key.length >= 8) redacted = redacted.split(key).join('[REDACTED]');
-      }
-    }
-  }
-  return redacted;
-}
-
 async function maybeWrite(io: CliIo, path: string | undefined, value: string): Promise<void> {
   if (path) await io.writeText(path, value);
 }
@@ -286,12 +271,7 @@ export async function runCli(
           `demo ${result.status} seed=${result.result.artifact.seed} report=${result.reportPath}\n`,
         );
         if (result.result.status === 'failed') {
-          io.stderr(
-            `${redactGeneratedSecrets(
-              `${result.result.error.name}: ${result.result.error.message}`,
-              result.generatedEnv,
-            )}\n`,
-          );
+          io.stderr(`${result.result.error.name}: ${result.result.error.message}\n`);
           exitCode = 1;
         }
       },

@@ -94,12 +94,12 @@ class FakeRuntime implements LabRuntime {
       this.demoResult ?? {
         status: 'passed',
         result: passed,
+        envFile: '.cashu-fault-lab/runtime/reference/secrets.env',
         artifactPath:
           options.artifactPath ?? '.cashu-fault-lab/runtime/reference/reports/demo.json',
         reportPath: options.reportPath ?? '.cashu-fault-lab/runtime/reference/reports/demo.html',
         startedStack: true,
         keptStack: options.keep ?? false,
-        generatedEnv: {},
       }
     );
   }
@@ -359,7 +359,7 @@ describe('lab CLI', () => {
     expect(setup.stdout()).toContain('passed');
   });
 
-  it('redacts generated demo secrets from failure messages', async () => {
+  it('prints runtime-redacted demo failure messages', async () => {
     const setup = fixture();
     const runtime = new FakeRuntime();
     runtime.demoResult = {
@@ -367,13 +367,13 @@ describe('lab CLI', () => {
       result: {
         status: 'failed',
         artifact,
-        error: { name: 'Error', message: 'demo failed with demo-super-secret-token' },
+        error: { name: 'Error', message: 'demo failed with [REDACTED]' },
       },
+      envFile: '.cashu-fault-lab/runtime/reference/secrets.env',
       artifactPath: 'demo/evidence.json',
       reportPath: 'demo/report.html',
       startedStack: true,
       keptStack: false,
-      generatedEnv: { CFL_CASHU_TS_TOKEN: 'demo-super-secret-token' },
     };
 
     const outcome = await runCli(['node', 'cashu-fault-lab', 'demo'], {
@@ -383,7 +383,6 @@ describe('lab CLI', () => {
 
     expect(outcome.exitCode).toBe(1);
     expect(setup.stderr()).toContain('[REDACTED]');
-    expect(setup.stderr()).not.toContain('demo-super-secret-token');
   });
 
   it('forces private permissions when overwriting an existing artifact', async () => {
