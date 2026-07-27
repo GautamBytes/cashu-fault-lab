@@ -1,8 +1,16 @@
-import type { ScenarioSpec } from '@cashu-fault-lab/scenario-runner';
-import { readFile } from 'node:fs/promises';
+import {
+  currentAdapterContract,
+  developmentIdentity,
+  type AdapterCapabilities,
+} from '@cashu-fault-lab/adapter-contract';
+import type { ScenarioRunResult, ScenarioSpec } from '@cashu-fault-lab/scenario-runner';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
 import { DockerComposeServiceController, PackagedLabRuntime } from '../src/packaged-runtime.js';
+import { REFERENCE_RUNTIME_ENV_PATH } from '../src/runtime-env.js';
 
 async function scenario(path: string): Promise<ScenarioSpec> {
   return JSON.parse(
@@ -34,7 +42,177 @@ function externalCapability(sender: boolean): AdapterCapabilities {
   };
 }
 
+function demoCapability(id: 'cashu-ts' | 'reference-receiver'): AdapterCapabilities {
+  const sender = id === 'cashu-ts';
+  return {
+    schemaVersion: 2,
+    contract: currentAdapterContract(),
+    implementation: developmentIdentity({
+      id,
+      version: '1.0.0',
+      language: sender ? 'typescript' : 'typescript',
+      runtime: 'node-24',
+    }),
+    roles: {
+      ...(sender
+        ? {
+            sender: {
+              transports: ['http'],
+              profiles: ['delivery-v1'],
+              durability: 'persistent',
+              evidence: { tier: 'T1', sources: ['adapter', 'transport', 'durable_state'] },
+            },
+          }
+        : {
+            receiver: {
+              transports: ['http'],
+              profiles: ['delivery-v1'],
+              durability: 'persistent',
+              evidence: { tier: 'T1', sources: ['adapter', 'transport', 'durable_ledger'] },
+            },
+          }),
+    },
+    nuts: [3, 7, 18],
+    encodings: ['creqA'],
+    mints: [{ id: 'local-nutshell', implementation: 'nutshell' }],
+  };
+}
+
+function externalDemoFetch(fetchCalls: string[]): typeof fetch {
+  const requestId = 'AAECAwQFBgcICQoLDA0ODw';
+  let activeDeliveryId = 'EBESExQVFhcYGRobHB0eHw';
+  const receipt = () =>
+    ({
+      profile: 'cashu-delivery-v1',
+      request_id: requestId,
+      delivery_id: activeDeliveryId,
+      payload_hash: 'a'.repeat(64),
+      status: 'settled',
+      status_version: 2,
+      mint: 'http://127.0.0.1:3338',
+      unit: 'sat',
+      amount: 8,
+      detail_code: 'settled',
+    }) as const;
+  return async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input.toString());
+    fetchCalls.push(`${url.port}${url.pathname}`);
+    if (url.port === '4300') {
+      if (url.pathname === '/__faults/v1/evidence') {
+        return new Response(JSON.stringify({ inbound: 2, forwarded: 1 }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    const body = (() => {
+      if (url.pathname === '/v1/capabilities') {
+        return demoCapability(url.port === '4101' ? 'cashu-ts' : 'reference-receiver');
+      }
+      if (url.pathname === '/v1/reset') return { ok: true };
+      if (url.pathname === '/v1/requests') {
+        return {
+          id: requestId,
+          raw: 'creqAexample',
+          amount: 8,
+          unit: 'sat',
+          singleUse: true,
+          expiresAt: 1_784_400_300,
+          transports: [{ type: 'post', target: 'http://127.0.0.1:4300/pay' }],
+        };
+      }
+      if (url.pathname === '/v1/send') {
+        const inputBody = JSON.parse(String(init?.body)) as { readonly deliveryId?: string };
+        activeDeliveryId = inputBody.deliveryId ?? activeDeliveryId;
+        return receipt();
+      }
+      if (url.pathname.startsWith('/v1/deliveries/')) return receipt();
+      if (url.pathname === '/v1/ledger') {
+        return [
+          {
+            requestId,
+            deliveryId: activeDeliveryId,
+            amount: 8,
+            unit: 'sat',
+            creditCount: 1,
+            createdAt: 1_784_399_401,
+          },
+        ];
+      }
+      if (url.pathname === '/v1/proofs') {
+        return [
+          {
+            deliveryId: activeDeliveryId,
+            proofSetHash: 'b'.repeat(64),
+            inputYs: [`02${'01'.repeat(32)}`],
+            state: 'spent',
+          },
+        ];
+      }
+      throw new Error(`Unexpected demo adapter request: ${url.pathname} ${String(init?.method)}`);
+    })();
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+}
+
+function secretValuesFromEnv(contents: string): readonly string[] {
+  return contents
+    .split(/\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'))
+    .map((line) => {
+      const index = line.indexOf('=');
+      return index === -1
+        ? (['', ''] as const)
+        : ([line.slice(0, index), line.slice(index + 1)] as const);
+    })
+    .filter(([name, value]) => /TOKEN|KEY|PASSWORD/u.test(name) && value.length >= 8)
+    .flatMap(([name, value]) =>
+      name.endsWith('STATE_KEYS')
+        ? value.split(',').map((entry) => entry.split(':').at(-1) ?? '')
+        : [value],
+    )
+    .filter((value) => value.length >= 8);
+}
+
+async function seedRuntimeEnv(root: string, contents: string): Promise<void> {
+  const path = join(root, REFERENCE_RUNTIME_ENV_PATH);
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await writeFile(path, contents, { encoding: 'utf8', mode: 0o600 });
+}
+
 describe('PackagedLabRuntime', () => {
+  it('starts the reference lab through the wallet adapter compose stack', async () => {
+    const invocations: Array<{ readonly file: string; readonly args: readonly string[] }> = [];
+    const services = new DockerComposeServiceController(async (file, args) => {
+      invocations.push({ file, args: [...args] });
+      return { stdout: 'cashu-ts\ncdk\nreference-receiver\n', stderr: '' };
+    });
+
+    await services.up('lab', { envFile: '/tmp/cashu-fault-lab.env' });
+
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]?.file).toBe('docker');
+    expect(invocations[0]?.args).toEqual([
+      'compose',
+      '--env-file',
+      '/tmp/cashu-fault-lab.env',
+      '-f',
+      expect.stringMatching(/wallet-adapters\.compose\.yml$/u),
+      'up',
+      '--build',
+      '-d',
+      '--wait',
+    ]);
+  });
+
   it('restarts one adapter service without converging its shared Compose dependencies', async () => {
     const invocations: Array<{ readonly file: string; readonly args: readonly string[] }> = [];
     const services = new DockerComposeServiceController(async (file, args) => {
@@ -55,14 +233,170 @@ describe('PackagedLabRuntime', () => {
   });
 
   it('starts the selected compose profile through the packaged service controller', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-runtime-up-'));
     const profiles: string[] = [];
     const runtime = new PackagedLabRuntime({
       services: { up: async (profile) => void profiles.push(profile), down: async () => {} },
+      runtimeRoot: directory,
     });
 
-    await runtime.up('lab');
+    try {
+      const result = await runtime.up('lab');
 
-    expect(profiles).toEqual(['lab']);
+      expect(profiles).toEqual(['lab']);
+      expect(result.envFile).toMatch(/secrets\.env$/u);
+      expect((await stat(result.envFile)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('runs the response-loss demo, writes redacted evidence, and cleans up started services', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-runtime-demo-'));
+    const ups: string[] = [];
+    const downs: string[] = [];
+    const services = {
+      isUp: async () => false,
+      up: async (profile: string) => void ups.push(profile),
+      down: async (profile: string) => void downs.push(profile),
+      restart: async () => {},
+    };
+    const fetchCalls: string[] = [];
+    const fakeFetch = externalDemoFetch(fetchCalls);
+    const runtime = new PackagedLabRuntime({
+      services,
+      runtimeRoot: directory,
+      fetch: fakeFetch,
+    });
+
+    try {
+      const result = await runtime.demo({ seed: 'demo-seed' });
+
+      expect(result.status).toBe('passed');
+      expect(result.startedStack).toBe(true);
+      expect(result.keptStack).toBe(false);
+      expect(ups).toEqual(['lab']);
+      expect(downs).toEqual(['lab']);
+      expect(fetchCalls).toContain('4101/v1/send');
+      expect(fetchCalls).toContain('4300/__faults/v1/rules');
+      const evidence = await readFile(result.artifactPath, 'utf8');
+      const report = await readFile(result.reportPath, 'utf8');
+      const runtimeEnv = await readFile(result.envFile, 'utf8');
+      expect(JSON.parse(evidence)).toMatchObject({ status: 'passed' });
+      expect(report).toContain('<!doctype html>');
+      for (const secret of secretValuesFromEnv(runtimeEnv)) {
+        expect(evidence).not.toContain(secret);
+        expect(report).not.toContain(secret);
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('redacts generated demo secrets from failed results and report artifacts', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-runtime-demo-redaction-'));
+    const leakedSecret = 'cfl_demo_super_secret_token';
+    await seedRuntimeEnv(directory, `CFL_CASHU_TS_TOKEN=${leakedSecret}\n`);
+    const services = {
+      isUp: async () => true,
+      up: async () => {},
+      down: async () => {},
+      restart: async () => {},
+    };
+    class LeakyDemoRuntime extends PackagedLabRuntime {
+      async run(scenarioSpec: ScenarioSpec, seed: string): Promise<ScenarioRunResult> {
+        return {
+          status: 'failed',
+          error: {
+            name: 'Error',
+            message: `demo failed with Bearer ${leakedSecret}`,
+          },
+          artifact: {
+            schemaVersion: 2,
+            seed,
+            scenario: scenarioSpec.name,
+            commands: scenarioSpec.commands,
+            history: [],
+            capabilities: {},
+            invariants: [],
+          },
+        };
+      }
+    }
+    const runtime = new LeakyDemoRuntime({ services, runtimeRoot: directory });
+
+    try {
+      const result = await runtime.demo({ seed: 'demo-secret-redaction' });
+
+      expect(result.status).toBe('failed');
+      expect(result.result.status).toBe('failed');
+      if (result.result.status !== 'failed') throw new Error('expected failed demo');
+      expect(result.result.error.message).toContain('[REDACTED]');
+      expect(result.result.error.message).not.toContain(leakedSecret);
+      const evidence = await readFile(result.artifactPath, 'utf8');
+      const report = await readFile(result.reportPath, 'utf8');
+      expect(evidence).not.toContain(leakedSecret);
+      expect(report).not.toContain(leakedSecret);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('does not clean up a demo stack that was already running', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-runtime-demo-running-'));
+    const ups: string[] = [];
+    const downs: string[] = [];
+    const runtime = new PackagedLabRuntime({
+      services: {
+        isUp: async () => true,
+        up: async (profile: string) => void ups.push(profile),
+        down: async (profile: string) => void downs.push(profile),
+        restart: async () => {},
+      },
+      runtimeRoot: directory,
+      fetch: externalDemoFetch([]),
+    });
+
+    try {
+      const result = await runtime.demo({ seed: 'already-running' });
+
+      expect(result.status).toBe('passed');
+      expect(result.startedStack).toBe(false);
+      expect(result.keptStack).toBe(true);
+      expect(ups).toEqual([]);
+      expect(downs).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('does not clean up a partial lab stack it did not fully create', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-runtime-demo-partial-'));
+    const ups: string[] = [];
+    const downs: string[] = [];
+    const runtime = new PackagedLabRuntime({
+      services: {
+        isUp: async () => false,
+        hasAny: async () => true,
+        up: async (profile: string) => void ups.push(profile),
+        down: async (profile: string) => void downs.push(profile),
+        restart: async () => {},
+      },
+      runtimeRoot: directory,
+      fetch: externalDemoFetch([]),
+    });
+
+    try {
+      const result = await runtime.demo({ seed: 'partial-running' });
+
+      expect(result.status).toBe('passed');
+      expect(result.startedStack).toBe(true);
+      expect(result.keptStack).toBe(true);
+      expect(ups).toEqual(['lab']);
+      expect(downs).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('runs and replays the real HTTP response-loss lane', async () => {
@@ -674,4 +1008,3 @@ describe('PackagedLabRuntime', () => {
     await expect(runtime.shrink(passing.artifact)).rejects.toThrow(/cannot be minimized/i);
   });
 });
-import { developmentIdentity, type AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';

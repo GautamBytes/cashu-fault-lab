@@ -59,6 +59,83 @@ jobs:
       - run: node apps/lab-cli/dist/bin.js run scenarios/security/malformed-input.json --seed pr-security
       - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1
 
+  generated-adapter-templates:
+    name: Generated adapter templates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Pin Rust toolchain
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup default 1.97.0
+      - run: pnpm install --frozen-lockfile
+      - name: Build lab CLI
+        run: pnpm exec turbo run build --filter=@cashu-fault-lab/lab-cli
+      - name: Generate standalone adapter projects
+        run: |
+          mkdir -p /tmp/cashu-fault-lab-templates
+          node apps/lab-cli/dist/bin.js adapter init --language typescript --name template-ts --output /tmp/cashu-fault-lab-templates/template-ts
+          node apps/lab-cli/dist/bin.js adapter init --language rust --name template-rust --output /tmp/cashu-fault-lab-templates/template-rust
+          node apps/lab-cli/dist/bin.js adapter init --language python --name template-python --output /tmp/cashu-fault-lab-templates/template-python
+      - name: Verify TypeScript template
+        working-directory: /tmp/cashu-fault-lab-templates/template-ts
+        run: |
+          corepack enable
+          pnpm install
+          pnpm build
+          pnpm test
+          docker build .
+      - name: Verify Rust template
+        working-directory: /tmp/cashu-fault-lab-templates/template-rust
+        run: |
+          cargo test
+          docker build .
+      - name: Verify Python template
+        working-directory: /tmp/cashu-fault-lab-templates/template-python
+        run: |
+          python -m pip install -e ".[test]"
+          pytest
+          docker build .
+
+  reference-lab-demo:
+    name: Reference lab startup and demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build lab CLI
+        run: pnpm exec turbo run build --filter=@cashu-fault-lab/lab-cli
+      - name: Start reference lab with generated runtime secrets
+        run: node apps/lab-cli/dist/bin.js up
+      - name: Run packaged response-loss demo
+        run: node apps/lab-cli/dist/bin.js demo --seed ci-demo
+      - name: Stop reference lab
+        if: always()
+        run: node apps/lab-cli/dist/bin.js down
+
   funded-wallet-matrix:
     name: Funded external wallet matrix
     runs-on: ubuntu-latest

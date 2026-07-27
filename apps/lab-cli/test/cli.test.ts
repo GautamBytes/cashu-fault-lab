@@ -6,13 +6,19 @@ import {
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import type { AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
-import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
 import type { DoctorProbes } from '../src/doctor.js';
-import { runCli, type CliIo, type LabRuntime } from '../src/index.js';
+import {
+  runCli,
+  type CliIo,
+  type LabDemoOptions,
+  type LabDemoResult,
+  type LabRuntime,
+} from '../src/index.js';
 
 const artifact: FailureArtifact = {
   schemaVersion: 2,
@@ -67,9 +73,36 @@ class FakeRuntime implements LabRuntime {
   selection: { sender: string; receiver: string } | undefined;
   adapterManifest: AdapterManifest | undefined;
   matrices = 0;
+  upProfiles: string[] = [];
+  downProfiles: string[] = [];
+  demos = 0;
+  demoOptions: LabDemoOptions | undefined;
+  demoResult: LabDemoResult | undefined;
 
-  async up(): Promise<void> {}
-  async down(): Promise<void> {}
+  async up(profile: string): Promise<void> {
+    this.upProfiles.push(profile);
+  }
+
+  async down(profile: string): Promise<void> {
+    this.downProfiles.push(profile);
+  }
+
+  async demo(options: LabDemoOptions): Promise<LabDemoResult> {
+    this.demos += 1;
+    this.demoOptions = options;
+    return (
+      this.demoResult ?? {
+        status: 'passed',
+        result: passed,
+        envFile: '.cashu-fault-lab/runtime/reference/secrets.env',
+        artifactPath:
+          options.artifactPath ?? '.cashu-fault-lab/runtime/reference/reports/demo.json',
+        reportPath: options.reportPath ?? '.cashu-fault-lab/runtime/reference/reports/demo.html',
+        startedStack: true,
+        keptStack: options.keep ?? false,
+      }
+    );
+  }
 
   async run(
     _scenario: ScenarioSpec,
@@ -139,6 +172,38 @@ function fixture(files: Readonly<Record<string, string>> = {}) {
 }
 
 describe('lab CLI', () => {
+  it('scaffolds an adapter project through adapter init', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-cli-adapter-init-'));
+    const output = join(directory, 'my-wallet');
+
+    try {
+      const setup = fixture();
+      const outcome = await runCli(
+        [
+          'node',
+          'cashu-fault-lab',
+          'adapter',
+          'init',
+          '--language',
+          'python',
+          '--name',
+          'my-wallet',
+          '--output',
+          output,
+        ],
+        { io: setup.io, runtime: new FakeRuntime() },
+      );
+
+      expect(outcome.exitCode).toBe(0);
+      expect(setup.stdout()).toContain(output);
+      expect(await readFile(join(output, 'adapter-manifest.json'), 'utf8')).toContain(
+        'MY_WALLET_TOKEN',
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('runs a scenario and writes a replayable result artifact', async () => {
     const scenario: ScenarioSpec = {
       name: 'request-loss',
@@ -199,6 +264,125 @@ describe('lab CLI', () => {
       ).exitCode,
     ).toBe(0);
     expect(setup.stdout()).toContain('"scenarioId": "request-loss"');
+  });
+
+  it('checks startup prerequisites before starting the lab without requiring manual secrets', async () => {
+    const setup = fixture();
+    const runtime = new FakeRuntime();
+    const probes: DoctorProbes = {
+      env: {},
+      execFile: async (command, args) => {
+        if (command === 'node') return { stdout: 'v24.0.0\n', stderr: '' };
+        if (command === 'pnpm') return { stdout: '11.15.0\n', stderr: '' };
+        if (command === 'docker' && args[0] === '--version') {
+          return { stdout: 'Docker version 27.0.0, build abc\n', stderr: '' };
+        }
+        if (command === 'docker' && args[0] === 'info') return { stdout: '27.0.0\n', stderr: '' };
+        throw new Error(`unexpected probe ${command} ${args.join(' ')}`);
+      },
+      isPortFree: async () => true,
+    };
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'up'], {
+      runtime,
+      io: setup.io,
+      doctorProbes: probes,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(runtime.upProfiles).toEqual(['lab']);
+    expect(setup.stdout()).toContain('started lab');
+  });
+
+  it('reports an actionable diagnostic when lab up cannot bind a conflicted port', async () => {
+    const setup = fixture();
+    const runtime = new FakeRuntime();
+    runtime.up = async (profile: string) => {
+      runtime.upProfiles.push(profile);
+      throw new Error('bind: address already in use');
+    };
+    const probes: DoctorProbes = {
+      env: {},
+      execFile: async (command, args) => {
+        if (command === 'node') return { stdout: 'v24.0.0\n', stderr: '' };
+        if (command === 'pnpm') return { stdout: '11.15.0\n', stderr: '' };
+        if (command === 'docker' && args[0] === '--version') {
+          return { stdout: 'Docker version 27.0.0, build abc\n', stderr: '' };
+        }
+        if (command === 'docker' && args[0] === 'info') return { stdout: '27.0.0\n', stderr: '' };
+        throw new Error(`unexpected probe ${command} ${args.join(' ')}`);
+      },
+      isPortFree: async (_host, port) => port !== 4101,
+    };
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'up'], {
+      runtime,
+      io: setup.io,
+      doctorProbes: probes,
+    });
+
+    expect(outcome.exitCode).toBe(2);
+    expect(runtime.upProfiles).toEqual(['lab']);
+    expect(setup.stderr()).toContain('PORT_IN_USE');
+    expect(setup.stderr()).toContain('cashu-fault-lab down --profile lab');
+  });
+
+  it('runs the packaged demo and prints the generated report location', async () => {
+    const setup = fixture();
+    const runtime = new FakeRuntime();
+
+    const outcome = await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        'demo',
+        '--keep',
+        '--seed',
+        'demo-seed',
+        '--artifact',
+        'demo/evidence.json',
+        '--report',
+        'demo/report.html',
+      ],
+      { runtime, io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(0);
+    expect(runtime.demos).toBe(1);
+    expect(runtime.demoOptions).toEqual({
+      keep: true,
+      seed: 'demo-seed',
+      artifactPath: 'demo/evidence.json',
+      reportPath: 'demo/report.html',
+    });
+    expect(setup.stdout()).toContain('demo/report.html');
+    expect(setup.stdout()).toContain('passed');
+  });
+
+  it('prints runtime-redacted demo failure messages', async () => {
+    const setup = fixture();
+    const runtime = new FakeRuntime();
+    runtime.demoResult = {
+      status: 'failed',
+      result: {
+        status: 'failed',
+        artifact,
+        error: { name: 'Error', message: 'demo failed with [REDACTED]' },
+      },
+      envFile: '.cashu-fault-lab/runtime/reference/secrets.env',
+      artifactPath: 'demo/evidence.json',
+      reportPath: 'demo/report.html',
+      startedStack: true,
+      keptStack: false,
+    };
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'demo'], {
+      runtime,
+      io: setup.io,
+    });
+
+    expect(outcome.exitCode).toBe(1);
+    expect(setup.stderr()).toContain('[REDACTED]');
   });
 
   it('forces private permissions when overwriting an existing artifact', async () => {
