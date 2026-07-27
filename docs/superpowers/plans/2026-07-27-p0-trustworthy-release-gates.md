@@ -24,6 +24,7 @@
 ### Task 1: Dependency remediation and explicit test tiers
 
 **Files:**
+
 - Create: `scripts/test-environment.mjs`
 - Modify: `package.json`
 - Modify: `turbo.json`
@@ -39,6 +40,7 @@
 - Modify: `pnpm-lock.yaml`
 
 **Interfaces:**
+
 - Produces: root commands `test`, `test:unit`, `test:integration`, `test:funded`, `test:all`.
 - Produces: `test-environment.mjs docker --skip-unavailable -- <command...>` and strict funded preflight mode.
 - Produces: doctor checks named `test:unit`, `test:integration`, and `test:funded`.
@@ -136,6 +138,7 @@ git commit -m "test: add explicit Docker-aware test tiers"
 ### Task 2: Adapter capability schema v2
 
 **Files:**
+
 - Modify: `packages/adapter-contract/src/types.ts`
 - Modify: `packages/adapter-contract/src/index.ts`
 - Modify: `spec/schemas/adapter-capabilities.schema.json`
@@ -144,6 +147,7 @@ git commit -m "test: add explicit Docker-aware test tiers"
 - Modify: `packages/adapter-contract/test/http-client.test.ts`
 
 **Interfaces:**
+
 - Produces: `AdapterImplementationIdentity`, `AdapterRoleCapability`, `AdapterMintIdentity`, `EvidenceSource`, and `DurabilityLevel`.
 - Produces: `AdapterCapabilities` with required `schemaVersion: 2`, `implementation`, `roles`, `nuts`, `encodings`, and `mints`.
 
@@ -219,6 +223,7 @@ git commit -m "feat: introduce adapter capability schema v2"
 ### Task 3: Migrate every capability producer and consumer
 
 **Files:**
+
 - Modify: `adapters/cashu-ts/src/server.ts`
 - Modify: `adapters/cashu-ts/src/funded-operations.ts`
 - Modify: `adapters/cashu-ts/src/funded-receiver-operations.ts`
@@ -239,6 +244,7 @@ git commit -m "feat: introduce adapter capability schema v2"
 - Modify: `packages/adapter-contract/README.md`
 
 **Interfaces:**
+
 - Consumes: capability v2 types from Task 2.
 - Produces: truthful role-specific capabilities for every bundled adapter and reference runtime.
 
@@ -304,6 +310,7 @@ git commit -m "feat: publish truthful role-specific capabilities"
 ### Task 4: Oracle-owned invariant results and scenario artifact v2
 
 **Files:**
+
 - Create: `packages/oracle/src/evidence.ts`
 - Create: `packages/oracle/test/evidence.test.ts`
 - Modify: `packages/oracle/src/index.ts`
@@ -317,6 +324,7 @@ git commit -m "feat: publish truthful role-specific capabilities"
 - Modify: `spec/invariants.md`
 
 **Interfaces:**
+
 - Produces: `InvariantId`, `InvariantResult`, `InvariantEvidenceReference`, `evaluateInvariants()`, and `INVARIANT_REGISTRY`.
 - Produces: artifact `schemaVersion: 2` with required `invariants`.
 
@@ -394,6 +402,7 @@ git commit -m "feat: emit oracle-owned invariant evidence"
 ### Task 5: Provenance-aware release policy
 
 **Files:**
+
 - Create: `packages/scenario-runner/src/release-policy.ts`
 - Create: `packages/scenario-runner/test/release-policy.test.ts`
 - Create: `spec/release-policy.json`
@@ -405,6 +414,7 @@ git commit -m "feat: emit oracle-owned invariant evidence"
 - Modify: `packages/scenario-runner/test/external-pair.test.ts`
 
 **Interfaces:**
+
 - Produces: `ReleasePolicy`, `ReleaseGateResult`, `ReleaseGateReason`, `evaluateReleasePolicy()`, and `validateReleasePolicy()`.
 - Extends passed `MatrixCaseResult` with sender/receiver capability snapshots, mint identity, and invariant results.
 
@@ -459,6 +469,7 @@ git commit -m "feat: enforce provenance-aware release policy"
 ### Task 6: CLI, reports, and CI release integration
 
 **Files:**
+
 - Modify: `apps/lab-cli/src/index.ts`
 - Modify: `apps/lab-cli/src/packaged-runtime.ts`
 - Modify: `apps/lab-cli/test/cli.test.ts`
@@ -475,6 +486,7 @@ git commit -m "feat: enforce provenance-aware release policy"
 - Modify: `spec/threat-model.md`
 
 **Interfaces:**
+
 - Produces: CLI option `matrix --release-policy <path>`.
 - Produces: matrix report schema v2 with optional `releaseGate`.
 
@@ -539,9 +551,11 @@ git commit -m "feat: expose release policy in CLI and reports"
 ### Task 7: Full verification and branch audit
 
 **Files:**
+
 - Modify only files required by verification findings.
 
 **Interfaces:**
+
 - Consumes all prior tasks.
 - Produces final evidence that the branch satisfies the approved design.
 
@@ -601,4 +615,3 @@ git log --oneline origin/main..HEAD
 ```
 
 Expected: no whitespace errors, clean status, and focused commits for design, test tiers, capability v2, invariant evidence, release policy, and CLI/CI integration.
-

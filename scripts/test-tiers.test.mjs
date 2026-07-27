@@ -4,6 +4,10 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const root = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+const environmentHelper = await readFile(
+  new URL('./test-environment.mjs', import.meta.url),
+  'utf8',
+);
 
 test('default tests are Docker-free and explicit tiers are available', () => {
   assert.equal(root.scripts.test, 'pnpm test:unit');
@@ -50,4 +54,10 @@ test('strict funded preflight accepts a command without optional flags', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /^test:funded blocked:/);
   assert.doesNotMatch(result.stderr, /usage:/);
+});
+
+test('environment preflight enables every opt-in lane it owns', () => {
+  assert.match(environmentHelper, /CFL_POSTGRES_E2E:\s*'1'/);
+  assert.match(environmentHelper, /CFL_NOSTR_RELAY_E2E:\s*'1'/);
+  assert.match(environmentHelper, /'CFL_REAL_MINT_URL'/);
 });

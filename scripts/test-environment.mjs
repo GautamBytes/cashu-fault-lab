@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 
 const REQUIRED_FUNDED_ENV = [
+  'CFL_REAL_MINT_URL',
   'CFL_CASHU_TS_TOKEN',
   'CFL_CDK_TOKEN',
   'CFL_REFERENCE_RECEIVER_TOKEN',
@@ -45,11 +46,17 @@ if (separator < 3 || separator === process.argv.length - 1) {
       if (missing.length > 0) {
         fail(`test:funded blocked: missing ${missing.join(', ')}`);
       } else {
-        const result = spawnSync(command, args, { stdio: 'inherit' });
+        const result = spawnSync(command, args, {
+          stdio: 'inherit',
+          env: { ...process.env, CFL_NOSTR_RELAY_E2E: '1' },
+        });
         process.exitCode = result.status ?? 1;
       }
     } else {
-      const result = spawnSync(command, args, { stdio: 'inherit' });
+      const result = spawnSync(command, args, {
+        stdio: 'inherit',
+        env: { ...process.env, CFL_POSTGRES_E2E: '1' },
+      });
       process.exitCode = result.status ?? 1;
     }
   }

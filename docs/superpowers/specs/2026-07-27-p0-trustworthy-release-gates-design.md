@@ -45,12 +45,7 @@ The public capability response is:
 ```ts
 type EvidenceTier = 'T0' | 'T1' | 'T2' | 'T3';
 type EvidenceSource =
-  | 'adapter'
-  | 'runner'
-  | 'transport'
-  | 'mint'
-  | 'durable_ledger'
-  | 'durable_state';
+  'adapter' | 'runner' | 'transport' | 'mint' | 'durable_ledger' | 'durable_state';
 type DurabilityLevel = 'process' | 'persistent' | 'restart_safe';
 
 interface AdapterImplementationIdentity {

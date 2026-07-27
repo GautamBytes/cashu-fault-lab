@@ -14,7 +14,6 @@ describe('template adapter', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.implementation).toBe('template');
     expect(body.nuts).toEqual([18]);
     expect(body).toMatchObject({
       schemaVersion: 2,

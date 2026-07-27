@@ -117,9 +117,7 @@ describe('PackagedLabRuntime', () => {
     expect((await passedCase('seed-a'))?.evidence).not.toEqual(
       (await passedCase('seed-b'))?.evidence,
     );
-    expect((await passedCase('seed-a'))?.evidence).toEqual(
-      (await passedCase('seed-a'))?.evidence,
-    );
+    expect((await passedCase('seed-a'))?.evidence).toEqual((await passedCase('seed-a'))?.evidence);
     expect((await passedCase('seed-a'))?.invariants).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

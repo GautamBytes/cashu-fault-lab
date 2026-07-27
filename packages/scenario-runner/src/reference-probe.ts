@@ -231,11 +231,7 @@ export async function runReferenceDeliveryProbe(seed: string): Promise<MatrixExe
       event: observation.type,
       data: observation,
     })),
-    commands: [
-      { type: 'send' },
-      { type: 'send' },
-      { type: 'assert_quiescent' },
-    ],
+    commands: [{ type: 'send' }, { type: 'send' }, { type: 'assert_quiescent' }],
     capabilities,
     metadata: {
       scenarioId: 'matrix:delivery-v1',
