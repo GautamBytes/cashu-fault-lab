@@ -20,6 +20,11 @@
     "test:all": "pnpm test:unit && pnpm test:integration && pnpm test:funded",
     "test:browser": "turbo run build --filter=@cashu-fault-lab/reference-receiver && node scripts/browser-cors-probe.mjs",
     "test:consumer": "turbo run test:consumer",
+    "docs:cli": "node scripts/generate-cli-docs.mjs",
+    "docs:cli:check": "node scripts/generate-cli-docs.mjs --check",
+    "codegen": "node scripts/codegen.mjs",
+    "codegen:check": "node scripts/codegen.mjs --check",
+    "openapi:validate": "node scripts/validate-openapi.mjs",
     "typecheck": "turbo run typecheck",
     "format:check": "prettier --check .",
     "audit": "pnpm audit --prod"

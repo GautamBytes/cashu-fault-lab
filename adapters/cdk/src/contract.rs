@@ -51,6 +51,14 @@ pub struct MintIdentity {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AdapterContractMetadata {
+    pub api_version: u8,
+    pub schema_version: u8,
+    pub spec_digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AdapterCapabilities {
     pub schema_version: u8,
     pub implementation: ImplementationIdentity,
@@ -58,6 +66,7 @@ pub struct AdapterCapabilities {
     pub nuts: Vec<u16>,
     pub encodings: Vec<String>,
     pub mints: Vec<MintIdentity>,
+    pub contract: AdapterContractMetadata,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +94,17 @@ fn identity() -> ImplementationIdentity {
         runtime: runtime.to_owned(),
         source_digest: digest("source"),
         build_digest: digest("build"),
+    }
+}
+
+fn contract_metadata() -> AdapterContractMetadata {
+    AdapterContractMetadata {
+        api_version: 1,
+        schema_version: 2,
+        spec_digest: format!(
+            "sha256:{}",
+            sha256::Hash::hash(include_bytes!("../../../spec/openapi.yaml"))
+        ),
     }
 }
 
@@ -129,6 +149,7 @@ pub fn capabilities() -> AdapterCapabilities {
         nuts: vec![18, 26],
         encodings: vec!["creqA".to_owned(), "creqB".to_owned()],
         mints: vec![],
+        contract: contract_metadata(),
     }
 }
 
@@ -149,6 +170,7 @@ pub fn funded_capabilities() -> AdapterCapabilities {
         nuts: vec![3, 7, 18],
         encodings: vec!["creqA".to_owned(), "creqB".to_owned()],
         mints: vec![],
+        contract: contract_metadata(),
     }
 }
 

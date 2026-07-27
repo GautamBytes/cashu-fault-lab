@@ -1,0 +1,9 @@
+{
+  "generatorName": "rust",
+  "inputSpec": "spec/openapi.yaml",
+  "outputDir": "packages/adapter-contract/generated/rust",
+  "additionalProperties": {
+    "packageName": "cashu_fault_lab_adapter_contract",
+    "packageVersion": "0.0.0"
+  }
+}

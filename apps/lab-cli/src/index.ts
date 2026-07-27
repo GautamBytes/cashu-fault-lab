@@ -21,6 +21,13 @@ import { Command, CommanderError, Option } from 'commander';
 import { chmod, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
+import { registerLifecycleCommands } from './commands/lifecycle.js';
+import {
+  LabDiagnosticError,
+  createDiagnostic,
+  renderDiagnosticJson,
+  renderDiagnosticText,
+} from './diagnostics.js';
 import { PackagedLabRuntime } from './packaged-runtime.js';
 
 const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
@@ -158,7 +165,16 @@ async function readAdapterManifest(
   path: string | undefined,
 ): Promise<AdapterManifest | undefined> {
   if (path === undefined) return undefined;
-  return parseAdapterManifest(json(await io.readText(path)));
+  try {
+    return parseAdapterManifest(json(await io.readText(path)));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Adapter manifest could not be read';
+    throw new LabDiagnosticError(
+      createDiagnostic('ADAPTER_MANIFEST_INVALID', {
+        problem: `Adapter manifest is invalid: ${detail}`,
+      }),
+    );
+  }
 }
 
 async function readReleasePolicy(
@@ -183,6 +199,8 @@ export async function runCli(
   argv: readonly string[],
   dependencies: RunCliDependencies = {},
 ): Promise<CliOutcome> {
+  const diagnosticJson = argv[2] === '--json';
+  const parseArgv = diagnosticJson ? [argv[0]!, argv[1]!, ...argv.slice(3)] : [...argv];
   const io = dependencies.io ?? defaultIo;
   const runtime = dependencies.runtime ?? new PackagedLabRuntime();
   const doctorProbes = dependencies.doctorProbes;
@@ -194,23 +212,14 @@ export async function runCli(
     .exitOverride()
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr });
 
-  program
-    .command('up')
-    .description('Start the local lab services')
-    .option('--profile <profile>', 'compose profile', 'lab')
-    .action(async (options: { profile: string }) => {
-      await runtime.up(options.profile);
-      io.stdout(`started ${options.profile}\n`);
-    });
-
-  program
-    .command('down')
-    .description('Stop the local lab services')
-    .option('--profile <profile>', 'compose profile', 'lab')
-    .action(async (options: { profile: string }) => {
-      await runtime.down(options.profile);
-      io.stdout(`stopped ${options.profile}\n`);
-    });
+  registerLifecycleCommands(program, {
+    io,
+    runtime,
+    ...(doctorProbes === undefined ? {} : { doctorProbes }),
+    setExitCode: (code) => {
+      exitCode = code;
+    },
+  });
 
   program
     .command('run')
@@ -580,44 +589,21 @@ export async function runCli(
       exitCode = 1;
     });
 
-  program
-    .command('gen-id')
-    .description('Generate a random 128-bit ProtocolId')
-    .action(async () => {
-      const { generateProtocolId } = await import('@cashu-fault-lab/delivery-core');
-      io.stdout(`${generateProtocolId()}\n`);
-    });
-
-  program
-    .command('doctor')
-    .description('Check local prerequisites (env, tools, ports) for funded lab lanes')
-    .option('--json', 'emit machine-readable JSON instead of text', false)
-    .action(async (options: { json: boolean }) => {
-      const { runDoctor, defaultDoctorProbes } = await import('./doctor.js');
-      const report = await runDoctor(doctorProbes ?? defaultDoctorProbes());
-      if (options.json) {
-        io.stdout(`${JSON.stringify(report, null, 2)}\n`);
-      } else {
-        for (const check of report.checks) {
-          const icon = check.status === 'ok' ? '✓' : check.status === 'warn' ? '!' : '✗';
-          io.stdout(`  ${icon} ${check.name}: ${check.detail}\n`);
-        }
-        const failedCount = report.checks.filter((c) => c.status === 'fail').length;
-        const warnCount = report.checks.filter((c) => c.status === 'warn').length;
-        io.stdout(
-          `\ndoctor: ${report.checks.length} checks, ${failedCount} failed, ${warnCount} warned\n`,
-        );
-      }
-      if (!report.ok) exitCode = 1;
-    });
-
   try {
-    await program.parseAsync([...argv], { from: 'node' });
+    await program.parseAsync(parseArgv, { from: 'node' });
   } catch (error) {
     if (error instanceof CommanderError && error.code === 'commander.helpDisplayed') {
       return { exitCode: 0 };
     }
-    io.stderr(`${safeError(error)}\n`);
+    if (error instanceof LabDiagnosticError) {
+      io.stderr(
+        diagnosticJson
+          ? renderDiagnosticJson(error.diagnostic)
+          : renderDiagnosticText(error.diagnostic),
+      );
+    } else {
+      io.stderr(`${safeError(error)}\n`);
+    }
     return { exitCode: 2 };
   }
   return { exitCode };

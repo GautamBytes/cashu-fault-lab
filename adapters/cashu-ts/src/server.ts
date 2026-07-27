@@ -5,6 +5,7 @@ import {
 } from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
+  currentAdapterContract,
   developmentIdentity,
   validateAdapterRequest,
   validateAdapterResponse,
@@ -29,6 +30,7 @@ const PAYMENT_BODY_LIMIT = 65_536;
 
 const capabilities: AdapterCapabilities = {
   schemaVersion: 2,
+  contract: currentAdapterContract(),
   implementation: developmentIdentity({
     id: 'cashu-ts',
     version: '4.7.2',

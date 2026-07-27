@@ -259,6 +259,14 @@ async fn exposes_funded_sender_over_authenticated_http_contract() {
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(value["schemaVersion"], 2);
     assert_eq!(value["implementation"]["id"], "cdk");
+    assert_eq!(value["contract"]["apiVersion"], 1);
+    assert_eq!(value["contract"]["schemaVersion"], 2);
+    assert!(
+        value["contract"]["specDigest"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:")
+    );
     assert_eq!(value["roles"]["sender"]["evidence"]["tier"], "T1");
     assert_eq!(value["roles"]["sender"]["profiles"], json!(["delivery-v1"]));
     assert!(value["roles"].get("receiver").is_none());

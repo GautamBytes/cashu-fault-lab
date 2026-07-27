@@ -1,5 +1,6 @@
 import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
 import {
+  currentAdapterContract,
   developmentIdentity,
   type AdapterCapabilities,
   type CreateRequestInput,
@@ -81,6 +82,7 @@ export class FundedReceiverAdapterControl implements ReceiverAdapterControl {
   async capabilities(): Promise<AdapterCapabilities> {
     return {
       schemaVersion: 2,
+      contract: currentAdapterContract(),
       implementation: developmentIdentity({
         id: 'reference-receiver',
         version: '0.0.0',

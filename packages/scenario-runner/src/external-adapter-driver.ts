@@ -1,6 +1,7 @@
 import {
   AdapterClientError,
   AdapterNotApplicableError,
+  validateAdapterCompatibility,
   type AdapterCapabilities,
   type AdapterTransport,
   type AdapterClient,
@@ -204,6 +205,16 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#senderCapabilities = undefined;
     this.#receiverCapabilities = undefined;
     this.#redeemedDeliveries.clear();
+    this.#senderCapabilities = await adapterCall('sender capability discovery', () =>
+      this.#sender.capabilities(),
+    );
+    this.#receiverCapabilities = await adapterCall('receiver capability discovery', () =>
+      this.#receiver.capabilities(),
+    );
+    const senderCompatibility = validateAdapterCompatibility(this.#senderCapabilities);
+    if (!senderCompatibility.ok) throw new Error(senderCompatibility.reason);
+    const receiverCompatibility = validateAdapterCompatibility(this.#receiverCapabilities);
+    if (!receiverCompatibility.ok) throw new Error(receiverCompatibility.reason);
     await this.#faults.reset();
     await adapterCall('receiver reset', () => this.#receiver.reset(seed));
     await adapterCall('sender reset', () => this.#sender.reset(seed));
@@ -228,20 +239,24 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   }
 
   async capabilities(): Promise<Readonly<Record<string, unknown>>> {
-    this.#senderCapabilities = await adapterCall('sender capability discovery', () =>
+    this.#senderCapabilities ??= await adapterCall('sender capability discovery', () =>
       this.#sender.capabilities(),
     );
-    this.#receiverCapabilities = await adapterCall('receiver capability discovery', () =>
+    this.#receiverCapabilities ??= await adapterCall('receiver capability discovery', () =>
       this.#receiver.capabilities(),
     );
     return {
       sender: {
         implementation: this.#senderCapabilities.implementation,
         role: this.#senderCapabilities.roles.sender,
+        contract: this.#senderCapabilities.contract,
+        compatibility: validateAdapterCompatibility(this.#senderCapabilities),
       },
       receiver: {
         implementation: this.#receiverCapabilities.implementation,
         role: this.#receiverCapabilities.roles.receiver,
+        contract: this.#receiverCapabilities.contract,
+        compatibility: validateAdapterCompatibility(this.#receiverCapabilities),
       },
       transports: this.#transports,
     };

@@ -1,6 +1,7 @@
 import {
   AdapterClientError,
   AdapterNotApplicableError,
+  validateAdapterCompatibility,
   type AdapterClient,
   type AdapterMintIdentity,
   type AdapterTransport,
@@ -146,10 +147,17 @@ export async function runExternalDeliveryPair(
     ) {
       return failure('ADAPTER_TRANSPORT_SELECTION', 'External pair transport selection is invalid');
     }
-    await input.receiver.reset(input.seed);
-    await input.sender.reset(input.seed);
     const senderCapabilities = await input.sender.capabilities();
     const receiverCapabilities = await input.receiver.capabilities();
+    const senderCompatibility = validateAdapterCompatibility(senderCapabilities);
+    if (!senderCompatibility.ok)
+      return failure(senderCompatibility.code, senderCompatibility.reason);
+    const receiverCompatibility = validateAdapterCompatibility(receiverCapabilities);
+    if (!receiverCompatibility.ok) {
+      return failure(receiverCompatibility.code, receiverCompatibility.reason);
+    }
+    await input.receiver.reset(input.seed);
+    await input.sender.reset(input.seed);
 
     const request = await input.receiver.createRequest({
       amount: input.amount,
@@ -330,6 +338,10 @@ export async function runExternalDeliveryPair(
         proofState: proof.state,
         transports,
         seed: input.seed,
+        contractCompatibility: {
+          sender: senderCompatibility,
+          receiver: receiverCompatibility,
+        },
       },
     };
   } catch (error) {

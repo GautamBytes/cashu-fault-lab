@@ -1,4 +1,5 @@
 import {
+  currentAdapterContract,
   developmentIdentity,
   type AdapterCapabilities,
   type AdapterRoleCapability,
@@ -114,6 +115,7 @@ function role(profiles: readonly string[]): AdapterRoleCapability {
 
 const referenceCapabilities: AdapterCapabilities = {
   schemaVersion: 2,
+  contract: currentAdapterContract(),
   implementation: developmentIdentity({
     id: 'reference-ts',
     version: '0.0.0',
@@ -135,6 +137,7 @@ function upstreamCapabilities(
 ): AdapterCapabilities {
   return {
     schemaVersion: 2,
+    contract: currentAdapterContract(),
     implementation: developmentIdentity({
       id: implementation,
       version,

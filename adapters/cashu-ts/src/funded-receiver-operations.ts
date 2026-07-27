@@ -1,6 +1,7 @@
 import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
+  currentAdapterContract,
   developmentIdentity,
   type AdapterCapabilities,
   type DurabilityLevel,
@@ -183,6 +184,7 @@ export class FundedCashuTsReceiverOperations {
     const transports = this.#transports();
     return {
       schemaVersion: 2,
+      contract: currentAdapterContract(),
       implementation: developmentIdentity({
         id: 'cashu-ts',
         version: CASHU_TS_VERSION,
@@ -369,6 +371,7 @@ export class FundedCashuTsDualRoleOperations implements CashuTsAdapterOperations
     const sender = await this.#sender.capabilities();
     return {
       schemaVersion: 2,
+      contract: currentAdapterContract(),
       implementation: sender.implementation,
       roles: {
         ...(sender.roles.sender === undefined ? {} : { sender: sender.roles.sender }),

@@ -35,8 +35,15 @@ export interface AdapterMintIdentity {
   readonly version?: string;
 }
 
+export interface AdapterContractMetadata {
+  readonly apiVersion: number;
+  readonly schemaVersion: number;
+  readonly specDigest: string;
+}
+
 export interface AdapterCapabilities {
   readonly schemaVersion: 2;
+  readonly contract?: AdapterContractMetadata;
   readonly implementation: AdapterImplementationIdentity;
   readonly roles: {
     readonly sender?: AdapterRoleCapability;
@@ -140,4 +147,24 @@ export type ValidationResult =
       readonly errorCode: SchemaErrorCode;
       readonly path: string;
       readonly message: string;
+    };
+
+export interface AdapterCompatibilityWarning {
+  readonly code: 'ADAPTER_CONTRACT_LEGACY';
+  readonly message: string;
+  readonly remediation: string;
+}
+
+export type AdapterCompatibilityResult =
+  | {
+      readonly ok: true;
+      readonly metadata?: AdapterContractMetadata;
+      readonly warnings: readonly AdapterCompatibilityWarning[];
+    }
+  | {
+      readonly ok: false;
+      readonly code: 'ADAPTER_CONTRACT_INCOMPATIBLE';
+      readonly reason: string;
+      readonly expected: AdapterContractMetadata;
+      readonly actual: AdapterContractMetadata;
     };

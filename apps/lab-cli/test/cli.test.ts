@@ -685,4 +685,39 @@ describe('lab CLI', () => {
     expect(report.checks.some((c) => c.name === 'node')).toBe(true);
     expect(report.checks.some((c) => c.name === 'testcontainers')).toBe(true);
   });
+
+  it('emits a machine-readable diagnostic for command errors when global --json is set', async () => {
+    const scenario: ScenarioSpec = {
+      name: 'request-loss',
+      commands: [{ type: 'assert_quiescent' }],
+    };
+    const setup = fixture({
+      'scenario.json': JSON.stringify(scenario),
+      'bad-adapters.json': JSON.stringify({ schemaVersion: 1, adapters: [] }),
+    });
+    const runtime = new FakeRuntime();
+
+    const outcome = await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        '--json',
+        'run',
+        'scenario.json',
+        '--adapters',
+        'bad-adapters.json',
+      ],
+      { runtime, io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(2);
+    expect(runtime.runs).toBe(0);
+    expect(JSON.parse(setup.stderr())).toMatchObject({
+      code: 'ADAPTER_MANIFEST_INVALID',
+      problem: expect.stringContaining('Adapter manifest'),
+      likelyCause: expect.any(String),
+      remediation: expect.any(String),
+      nextCommand: expect.stringContaining('cashu-fault-lab doctor'),
+    });
+  });
 });

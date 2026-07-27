@@ -1,0 +1,9 @@
+{
+  "generatorName": "python",
+  "inputSpec": "spec/openapi.yaml",
+  "outputDir": "packages/adapter-contract/generated/python",
+  "additionalProperties": {
+    "packageName": "cashu_fault_lab_adapter_contract",
+    "packageVersion": "0.0.0"
+  }
+}

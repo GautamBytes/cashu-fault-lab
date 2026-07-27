@@ -1,4 +1,8 @@
-import { developmentIdentity, type AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
+import {
+  currentAdapterContract,
+  developmentIdentity,
+  type AdapterCapabilities,
+} from '@cashu-fault-lab/adapter-contract';
 import { describe, expect, it } from 'vitest';
 import { CompatibilityMatrix, type MatrixExecutor, type MatrixParticipant } from '../src/index.js';
 
@@ -55,6 +59,10 @@ describe('CompatibilityMatrix', () => {
     expect(first.evidence).toEqual({ credits: 1, settlements: 1 });
     expect(first.senderCapabilities.implementation.id).toBe('sender-a');
     expect(first.receiverCapabilities.implementation.id).toBe('receiver-a');
+    expect(first.compatibility?.sender).toMatchObject({
+      ok: true,
+      warnings: [expect.objectContaining({ code: 'ADAPTER_CONTRACT_LEGACY' })],
+    });
     expect(first.invariants).toEqual([]);
     expect(first.mints).toEqual([]);
     expect(calls).toEqual(['delivery-v1:sender-a:receiver-a', 'delivery-v1:sender-b:receiver-a']);
@@ -130,5 +138,34 @@ describe('CompatibilityMatrix', () => {
       status: 'expected_failure',
       code: 'NUT26_NIP_MAPPING_MISMATCH',
     });
+  });
+
+  it('rejects contract digest mismatches before executing a matrix pair', async () => {
+    const sender = participant('sender-a', 'sender');
+    const receiver = participant('receiver-a', 'receiver');
+    const badDigest = `sha256:${'12'.repeat(32)}`;
+    const result = await new CompatibilityMatrix(async () => {
+      throw new Error('must not execute');
+    }).run(
+      'delivery-v1',
+      [{ ...sender, capabilities: { ...sender.capabilities, contract: currentAdapterContract() } }],
+      [
+        {
+          ...receiver,
+          capabilities: {
+            ...receiver.capabilities,
+            contract: { ...currentAdapterContract(), specDigest: badDigest },
+          },
+        },
+      ],
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        status: 'failed',
+        code: 'ADAPTER_CONTRACT_INCOMPATIBLE',
+        reason: expect.stringContaining('regeneration'),
+      }),
+    ]);
   });
 });
