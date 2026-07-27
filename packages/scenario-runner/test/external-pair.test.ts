@@ -167,8 +167,9 @@ describe('runExternalDeliveryPair', () => {
     expect(fixture.calls).toEqual([
       'receiver.reset',
       'sender.reset',
-      'sender.capabilities',
       'receiver.request',
+      'sender.capabilities',
+      'receiver.capabilities',
       'sender.send',
       'receiver.delivery',
       'receiver.ledger',

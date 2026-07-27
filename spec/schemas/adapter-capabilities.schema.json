@@ -19,6 +19,7 @@
       "items": { "enum": ["http", "nostr"] }
     },
     "evidenceTier": { "enum": ["T0", "T1", "T2", "T3"] },
+    "durability": { "enum": ["process-local", "persistent"] },
     "encodings": {
       "type": "array",
       "uniqueItems": true,

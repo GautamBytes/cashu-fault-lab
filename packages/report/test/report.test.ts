@@ -26,6 +26,13 @@ const result: ScenarioRunResult = {
         rule: { kind: 'drop_response', occurrence: 1 },
       },
       { type: 'send', sender: 'reference', requestId: 'request-1' },
+      {
+        type: 'start_send',
+        operationId: 'op-1',
+        sender: 'reference',
+        requestId: 'request-1',
+      },
+      { type: 'await_send', operationId: 'op-1' },
     ],
     capabilities: {
       implementation: 'reference',
@@ -33,6 +40,7 @@ const result: ScenarioRunResult = {
       nuts: [3, 7, 9, 19],
       transports: ['http'],
       evidenceTier: 'T3',
+      durability: 'persistent',
       secret: 'secret-a',
       bearer: 'top-secret',
     },
@@ -110,6 +118,7 @@ describe('allowlist report rendering', () => {
         nuts: [3, 7, 9, 19],
         transports: ['http'],
         evidenceTier: 'T3',
+        durability: 'persistent',
       },
     });
     expect(validateScenarioResult(report)).toEqual({ ok: true });
@@ -117,6 +126,13 @@ describe('allowlist report rendering', () => {
       deliveryId: 'delivery-1',
       proofSetHash: 'b'.repeat(64),
     });
+    expect(report.commands.at(-2)).toEqual({
+      type: 'start_send',
+      operationId: 'op-1',
+      sender: 'reference',
+      requestId: 'request-1',
+    });
+    expect(report.commands.at(-1)).toEqual({ type: 'await_send', operationId: 'op-1' });
     expectSecretFree(JSON.stringify(report));
   });
 

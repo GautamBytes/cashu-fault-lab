@@ -95,6 +95,24 @@ class FailureSignatureDriver extends FakeDriver {
   }
 }
 
+class DeferredSendDriver extends FakeDriver {
+  private resolver: (() => void) | undefined;
+
+  override async send(sender: string, requestId: string): Promise<DriverSendResult> {
+    this.calls.push(`send-start:${sender}:${requestId}`);
+    await new Promise<void>((resolve) => {
+      this.resolver = resolve;
+    });
+    this.calls.push(`send-finish:${sender}:${requestId}`);
+    return super.send(sender, requestId);
+  }
+
+  async advanceTime(milliseconds: number): Promise<void> {
+    this.calls.push(`advance:${milliseconds}`);
+    this.resolver?.();
+  }
+}
+
 const scenario: ScenarioSpec = {
   name: 'http-response-loss',
   commands: [
@@ -237,5 +255,53 @@ describe('ScenarioRunner', () => {
       status: 'failed',
       error: { message: 'target invariant failure' },
     });
+  });
+
+  it('starts a send, advances virtual time while it is pending, then awaits observations', async () => {
+    const driver = new DeferredSendDriver();
+    const result = await new ScenarioRunner(driver).run(
+      {
+        name: 'in-flight-send',
+        commands: [
+          { type: 'start_send', operationId: 'op-1', sender: 'sender-a', requestId: 'request-1' },
+          { type: 'advance_time', milliseconds: 250 },
+          { type: 'await_send', operationId: 'op-1' },
+        ],
+      },
+      'seed-in-flight',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(driver.calls).toEqual([
+      'reset:seed-in-flight',
+      'send-start:sender-a:request-1',
+      'advance:250',
+      'send-finish:sender-a:request-1',
+      'send:sender-a:request-1',
+    ]);
+    expect(
+      result.artifact.history.find(
+        (event) => event.event === 'await_send' && event.phase === 'completed',
+      ),
+    ).toMatchObject({
+      at: 250,
+      outcome: 'passed',
+    });
+  });
+
+  it('fails scenarios that start a send without awaiting it', async () => {
+    const result = await new ScenarioRunner(new FakeDriver()).run(
+      {
+        name: 'missing-await',
+        commands: [
+          { type: 'start_send', operationId: 'op-1', sender: 'sender-a', requestId: 'request-1' },
+        ],
+      },
+      'seed-missing-await',
+    );
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected failed scenario');
+    expect(result.error.message).toBe('Scenario operation op-1 was not awaited');
   });
 });

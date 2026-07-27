@@ -23,6 +23,13 @@ describe('validateScenarioSpec', () => {
         commands: [
           ...validScenario.commands,
           { type: 'advance_time', milliseconds: 5_000 },
+          {
+            type: 'start_send',
+            operationId: 'op-1',
+            sender: 'reference',
+            requestId: 'AAECAwQFBgcICQoLDA0ODw',
+          },
+          { type: 'await_send', operationId: 'op-1' },
           { type: 'clear_faults', target: 'http' },
           { type: 'restart', component: 'receiver' },
         ],

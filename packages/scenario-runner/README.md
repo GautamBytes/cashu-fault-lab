@@ -14,6 +14,7 @@ Orchestrates sender/receiver pairs, injects transport faults (drop, delay, dupli
 - **External adapter** — `ExternalAdapterScenarioDriver`, `HttpExternalFaultController`
 - **Compatibility matrix** — `CompatibilityMatrix`, `runExternalDeliveryPair`
 - **Replay** — `assertReplayableArtifact`, `minimizeFailingCommands` (delta-debugging)
+- **Virtual time** — `VirtualScheduler` and `advance_time` support deterministic delayed work
 
 ## Scenario JSON schema
 
@@ -33,7 +34,9 @@ Orchestrates sender/receiver pairs, injects transport faults (drop, delay, dupli
 }
 ```
 
-Command types: `configure_fault`, `send`, `restart`, `advance_time`, `clear_faults`, `assert_quiescent`.
+Command types: `configure_fault`, `send`, `start_send`, `await_send`, `restart`, `advance_time`, `clear_faults`, `assert_quiescent`.
+
+Use `start_send` plus `await_send` when a restart or time advance must happen while a delivery is in flight. The runner validates operation IDs during execution and the shrinker keeps dependent `start_send`/`await_send` pairs together.
 
 ## Tests
 

@@ -1,6 +1,7 @@
 import type { DeliveryReceiptWire } from '@cashu-fault-lab/delivery-core';
 
 export type EvidenceTier = 'T0' | 'T1' | 'T2' | 'T3';
+export type AdapterDurability = 'process-local' | 'persistent';
 export type AdapterTransport = 'http' | 'nostr';
 export type AdapterEncoding = 'creqA' | 'creqB';
 export type AdapterRole = 'sender' | 'receiver';
@@ -18,6 +19,7 @@ export interface AdapterCapabilities {
   readonly nuts: readonly number[];
   readonly transports: readonly AdapterTransport[];
   readonly evidenceTier: EvidenceTier;
+  readonly durability?: AdapterDurability;
   readonly encodings?: readonly AdapterEncoding[];
   readonly profiles?: readonly AdapterProfileCapability[];
 }

@@ -23,6 +23,7 @@
         "nuts": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
         "transports": { "type": "array", "items": { "type": "string" } },
         "evidenceTier": { "type": "string" },
+        "durability": { "type": "string" },
         "sender": { "type": "string" },
         "receiver": { "type": "string" }
       }

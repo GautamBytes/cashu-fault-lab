@@ -25,6 +25,7 @@ export {
 export type {
   AdapterCapabilities,
   AdapterClient,
+  AdapterDurability,
   AdapterEncoding,
   AdapterProfileCapability,
   AdapterRequestOperation,

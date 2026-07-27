@@ -188,6 +188,45 @@ describe('runDoctor', () => {
     });
   });
 
+  it('reports cashu-ts sender durability readiness from explicit PostgreSQL key config', async () => {
+    const stateKey = Buffer.alloc(32, 4).toString('base64url');
+    const report = await runDoctor({
+      env: {
+        ...healthyEnv,
+        CFL_CASHU_TS_SENDER_DATABASE_URL: 'postgresql://cashu:cashu@127.0.0.1:5432/lab',
+        CFL_CASHU_TS_SENDER_RUN_ID: 'run-1',
+        CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION: '1',
+        CFL_CASHU_TS_SENDER_STATE_KEYS: `1:${stateKey}`,
+      },
+      execFile: healthyExec(),
+      isPortFree: async () => true,
+    });
+
+    expect(report.checks).toContainEqual({
+      name: 'cashu-ts sender durability',
+      status: 'ok',
+      detail: 'PostgreSQL sender state configured for run run-1',
+    });
+  });
+
+  it('fails cashu-ts sender durability when PostgreSQL mode is partially configured', async () => {
+    const report = await runDoctor({
+      env: {
+        ...healthyEnv,
+        CFL_CASHU_TS_SENDER_DATABASE_URL: 'postgresql://cashu:cashu@127.0.0.1:5432/lab',
+      },
+      execFile: healthyExec(),
+      isPortFree: async () => true,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.checks).toContainEqual({
+      name: 'cashu-ts sender durability',
+      status: 'fail',
+      detail: 'missing CFL_CASHU_TS_SENDER_RUN_ID',
+    });
+  });
+
   it('uses safe defaults when called without probes', async () => {
     const probesDefault = probes();
     expect(probesDefault.env).toEqual({});

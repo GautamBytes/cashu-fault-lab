@@ -6,6 +6,7 @@ import {
 import {
   AdapterNotApplicableError,
   type AdapterCapabilities,
+  type AdapterDurability,
   type AdapterTransport,
   type DeliveryReceiptView,
   type LedgerCreditView,
@@ -15,10 +16,12 @@ import {
 import {
   assertReceiptTransition,
   computePayloadHash,
+  noopCrashCheckpoint,
   normalizeMintUrl,
   parseDeliveryReceipt,
   parseProtocolId,
   serializeDeliveryPayload,
+  type CrashCheckpoint,
   type CashuProof,
   type DeliveryPayload,
 } from '@cashu-fault-lab/delivery-core';
@@ -65,10 +68,12 @@ export interface CashuTsStoredDelivery {
   readonly unit: string;
   readonly amount: number;
   readonly receipt?: DeliveryReceiptView;
+  readonly proofEvidence?: ProofEvidenceView;
   readonly settledMarked: boolean;
 }
 
 export interface CashuTsDeliveryStore {
+  readonly durability?: AdapterDurability;
   reset(seed: string): Promise<void>;
   get(deliveryId: string): Promise<CashuTsStoredDelivery | undefined>;
   put(record: CashuTsStoredDelivery): Promise<void>;
@@ -84,10 +89,19 @@ function cloneRecord(record: CashuTsStoredDelivery): CashuTsStoredDelivery {
       ...(transport.tags === undefined ? {} : { tags: transport.tags.map((tag) => [...tag]) }),
     })),
     ...(record.receipt === undefined ? {} : { receipt: structuredClone(record.receipt) }),
+    ...(record.proofEvidence === undefined
+      ? {}
+      : {
+          proofEvidence: {
+            ...record.proofEvidence,
+            inputYs: [...record.proofEvidence.inputYs],
+          },
+        }),
   };
 }
 
 export class MemoryCashuTsDeliveryStore implements CashuTsDeliveryStore {
+  readonly durability = 'process-local' as const;
   readonly #records = new Map<string, CashuTsStoredDelivery>();
 
   async reset(): Promise<void> {
@@ -113,6 +127,7 @@ export interface FundedCashuTsOperationsOptions {
   readonly transport: CashuTsTransportPort;
   readonly store?: CashuTsDeliveryStore;
   readonly now: () => number;
+  readonly crashCheckpoint?: CrashCheckpoint;
   readonly supportedTransports?: readonly AdapterTransport[];
 }
 
@@ -236,6 +251,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
   readonly #transport: CashuTsTransportPort;
   readonly #store: CashuTsDeliveryStore;
   readonly #now: () => number;
+  readonly #crashCheckpoint: CrashCheckpoint;
   readonly #supportedTransports: readonly AdapterTransport[];
   readonly #inflight = new Map<string, InflightSend>();
   #seed = '';
@@ -246,6 +262,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
     this.#transport = options.transport;
     this.#store = options.store ?? new MemoryCashuTsDeliveryStore();
     this.#now = options.now;
+    this.#crashCheckpoint = options.crashCheckpoint ?? noopCrashCheckpoint;
     this.#supportedTransports = supportedTransports(options.supportedTransports);
   }
 
@@ -256,6 +273,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
       nuts: [3, 7, 18],
       transports: this.#supportedTransports,
       evidenceTier: 'T1',
+      durability: this.#store.durability ?? 'process-local',
       encodings: ['creqA', 'creqB'],
       profiles: [
         {
@@ -285,7 +303,6 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
   }
 
   async send(input: SendPaymentInput): Promise<DeliveryReceiptView> {
-    if (this.#seed.length === 0) throw new Error('Cashu funded adapter must be reset first');
     const parsed = parseRequest(input.request);
     const transports = parsed.transports.filter((transport) =>
       this.#supportedTransports.includes(adapterTransport(transport)),
@@ -295,7 +312,10 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
     }
     const request: ParsedRequest = { ...parsed, transports };
     const requestFingerprint = fingerprint(input.request, input.memo);
-    const deliveryId = input.deliveryId ?? protocolId(this.#seed, request.id, this.#ordinal++);
+    const deliveryId =
+      input.deliveryId === undefined
+        ? this.#nextDeliveryId(request.id)
+        : parseProtocolId(input.deliveryId);
     parseProtocolId(deliveryId);
     const inflight = this.#inflight.get(deliveryId);
     if (inflight !== undefined) {
@@ -313,6 +333,13 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
     }
   }
 
+  #nextDeliveryId(requestId: string): string {
+    if (this.#seed.length === 0) {
+      throw new Error('Cashu funded adapter must be reset first');
+    }
+    return protocolId(this.#seed, requestId, this.#ordinal++);
+  }
+
   async #sendOnce(
     input: SendPaymentInput,
     request: ParsedRequest,
@@ -324,12 +351,18 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
       throw new Error('Delivery ID is already bound to another payment request');
     }
     if (record === undefined) {
+      if (this.#seed.length === 0) throw new Error('Cashu funded adapter must be reset first');
       const now = this.#now();
       if (!Number.isSafeInteger(now) || now < 0) throw new Error('Cashu adapter time is invalid');
+      await this.#crashCheckpoint.hit('sender_before_proof_reservation', deliveryId);
       const reserved = await this.#wallet.reserve(
         request.amount,
         request.unit,
         request.mints,
+        deliveryId,
+      );
+      await this.#crashCheckpoint.hit(
+        'sender_after_reservation_before_payload_persistence',
         deliveryId,
       );
       const mint = normalizeMintUrl(reserved.mint);
@@ -350,6 +383,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
         },
       };
       const payloadBytes = serializeDeliveryPayload(payload);
+      const proofEvidence = await this.#wallet.evidence(deliveryId);
       record = {
         deliveryId,
         requestId: request.id,
@@ -370,10 +404,15 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
         amount: request.amount,
         transports: request.transports,
         attempts: 0,
+        proofEvidence,
         settledMarked: false,
       };
       // Persist the proof-bearing exact bytes before the first network attempt.
       await this.#store.put(record);
+      await this.#crashCheckpoint.hit(
+        'sender_after_payload_persistence_before_network_send',
+        deliveryId,
+      );
     }
 
     const selectedTarget =
@@ -391,17 +430,31 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
     } catch {
       throw new Error('Cashu payment delivery failed');
     }
+    await this.#crashCheckpoint.hit('sender_after_send_before_response', deliveryId);
     assertReceiptIdentity(receipt, record);
     const parsedReceipt = parseDeliveryReceipt(receipt);
     if (record.receipt !== undefined) {
       assertReceiptTransition(parseDeliveryReceipt(record.receipt), parsedReceipt);
     }
     let settledMarked = record.settledMarked;
+    let proofEvidence = record.proofEvidence;
     if (parsedReceipt.status === 'settled' && !settledMarked) {
-      await this.#wallet.markSettled(deliveryId);
+      try {
+        await this.#wallet.markSettled(deliveryId);
+      } catch (error) {
+        if (proofEvidence === undefined) throw error;
+      }
       settledMarked = true;
+      if (proofEvidence !== undefined) {
+        proofEvidence = { ...proofEvidence, inputYs: [...proofEvidence.inputYs], state: 'spent' };
+      }
     }
-    const updated: CashuTsStoredDelivery = { ...record, receipt, settledMarked };
+    const updated: CashuTsStoredDelivery = {
+      ...record,
+      receipt,
+      ...(proofEvidence === undefined ? {} : { proofEvidence }),
+      settledMarked,
+    };
     await this.#store.put(updated);
     return receipt;
   }
@@ -421,6 +474,15 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
 
   async proofs(): Promise<readonly ProofEvidenceView[]> {
     const records = await this.#store.list();
-    return Promise.all(records.map((record) => this.#wallet.evidence(record.deliveryId)));
+    return Promise.all(
+      records.map((record) =>
+        record.proofEvidence === undefined
+          ? this.#wallet.evidence(record.deliveryId)
+          : {
+              ...record.proofEvidence,
+              inputYs: [...record.proofEvidence.inputYs],
+            },
+      ),
+    );
   }
 }

@@ -1,21 +1,15 @@
+import { type AdapterClient, type AdapterTransport } from '@cashu-fault-lab/adapter-contract';
+import type { Observation } from '@cashu-fault-lab/oracle';
 import {
-  AdapterClientError,
-  AdapterNotApplicableError,
-  type AdapterClient,
-  type AdapterTransport,
-  type LedgerCreditView,
-  type PaymentRequestView,
-  type ProofEvidenceView,
-} from '@cashu-fault-lab/adapter-contract';
-import {
-  assertReceiptTransition,
-  parseDeliveryReceipt,
-  type DeliveryReceipt,
-} from '@cashu-fault-lab/delivery-core';
+  DirectExternalFaultController,
+  ExternalAdapterScenarioDriver,
+} from './external-adapter-driver.js';
 import type { MatrixExecutionResult } from './matrix.js';
-import { seededProtocolId } from './seeded-fixture.js';
+import { ScenarioRunner, type FailureArtifact, type ScenarioError } from './runner.js';
 
 const DELIVERY_PROFILE = 'delivery-v1';
+const SCENARIO_SENDER = 'external-sender';
+const SCENARIO_REQUEST = 'external-request';
 
 export interface ExternalDeliveryPairInput {
   readonly profile: string;
@@ -34,68 +28,111 @@ function failure(code: string, reason: string): MatrixExecutionResult {
   return { ok: false, code, reason };
 }
 
-function positiveSafeInteger(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new Error(`${name} must be a positive safe integer`);
-  }
-  return value;
+function observations(artifact: FailureArtifact): readonly Observation[] {
+  return artifact.history.flatMap((event) => {
+    if (event.phase !== 'observation') return [];
+    const value = event.data as Observation;
+    return typeof value?.type === 'string' ? [value] : [];
+  });
 }
 
-function executionFailure(stage: string, error: unknown): MatrixExecutionResult {
-  if (error instanceof AdapterClientError) {
+function proofState(value: string | undefined): string | undefined {
+  if (value === 'UNSPENT') return 'unspent';
+  if (value === 'PENDING') return 'pending';
+  if (value === 'SPENT') return 'spent';
+  return undefined;
+}
+
+function passedEvidence(
+  artifact: FailureArtifact,
+  seed: string,
+  transports: readonly AdapterTransport[],
+): MatrixExecutionResult {
+  const all = observations(artifact);
+  const receipt = all
+    .filter((observation) => observation.type === 'receipt_observed')
+    .sort((left, right) =>
+      left.type === 'receipt_observed' && right.type === 'receipt_observed'
+        ? right.version - left.version
+        : 0,
+    )[0];
+  const creditCount = all.filter((observation) => observation.type === 'merchant_credited').length;
+  const proof = all.find((observation) => observation.type === 'mint_proofs_state');
+  const delivery = all.find((observation) => observation.type === 'delivery_attempted');
+  if (
+    receipt?.type !== 'receipt_observed' ||
+    proof?.type !== 'mint_proofs_state' ||
+    delivery?.type !== 'delivery_attempted'
+  ) {
+    return failure(
+      'ADAPTER_INVARIANT_CONFORMANCE',
+      'Scenario runner did not produce required conformance evidence',
+    );
+  }
+  return {
+    ok: true,
+    evidence: {
+      tier: 'T1',
+      requestId: receipt.requestId,
+      deliveryId: receipt.deliveryId,
+      payloadHash: receipt.payloadHash,
+      receiptVersion: receipt.version,
+      credits: creditCount,
+      proofSetHash: delivery.proofSetHash,
+      proofState: proofState(proof.state),
+      transports,
+      seed,
+    },
+  };
+}
+
+function failedResult(error: ScenarioError): MatrixExecutionResult {
+  if (error.name === 'AdapterNotApplicableError') return { ok: null, reason: error.message };
+  if (/request does not match/i.test(error.message)) {
+    return failure(
+      'ADAPTER_REQUEST_IDENTITY',
+      'Receiver request does not match the requested payment',
+    );
+  }
+  if (/receipt.*(scenario payment|identit)/i.test(error.message)) {
+    return failure(
+      'ADAPTER_RECEIPT_IDENTITY',
+      'Sender or receiver receipt does not match the requested payment',
+    );
+  }
+  if (/transition/i.test(error.message)) {
+    return failure(
+      'ADAPTER_RECEIPT_TRANSITION',
+      'Receiver receipt is not a valid progression from the sender receipt',
+    );
+  }
+  if (/settled state/i.test(error.message)) {
+    return failure('ADAPTER_RECEIPT_NOT_SETTLED', 'Receiver did not report a settled payment');
+  }
+  if (/merchant credit/i.test(error.message)) {
+    return failure(
+      'ADAPTER_LEDGER_EVIDENCE',
+      'Receiver must report exactly one matching merchant credit',
+    );
+  }
+  if (/proof/i.test(error.message)) {
+    return failure(
+      'ADAPTER_PROOF_EVIDENCE',
+      'Receiver must report exactly one spent input proof set',
+    );
+  }
+  if (/oracle safety violation/i.test(error.message)) {
+    return failure('ADAPTER_INVARIANT_CONFORMANCE', error.message);
+  }
+  if (/External sender did not return a receipt after retry attempts: /i.test(error.message)) {
     return failure(
       'ADAPTER_PAIR_EXECUTION',
-      `External adapter pair execution failed during ${stage}: ${error.code} ${error.message}`,
+      `External adapter pair execution failed during sender send${error.message.slice(
+        error.message.indexOf(':'),
+      )}`,
     );
   }
   return failure('ADAPTER_PAIR_EXECUTION', 'External adapter pair execution failed');
-}
-
-function transportViewTypes(request: PaymentRequestView): ReadonlySet<AdapterTransport> {
-  return new Set(
-    request.transports.map((transport) => (transport.type === 'post' ? 'http' : 'nostr')),
-  );
-}
-
-function requestMatches(
-  input: ExternalDeliveryPairInput,
-  request: PaymentRequestView,
-  transports: readonly AdapterTransport[],
-): boolean {
-  return (
-    request.amount === input.amount &&
-    request.unit === input.unit &&
-    request.singleUse &&
-    transports.every((transport) => transportViewTypes(request).has(transport))
-  );
-}
-
-function sameReceiptIdentity(left: DeliveryReceipt, right: DeliveryReceipt): boolean {
-  return (
-    left.profile === right.profile &&
-    left.requestId === right.requestId &&
-    left.deliveryId === right.deliveryId &&
-    left.payloadHash === right.payloadHash &&
-    left.mint === right.mint &&
-    left.unit === right.unit &&
-    left.amount === right.amount
-  );
-}
-
-function relatedCredits(
-  credits: readonly LedgerCreditView[],
-  receipt: DeliveryReceipt,
-): readonly LedgerCreditView[] {
-  return credits.filter(
-    (credit) => credit.requestId === receipt.requestId || credit.deliveryId === receipt.deliveryId,
-  );
-}
-
-function relatedProofs(
-  proofs: readonly ProofEvidenceView[],
-  deliveryId: string,
-): readonly ProofEvidenceView[] {
-  return proofs.filter((proof) => proof.deliveryId === deliveryId);
 }
 
 export async function runExternalDeliveryPair(
@@ -105,138 +142,41 @@ export async function runExternalDeliveryPair(
     return { ok: null, reason: `External pair profile ${input.profile} is not supported` };
   }
 
+  const transports: AdapterTransport[] = [...new Set(input.transports ?? (['http'] as const))];
+  if (
+    transports.length < 1 ||
+    transports.some((transport) => transport !== 'http' && transport !== 'nostr')
+  ) {
+    return failure('ADAPTER_TRANSPORT_SELECTION', 'External pair transport selection is invalid');
+  }
+
   try {
-    const maxAttempts = positiveSafeInteger(input.maxAttempts ?? 3, 'maxAttempts');
-    const retryDelayMs = positiveSafeInteger(input.retryDelayMs ?? 100, 'retryDelayMs');
-    const sleep =
-      input.sleep ??
-      ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
-    const transports: AdapterTransport[] = [...new Set(input.transports ?? (['http'] as const))];
-    if (
-      transports.length < 1 ||
-      transports.some((transport) => transport !== 'http' && transport !== 'nostr')
-    ) {
-      return failure('ADAPTER_TRANSPORT_SELECTION', 'External pair transport selection is invalid');
-    }
-    await input.receiver.reset(input.seed);
-    await input.sender.reset(input.seed);
-    const senderCapabilities = await input.sender.capabilities();
-
-    const request = await input.receiver.createRequest({
-      amount: input.amount,
-      unit: input.unit,
-      transports,
-      singleUse: true,
-      expiresIn: 900,
-    });
-    if (!requestMatches(input, request, transports)) {
-      return failure(
-        'ADAPTER_REQUEST_IDENTITY',
-        'Receiver request does not match the requested payment',
-      );
-    }
-
-    const deliveryId = seededProtocolId(
-      input.seed,
-      `external-delivery:${senderCapabilities.implementation}:${request.id}`,
-    );
-    let sent: DeliveryReceipt | undefined;
-    let lastSendError: unknown;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      try {
-        sent = parseDeliveryReceipt(await input.sender.send({ request: request.raw, deliveryId }));
-        break;
-      } catch (error) {
-        if (error instanceof AdapterNotApplicableError) throw error;
-        lastSendError = error;
-        if (attempt + 1 === maxAttempts) return executionFailure('sender send', lastSendError);
-        await sleep(Math.min(retryDelayMs * 2 ** attempt, 5_000));
-      }
-    }
-    if (sent === undefined) {
-      return failure('ADAPTER_PAIR_EXECUTION', 'External adapter pair execution failed');
-    }
-    if (
-      sent.requestId !== request.id ||
-      sent.deliveryId !== deliveryId ||
-      sent.amount !== request.amount ||
-      sent.unit !== request.unit
-    ) {
-      return failure(
-        'ADAPTER_RECEIPT_IDENTITY',
-        'Sender receipt does not match the receiver request',
-      );
-    }
-
-    const observed = parseDeliveryReceipt(await input.receiver.delivery(sent.deliveryId));
-    if (!sameReceiptIdentity(sent, observed)) {
-      return failure(
-        'ADAPTER_RECEIPT_IDENTITY',
-        'Receiver receipt conflicts with the sender receipt',
-      );
-    }
-    try {
-      assertReceiptTransition(sent, observed);
-    } catch {
-      return failure(
-        'ADAPTER_RECEIPT_TRANSITION',
-        'Receiver receipt is not a valid progression from the sender receipt',
-      );
-    }
-    if (observed.status !== 'settled') {
-      return failure('ADAPTER_RECEIPT_NOT_SETTLED', 'Receiver did not report a settled payment');
-    }
-
-    const credits = relatedCredits(await input.receiver.ledger(), observed);
-    const credit = credits[0];
-    if (
-      credits.length !== 1 ||
-      credit === undefined ||
-      credit.requestId !== observed.requestId ||
-      credit.deliveryId !== observed.deliveryId ||
-      credit.amount !== observed.amount ||
-      credit.unit !== observed.unit ||
-      credit.creditCount !== 1
-    ) {
-      return failure(
-        'ADAPTER_LEDGER_EVIDENCE',
-        'Receiver must report exactly one matching merchant credit',
-      );
-    }
-
-    const proofs = relatedProofs(await input.receiver.proofs(), observed.deliveryId);
-    const proof = proofs[0];
-    if (
-      proofs.length !== 1 ||
-      proof === undefined ||
-      proof.state !== 'spent' ||
-      proof.inputYs.length === 0
-    ) {
-      return failure(
-        'ADAPTER_PROOF_EVIDENCE',
-        'Receiver must report exactly one spent input proof set',
-      );
-    }
-
-    return {
-      ok: true,
-      evidence: {
-        tier: 'T1',
-        requestId: observed.requestId,
-        deliveryId: observed.deliveryId,
-        payloadHash: observed.payloadHash,
-        receiptVersion: observed.statusVersion,
-        credits: credit.creditCount,
-        proofSetHash: proof.proofSetHash,
-        proofState: proof.state,
+    const runner = new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender: input.sender,
+        receiver: input.receiver,
+        faults: new DirectExternalFaultController(),
+        amount: input.amount,
+        unit: input.unit,
         transports,
-        seed: input.seed,
+        ...(input.maxAttempts === undefined ? {} : { maxAttempts: input.maxAttempts }),
+        ...(input.retryDelayMs === undefined ? {} : { retryDelayMs: input.retryDelayMs }),
+        ...(input.sleep === undefined ? {} : { sleep: input.sleep }),
+        senderAlias: SCENARIO_SENDER,
+        requestAlias: SCENARIO_REQUEST,
+      }),
+    );
+    const result = await runner.run(
+      {
+        name: 'external-delivery-pair',
+        commands: [{ type: 'send', sender: SCENARIO_SENDER, requestId: SCENARIO_REQUEST }],
       },
-    };
-  } catch (error) {
-    if (error instanceof AdapterNotApplicableError) {
-      return { ok: null, reason: error.reason };
-    }
-    return executionFailure('setup or evidence collection', error);
+      input.seed,
+    );
+    return result.status === 'passed'
+      ? passedEvidence(result.artifact, input.seed, transports)
+      : failedResult(result.error);
+  } catch {
+    return failure('ADAPTER_PAIR_EXECUTION', 'External adapter pair execution failed');
   }
 }

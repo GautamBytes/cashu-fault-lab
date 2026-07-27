@@ -43,6 +43,22 @@ describe('VirtualScheduler', () => {
     expect(() => scheduler.runUntilIdle(10)).toThrowError(/limit/i);
   });
 
+  it('resolves virtual sleeps only after explicit advancement reaches the deadline', async () => {
+    const events: string[] = [];
+    const scheduler = new VirtualScheduler(100);
+    const slept = scheduler.sleep(25).then(() => events.push(`slept:${scheduler.now}`));
+
+    await Promise.resolve();
+    expect(events).toEqual([]);
+    scheduler.advanceBy(24);
+    await Promise.resolve();
+    expect(events).toEqual([]);
+    scheduler.advanceBy(1);
+    await slept;
+
+    expect(events).toEqual(['slept:125']);
+  });
+
   it('rejects invalid virtual timestamps', () => {
     expect(() => new VirtualScheduler(-1)).toThrowError(/time/i);
     const scheduler = new VirtualScheduler();

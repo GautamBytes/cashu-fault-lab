@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { buildFundedCashuTsAdapterServer } from './funded-server.js';
 import { createPostgresCashuTsReceiverStore } from './postgres-receiver-store.js';
+import {
+  createPostgresCashuTsSenderStore,
+  parseCashuTsSenderStateKeys,
+} from './postgres-sender-store.js';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -65,6 +69,25 @@ const paymentTarget =
     ? undefined
     : (process.env.CFL_CASHU_TS_PAYMENT_TARGET ?? `http://127.0.0.1:${port}/pay`);
 const receiverDatabaseUrl = process.env.CFL_CASHU_TS_RECEIVER_DATABASE_URL;
+const senderDatabaseUrl = process.env.CFL_CASHU_TS_SENDER_DATABASE_URL;
+const durableSender =
+  senderDatabaseUrl === undefined || senderDatabaseUrl.length === 0
+    ? undefined
+    : await createPostgresCashuTsSenderStore({
+        connectionString: senderDatabaseUrl,
+        runId: required('CFL_CASHU_TS_SENDER_RUN_ID'),
+        keyRing: parseCashuTsSenderStateKeys({
+          activeKeyVersion: positiveInteger(
+            process.env.CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION,
+            0,
+            'CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION',
+          ),
+          encodedKeys: required('CFL_CASHU_TS_SENDER_STATE_KEYS'),
+        }),
+        ...(process.env.CFL_CASHU_TS_SENDER_TENANT_ID === undefined
+          ? {}
+          : { tenantId: process.env.CFL_CASHU_TS_SENDER_TENANT_ID }),
+      });
 const durableReceiver =
   receiverDatabaseUrl === undefined || receiverDatabaseUrl.length === 0
     ? undefined
@@ -85,6 +108,7 @@ const app = await buildFundedCashuTsAdapterServer({
   ),
   ...(proofClaimKey === undefined ? {} : { proofClaimKey }),
   ...(paymentTarget === undefined ? {} : { paymentTarget }),
+  ...(durableSender === undefined ? {} : { store: durableSender.store }),
   ...(durableReceiver === undefined ? {} : { receiverStore: durableReceiver.store }),
   ...(senderNostrPrivateKey === undefined ? {} : { senderNostrPrivateKey }),
   ...(receiverNostrPrivateKey === undefined ? {} : { receiverNostrPrivateKey }),
@@ -93,6 +117,7 @@ const app = await buildFundedCashuTsAdapterServer({
 
 const close = async (): Promise<void> => {
   await app.close();
+  await durableSender?.pool.end();
   await durableReceiver?.pool.end();
   process.exitCode = 0;
 };

@@ -42,6 +42,7 @@ export interface ReportCapabilities {
   readonly nuts?: readonly number[];
   readonly transports?: readonly string[];
   readonly evidenceTier?: string;
+  readonly durability?: string;
   readonly sender?: string;
   readonly receiver?: string;
 }
@@ -85,6 +86,15 @@ function commandView(
       };
     case 'send':
       return { type: command.type, sender: command.sender, requestId: command.requestId };
+    case 'start_send':
+      return {
+        type: command.type,
+        operationId: command.operationId,
+        sender: command.sender,
+        requestId: command.requestId,
+      };
+    case 'await_send':
+      return { type: command.type, operationId: command.operationId };
     case 'restart':
       return { type: command.type, component: command.component };
     case 'advance_time':
@@ -152,6 +162,7 @@ function capabilitiesView(value: FailureArtifact['capabilities']): ReportCapabil
   const implementation = stringField(value.implementation);
   const version = stringField(value.version);
   const evidenceTier = stringField(value.evidenceTier);
+  const durability = stringField(value.durability);
   const sender = stringField(value.sender);
   const receiver = stringField(value.receiver);
   const nuts = Array.isArray(value.nuts)
@@ -166,6 +177,7 @@ function capabilitiesView(value: FailureArtifact['capabilities']): ReportCapabil
     ...(nuts ? { nuts } : {}),
     ...(transports ? { transports } : {}),
     ...(evidenceTier ? { evidenceTier } : {}),
+    ...(durability ? { durability } : {}),
     ...(sender ? { sender } : {}),
     ...(receiver ? { receiver } : {}),
   };
