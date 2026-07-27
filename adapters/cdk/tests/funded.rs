@@ -257,10 +257,9 @@ async fn exposes_funded_sender_over_authenticated_http_contract() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = to_bytes(response.into_body(), 16_384).await.unwrap();
     let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(value["evidenceTier"], "T1");
-    assert!(value["profiles"].as_array().unwrap().iter().any(|profile| {
-        profile["name"] == "delivery-v1"
-            && profile["roles"] == json!(["sender"])
-            && profile["status"] == "supported"
-    }));
+    assert_eq!(value["schemaVersion"], 2);
+    assert_eq!(value["implementation"]["id"], "cdk");
+    assert_eq!(value["roles"]["sender"]["evidence"]["tier"], "T1");
+    assert_eq!(value["roles"]["sender"]["profiles"], json!(["delivery-v1"]));
+    assert!(value["roles"].get("receiver").is_none());
 }

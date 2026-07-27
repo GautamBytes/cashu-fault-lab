@@ -16,7 +16,17 @@ describe('template adapter', () => {
     const body = response.json();
     expect(body.implementation).toBe('template');
     expect(body.nuts).toEqual([18]);
-    expect(body.evidenceTier).toBe('T0');
+    expect(body).toMatchObject({
+      schemaVersion: 2,
+      implementation: { id: 'template' },
+      roles: {
+        sender: {
+          profiles: ['template'],
+          durability: 'process',
+          evidence: { tier: 'T0', sources: ['adapter'] },
+        },
+      },
+    });
   });
 
   it('rejects requests without a valid bearer token', async () => {

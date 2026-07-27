@@ -21,16 +21,13 @@ fn vectors() -> Vec<Vector> {
 #[test]
 fn publishes_honest_legacy_capabilities() {
     let value = capabilities();
-    assert_eq!(value.implementation, "cdk");
-    assert_eq!(value.version, "0.17.3");
-    assert_eq!(value.evidence_tier, "T0");
+    assert_eq!(value.schema_version, 2);
+    assert_eq!(value.implementation.id, "cdk");
+    assert_eq!(value.implementation.version, "0.17.3");
     assert_eq!(value.encodings, ["creqA", "creqB"]);
-    assert!(
-        value
-            .profiles
-            .iter()
-            .any(|profile| profile.name == "delivery-v1" && profile.status == "unsupported")
-    );
+    let sender = value.roles.sender.expect("sender role must be declared");
+    assert_eq!(sender.evidence.tier, "T0");
+    assert!(!sender.profiles.contains(&"delivery-v1".to_owned()));
 }
 
 #[test]

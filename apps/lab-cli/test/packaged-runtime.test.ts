@@ -10,6 +10,30 @@ async function scenario(path: string): Promise<ScenarioSpec> {
   ) as ScenarioSpec;
 }
 
+function externalCapability(sender: boolean): AdapterCapabilities {
+  const role = sender ? 'sender' : 'receiver';
+  return {
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id: sender ? 'wallet-sender' : 'wallet-receiver',
+      version: '1.0.0',
+      language: 'typescript',
+      runtime: 'node-24',
+    }),
+    roles: {
+      [role]: {
+        transports: ['http'],
+        profiles: ['delivery-v1'],
+        durability: 'persistent',
+        evidence: { tier: 'T1', sources: ['adapter', 'runner', 'transport'] },
+      },
+    },
+    nuts: [3, 7, 18],
+    encodings: ['creqA'],
+    mints: [],
+  };
+}
+
 describe('PackagedLabRuntime', () => {
   it('restarts one adapter service without converging its shared Compose dependencies', async () => {
     const invocations: Array<{ readonly file: string; readonly args: readonly string[] }> = [];
@@ -54,7 +78,10 @@ describe('PackagedLabRuntime', () => {
         (event) => event.phase === 'observation' && event.event === 'merchant_credited',
       ),
     ).toHaveLength(1);
-    expect(first.artifact.capabilities).toMatchObject({ evidenceTier: 'T0' });
+    expect(first.artifact.capabilities).toMatchObject({
+      sender: 'reference-ts',
+      receiver: 'reference-ts',
+    });
 
     const replayed = await runtime.replay(first.artifact);
     expect(replayed.status).toBe('passed');
@@ -132,21 +159,7 @@ describe('PackagedLabRuntime', () => {
       const sender = url.port === '4101';
       const body = (() => {
         if (url.pathname === '/v1/capabilities') {
-          return {
-            implementation: sender ? 'wallet-sender' : 'wallet-receiver',
-            version: '1.0.0',
-            nuts: [3, 7, 18],
-            transports: ['http'],
-            evidenceTier: 'T1',
-            encodings: ['creqA'],
-            profiles: [
-              {
-                name: 'delivery-v1',
-                roles: [sender ? 'sender' : 'receiver'],
-                status: 'supported',
-              },
-            ],
-          };
+          return externalCapability(sender);
         }
         if (url.pathname === '/v1/reset') return { ok: true };
         if (url.pathname === '/v1/requests') {
@@ -228,7 +241,16 @@ describe('PackagedLabRuntime', () => {
       },
     );
     expect(scenarioResult.status).toBe('passed');
-    expect(scenarioResult.artifact.capabilities).toMatchObject({ evidenceTier: 'T1' });
+    expect(scenarioResult.artifact.capabilities).toMatchObject({
+      sender: {
+        implementation: { id: 'wallet-sender' },
+        role: { evidence: { tier: 'T1' } },
+      },
+      receiver: {
+        implementation: { id: 'wallet-receiver' },
+        role: { evidence: { tier: 'T1' } },
+      },
+    });
   });
 
   it('maps external restart commands to the selected adapter services', async () => {
@@ -265,21 +287,7 @@ describe('PackagedLabRuntime', () => {
       const sender = url.port === '4101';
       const body = (() => {
         if (url.pathname === '/v1/capabilities') {
-          return {
-            implementation: sender ? 'wallet-sender' : 'wallet-receiver',
-            version: '1.0.0',
-            nuts: [3, 7, 18],
-            transports: ['http'],
-            evidenceTier: 'T1',
-            encodings: ['creqA'],
-            profiles: [
-              {
-                name: 'delivery-v1',
-                roles: [sender ? 'sender' : 'receiver'],
-                status: 'supported',
-              },
-            ],
-          };
+          return externalCapability(sender);
         }
         if (url.pathname === '/v1/reset') return { ok: true };
         if (url.pathname === '/v1/requests') {
@@ -610,3 +618,4 @@ describe('PackagedLabRuntime', () => {
     await expect(runtime.shrink(passing.artifact)).rejects.toThrow(/cannot be minimized/i);
   });
 });
+import { developmentIdentity, type AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';

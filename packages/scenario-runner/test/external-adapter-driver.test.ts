@@ -1,5 +1,6 @@
 import {
   AdapterClientError,
+  developmentIdentity,
   type AdapterCapabilities,
   type AdapterClient,
   type CreateRequestInput,
@@ -20,13 +21,24 @@ const requestId = 'AAECAwQFBgcICQoLDA0ODw';
 
 function capability(id: string, role: 'sender' | 'receiver'): AdapterCapabilities {
   return {
-    implementation: id,
-    version: '1.0.0',
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id,
+      version: '1.0.0',
+      language: 'typescript',
+      runtime: 'node-24',
+    }),
+    roles: {
+      [role]: {
+        transports: ['http'],
+        profiles: ['delivery-v1'],
+        durability: 'persistent',
+        evidence: { tier: 'T1', sources: ['adapter', 'runner', 'transport'] },
+      },
+    },
     nuts: [3, 7, 18],
-    transports: ['http'],
-    evidenceTier: 'T1',
     encodings: ['creqA'],
-    profiles: [{ name: 'delivery-v1', roles: [role], status: 'supported' }],
+    mints: [],
   };
 }
 

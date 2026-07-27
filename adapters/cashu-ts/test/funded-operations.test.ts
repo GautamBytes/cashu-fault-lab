@@ -138,16 +138,20 @@ describe('FundedCashuTsOperations', () => {
     try {
       const capabilities = (await app.inject({ method: 'GET', url: '/v1/capabilities' })).json();
       expect(capabilities).toMatchObject({
-        implementation: 'cashu-ts',
-        evidenceTier: 'T1',
-        profiles: expect.arrayContaining([
-          {
-            name: 'delivery-v1',
-            roles: ['sender'],
-            status: 'supported',
+        schemaVersion: 2,
+        implementation: { id: 'cashu-ts', version: '4.7.2' },
+        roles: {
+          sender: {
+            profiles: ['delivery-v1'],
+            durability: 'persistent',
+            evidence: {
+              tier: 'T1',
+              sources: ['adapter', 'runner', 'transport', 'durable_state'],
+            },
           },
-        ]),
+        },
       });
+      expect(capabilities.roles).not.toHaveProperty('receiver');
       const ledger = await app.inject({ method: 'GET', url: '/v1/ledger' });
       expect(ledger.json()).toEqual({
         status: 'N/A',

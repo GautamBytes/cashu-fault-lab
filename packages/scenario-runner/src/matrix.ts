@@ -42,14 +42,9 @@ function unsupportedReason(
   participant: MatrixParticipant,
   role: AdapterRole,
 ): string | undefined {
-  const capability = participant.capabilities.profiles?.find(
-    (candidate) => candidate.name === profile && candidate.roles.includes(role),
-  );
-  if (!capability) return `${participant.id}: ${profile} ${role} capability is not declared`;
-  if (capability.status === 'unsupported') {
-    return `${participant.id}: ${capability.reason ?? `${profile} ${role} is unsupported`}`;
-  }
-  return undefined;
+  const capability = participant.capabilities.roles[role];
+  if (capability?.profiles.includes(profile)) return undefined;
+  return `${participant.id}: ${profile} ${role} capability is not declared`;
 }
 
 export class CompatibilityMatrix {

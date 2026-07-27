@@ -7,6 +7,7 @@ import type {
   ProofEvidenceView,
   SendPaymentInput,
 } from '@cashu-fault-lab/adapter-contract';
+import { developmentIdentity } from '@cashu-fault-lab/adapter-contract';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 const UNAUTH = { statusCode: 401, error: 'Unauthorized' } as const;
@@ -29,20 +30,24 @@ export function createAdapterServer(options: AdapterServerOptions): FastifyInsta
   // GET /v1/capabilities — Declare implementation identity and supported profiles.
   server.get('/v1/capabilities', async (_request, reply) => {
     const capabilities: AdapterCapabilities = {
-      implementation: 'template',
-      version: '0.0.0',
-      nuts: [18],
-      transports: ['http'],
-      evidenceTier: 'T0',
-      encodings: ['creqA'],
-      profiles: [
-        {
-          name: 'delivery-v1',
-          roles: ['sender'],
-          status: 'unsupported',
-          reason: 'Replace with your real wallet implementation',
+      schemaVersion: 2,
+      implementation: developmentIdentity({
+        id: 'template',
+        version: '0.0.0',
+        language: 'typescript',
+        runtime: 'node-24',
+      }),
+      roles: {
+        sender: {
+          transports: ['http'],
+          profiles: ['template'],
+          durability: 'process',
+          evidence: { tier: 'T0', sources: ['adapter'] },
         },
-      ],
+      },
+      nuts: [18],
+      encodings: ['creqA'],
+      mints: [],
     };
     return reply.send(capabilities);
   });

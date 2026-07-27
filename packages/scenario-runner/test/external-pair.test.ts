@@ -1,6 +1,7 @@
 import {
   AdapterClientError,
   AdapterNotApplicableError,
+  developmentIdentity,
   type AdapterCapabilities,
   type AdapterClient,
   type CreateRequestInput,
@@ -60,13 +61,27 @@ const proof: ProofEvidenceView = {
 
 function capabilities(implementation: string, role: 'sender' | 'receiver'): AdapterCapabilities {
   return {
-    implementation,
-    version: '1.0.0',
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id: implementation,
+      version: '1.0.0',
+      language: 'typescript',
+      runtime: 'node-24',
+    }),
+    roles: {
+      [role]: {
+        transports: ['http'],
+        profiles: ['delivery-v1'],
+        durability: role === 'sender' ? 'persistent' : 'restart_safe',
+        evidence: {
+          tier: role === 'sender' ? 'T1' : 'T3',
+          sources: role === 'sender' ? ['adapter', 'runner'] : ['adapter', 'durable_ledger'],
+        },
+      },
+    },
     nuts: [3, 7, 18],
-    transports: ['http'],
-    evidenceTier: role === 'sender' ? 'T1' : 'T3',
     encodings: ['creqA'],
-    profiles: [{ name: 'delivery-v1', roles: [role], status: 'supported' }],
+    mints: [],
   };
 }
 

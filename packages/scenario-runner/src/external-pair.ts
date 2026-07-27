@@ -138,7 +138,7 @@ export async function runExternalDeliveryPair(
 
     const deliveryId = seededProtocolId(
       input.seed,
-      `external-delivery:${senderCapabilities.implementation}:${request.id}`,
+      `external-delivery:${senderCapabilities.implementation.id}:${request.id}`,
     );
     let sent: DeliveryReceipt | undefined;
     let lastSendError: unknown;
