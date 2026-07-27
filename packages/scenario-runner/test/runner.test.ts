@@ -118,6 +118,17 @@ describe('ScenarioRunner', () => {
     const result = await runner.run(scenario, 'seed-1');
 
     expect(result.status).toBe('passed');
+    expect(result.artifact.schemaVersion).toBe(2);
+    expect(result.artifact.invariants).toHaveLength(18);
+    expect(
+      result.artifact.invariants.find(
+        (item) => item.id === 'at-most-one-merchant-credit-per-delivery',
+      ),
+    ).toMatchObject({
+      status: 'passed',
+      confidence: 'observed',
+      evidence: [expect.objectContaining({ source: 'ledger' })],
+    });
     expect(result.artifact.seed).toBe('seed-1');
     expect(result.artifact.scenario).toBe('http-response-loss');
     expect(result.artifact.history.map((event) => event.sequence)).toEqual(

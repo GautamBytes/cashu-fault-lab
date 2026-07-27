@@ -27,15 +27,18 @@ describe('FundedReceiverAdapterControl', () => {
     const decoded = PaymentRequest.fromEncodedRequest(request.raw);
 
     expect(await control.capabilities()).toMatchObject({
-      implementation: 'reference-receiver',
-      evidenceTier: 'T1',
-      profiles: expect.arrayContaining([
-        {
-          name: 'delivery-v1',
-          roles: ['receiver'],
-          status: 'supported',
+      schemaVersion: 2,
+      implementation: { id: 'reference-receiver' },
+      roles: {
+        receiver: {
+          profiles: ['delivery-v1'],
+          durability: 'process',
+          evidence: {
+            tier: 'T1',
+            sources: ['adapter', 'runner', 'transport', 'mint'],
+          },
         },
-      ]),
+      },
     });
     expect(request).toMatchObject({ amount: 8, unit: 'sat', singleUse: true });
     expect(request.raw).toMatch(/^creqA[A-Za-z0-9_-]+$/);

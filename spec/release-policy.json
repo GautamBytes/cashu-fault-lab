@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "profile": "delivery-v1",
+  "minimumQualifyingPairs": 2,
+  "requireCrossImplementation": true,
+  "requireCrossLanguage": true,
+  "requireDistinctBuilds": true,
+  "minimumDistinctMints": 2,
+  "minimumEvidence": {
+    "sender": "T1",
+    "receiver": "T3"
+  },
+  "requiredInvariants": [
+    "at-most-once-redemption-start",
+    "at-most-one-merchant-credit-per-request",
+    "at-most-one-merchant-credit-per-delivery",
+    "proof-set-exclusivity",
+    "delivery-identity-immutability",
+    "stable-duplicate-response",
+    "crash-recovery",
+    "retry-convergence",
+    "independent-mint-evidence",
+    "independent-ledger-evidence",
+    "reproducibility",
+    "no-unsupported-pass"
+  ],
+  "acceptedConfidence": ["observed", "derived"]
+}

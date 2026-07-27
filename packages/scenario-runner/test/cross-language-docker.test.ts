@@ -297,7 +297,19 @@ describe.skipIf(!mintUrl)('real funded cross-language delivery', () => {
       });
       expect(direct, `sender=${index} ${JSON.stringify(direct)} ${cdkErrors}`).toMatchObject({
         ok: true,
-        evidence: { tier: 'T1', credits: 1 },
+        evidence: { credits: 1 },
+        invariants: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'at-most-one-merchant-credit-per-delivery',
+            status: 'passed',
+            confidence: 'adapter_claimed',
+          }),
+          expect.objectContaining({
+            id: 'independent-mint-evidence',
+            status: 'passed',
+            confidence: 'adapter_claimed',
+          }),
+        ]),
       });
 
       for (const scenario of [responseLost, duplicateDelivery]) {

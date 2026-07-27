@@ -1,4 +1,9 @@
-import type { AdapterCapabilities, AdapterRole } from '@cashu-fault-lab/adapter-contract';
+import type {
+  AdapterCapabilities,
+  AdapterMintIdentity,
+  AdapterRole,
+} from '@cashu-fault-lab/adapter-contract';
+import type { InvariantResult } from '@cashu-fault-lab/oracle';
 
 export interface MatrixParticipant {
   readonly id: string;
@@ -6,7 +11,12 @@ export interface MatrixParticipant {
 }
 
 export type MatrixExecutionResult =
-  | { readonly ok: true; readonly evidence?: Readonly<Record<string, unknown>> }
+  | {
+      readonly ok: true;
+      readonly evidence?: Readonly<Record<string, unknown>>;
+      readonly invariants?: readonly InvariantResult[];
+      readonly mints?: readonly AdapterMintIdentity[];
+    }
   | { readonly ok: null; readonly reason: string }
   | { readonly ok: false; readonly code: string; readonly reason: string };
 
@@ -25,6 +35,10 @@ interface MatrixCaseIdentity {
 export type MatrixCaseResult =
   | (MatrixCaseIdentity & {
       readonly status: 'passed';
+      readonly senderCapabilities: AdapterCapabilities;
+      readonly receiverCapabilities: AdapterCapabilities;
+      readonly invariants: readonly InvariantResult[];
+      readonly mints: readonly AdapterMintIdentity[];
       readonly evidence?: Readonly<Record<string, unknown>>;
     })
   | (MatrixCaseIdentity & {
@@ -42,14 +56,9 @@ function unsupportedReason(
   participant: MatrixParticipant,
   role: AdapterRole,
 ): string | undefined {
-  const capability = participant.capabilities.profiles?.find(
-    (candidate) => candidate.name === profile && candidate.roles.includes(role),
-  );
-  if (!capability) return `${participant.id}: ${profile} ${role} capability is not declared`;
-  if (capability.status === 'unsupported') {
-    return `${participant.id}: ${capability.reason ?? `${profile} ${role} is unsupported`}`;
-  }
-  return undefined;
+  const capability = participant.capabilities.roles[role];
+  if (capability?.profiles.includes(profile)) return undefined;
+  return `${participant.id}: ${profile} ${role} capability is not declared`;
 }
 
 export class CompatibilityMatrix {
@@ -103,6 +112,10 @@ export class CompatibilityMatrix {
           results.push({
             ...identity,
             status: 'passed',
+            senderCapabilities: structuredClone(sender.capabilities),
+            receiverCapabilities: structuredClone(receiver.capabilities),
+            invariants: structuredClone(execution.invariants ?? []),
+            mints: structuredClone(execution.mints ?? []),
             ...(execution.evidence === undefined ? {} : { evidence: execution.evidence }),
           });
           continue;

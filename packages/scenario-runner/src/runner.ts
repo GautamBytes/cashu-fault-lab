@@ -3,9 +3,13 @@ import {
   assertQuiescentLiveness,
   assertSafety,
   emptyOracleModel,
+  evaluateInvariants,
+  type InvariantResult,
+  type EvidenceConfidence,
   type Observation,
   type OracleModel,
 } from '@cashu-fault-lab/oracle';
+import { isDeepStrictEqual } from 'node:util';
 import { containsSensitiveData, HistoryRecorder, redact, type HistoryEvent } from './history.js';
 import { assertReplayableArtifact, minimizeFailingCommands } from './replay.js';
 import { VirtualScheduler } from './scheduler.js';
@@ -41,6 +45,7 @@ export interface DriverSendResult {
 }
 
 export interface ScenarioDriver {
+  readonly observationConfidence?: Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>;
   reset(seed: string): Promise<void>;
   capabilities(): Promise<Readonly<Record<string, unknown>>>;
   configureFault(target: string, rule: FaultRule): Promise<void>;
@@ -51,12 +56,13 @@ export interface ScenarioDriver {
 }
 
 export interface FailureArtifact {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly seed: string;
   readonly scenario: string;
   readonly commands: readonly ScenarioCommand[];
   readonly history: readonly HistoryEvent[];
   readonly capabilities: Readonly<Record<string, unknown>>;
+  readonly invariants: readonly InvariantResult[];
   readonly componentVersions?: Readonly<Record<string, string>>;
   readonly imageDigests?: Readonly<Record<string, string>>;
 }
@@ -113,10 +119,25 @@ function metadataRecord(value: unknown): Readonly<Record<string, string>> {
 function versionedComponent(value: unknown, prefix?: string): readonly [string, string][] {
   if (!isRecord(value)) return [];
   const implementation = value.implementation;
-  const version = value.version;
-  if (typeof implementation !== 'string' || implementation.length === 0) return [];
-  if (typeof version !== 'string' || version.length === 0) return [];
-  return [[prefix ? `${prefix}/${implementation}` : implementation, version]];
+  if (typeof implementation === 'string') {
+    const version = value.version;
+    if (implementation.length === 0 || typeof version !== 'string' || version.length === 0) {
+      return [];
+    }
+    return [[prefix ? `${prefix}/${implementation}` : implementation, version]];
+  }
+  if (!isRecord(implementation)) return [];
+  const id = implementation.id;
+  const version = implementation.version;
+  if (
+    typeof id !== 'string' ||
+    id.length === 0 ||
+    typeof version !== 'string' ||
+    version.length === 0
+  ) {
+    return [];
+  }
+  return [[prefix ? `${prefix}/${id}` : id, version]];
 }
 
 function componentVersionsFromCapabilities(
@@ -213,14 +234,30 @@ export class ScenarioRunner {
       }
     }
 
+    const snapshot = history.snapshot();
+    const componentVersions = componentVersionsFromCapabilities(capabilities);
     const artifact: FailureArtifact = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       seed,
       scenario: spec.name,
       commands: structuredClone(spec.commands),
-      history: history.snapshot(),
+      history: snapshot,
       capabilities,
-      componentVersions: componentVersionsFromCapabilities(capabilities),
+      invariants: evaluateInvariants({
+        model: oracle,
+        history: snapshot,
+        commands: spec.commands,
+        capabilities,
+        metadata: {
+          scenarioId: spec.name,
+          seed,
+          componentVersions,
+        },
+        ...(this.#driver.observationConfidence === undefined
+          ? {}
+          : { observationConfidence: this.#driver.observationConfidence }),
+      }),
+      componentVersions,
       imageDigests: imageDigestsFromCapabilities(capabilities),
     };
     return failure
@@ -230,7 +267,14 @@ export class ScenarioRunner {
 
   async replay(artifact: FailureArtifact): Promise<ScenarioRunResult> {
     assertReplayableArtifact(artifact);
-    return this.run({ name: artifact.scenario, commands: artifact.commands }, artifact.seed);
+    const result = await this.run(
+      { name: artifact.scenario, commands: artifact.commands },
+      artifact.seed,
+    );
+    if (!isDeepStrictEqual(result.artifact.invariants, artifact.invariants)) {
+      throw new Error('Recorded invariant evidence does not reproduce');
+    }
+    return result;
   }
 
   async shrink(artifact: FailureArtifact, runLimit = 100): Promise<FailureArtifact> {

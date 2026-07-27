@@ -23,6 +23,7 @@ import {
   type SenderWallet,
 } from '@cashu-fault-lab/reference-sender';
 import { createHash } from 'node:crypto';
+import { referenceCapabilities } from '../src/reference-capabilities.js';
 import { readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -162,12 +163,7 @@ class HttpE2eDriver implements ScenarioDriver {
   }
 
   async capabilities(): Promise<Readonly<Record<string, unknown>>> {
-    return {
-      sender: 'reference',
-      receiver: 'reference',
-      transports: ['http'],
-      evidenceTier: 'T3',
-    };
+    return referenceCapabilities(['http']);
   }
 
   async configureFault(target: string, rule: FaultRule): Promise<void> {

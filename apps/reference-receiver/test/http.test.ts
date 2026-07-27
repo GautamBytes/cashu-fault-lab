@@ -1,10 +1,11 @@
 import { serializeDeliveryPayload } from '@cashu-fault-lab/delivery-core';
-import type {
-  AdapterCapabilities,
-  CreateRequestInput,
-  LedgerCreditView,
-  PaymentRequestView,
-  ProofEvidenceView,
+import {
+  developmentIdentity,
+  type AdapterCapabilities,
+  type CreateRequestInput,
+  type LedgerCreditView,
+  type PaymentRequestView,
+  type ProofEvidenceView,
 } from '@cashu-fault-lab/adapter-contract';
 import type { DeliveryReceiptWire } from '@cashu-fault-lab/delivery-core';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -197,11 +198,24 @@ class FakeAdapterControl implements ReceiverAdapterControl {
 
   async capabilities(): Promise<AdapterCapabilities> {
     return {
-      implementation: 'reference-receiver',
-      version: '0.0.0',
+      schemaVersion: 2,
+      implementation: developmentIdentity({
+        id: 'reference-receiver',
+        version: '0.0.0',
+        language: 'typescript',
+        runtime: 'node-24',
+      }),
+      roles: {
+        receiver: {
+          transports: ['http'],
+          profiles: ['delivery-v1'],
+          durability: 'restart_safe',
+          evidence: { tier: 'T3', sources: ['adapter', 'durable_ledger'] },
+        },
+      },
       nuts: [18],
-      transports: ['http'],
-      evidenceTier: 'T3',
+      encodings: ['creqA'],
+      mints: [],
     };
   }
 

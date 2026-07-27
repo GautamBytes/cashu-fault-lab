@@ -22,17 +22,27 @@ export {
   HttpAdapterClient,
   type HttpAdapterClientOptions,
 } from './http-client.js';
+export {
+  developmentIdentity,
+  isDevelopmentIdentity,
+  type DevelopmentIdentityInput,
+} from './identity.js';
 export type {
   AdapterCapabilities,
   AdapterClient,
   AdapterEncoding,
-  AdapterProfileCapability,
+  AdapterImplementationIdentity,
+  AdapterMintIdentity,
   AdapterRequestOperation,
   AdapterResponseOperation,
   AdapterRole,
+  AdapterRoleCapability,
+  AdapterRoleEvidence,
   AdapterTransport,
   CreateRequestInput,
   DeliveryReceiptView,
+  DurabilityLevel,
+  EvidenceSource,
   EvidenceTier,
   LedgerCreditView,
   PaymentRequestView,

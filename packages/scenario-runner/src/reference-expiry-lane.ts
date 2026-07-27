@@ -33,6 +33,7 @@ import {
   type ScenarioRunResult,
   type ScenarioSpec,
 } from './runner.js';
+import { referenceCapabilities } from './reference-capabilities.js';
 import { seededProtocolId, seededSecret } from './seeded-fixture.js';
 
 const BASE_NOW = 1_784_399_400;
@@ -174,10 +175,7 @@ class ExpiryDriver implements ScenarioDriver {
 
   async capabilities(): Promise<Readonly<Record<string, unknown>>> {
     return {
-      sender: 'reference-ts',
-      receiver: 'reference-ts',
-      transports: ['http'],
-      evidenceTier: 'T0',
+      ...referenceCapabilities(['http']),
       feature: 'expiry',
     };
   }

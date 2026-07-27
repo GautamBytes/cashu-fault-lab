@@ -1,5 +1,6 @@
 import {
   AdapterClientError,
+  developmentIdentity,
   type AdapterCapabilities,
   type AdapterClient,
   type CreateRequestInput,
@@ -20,13 +21,24 @@ const requestId = 'AAECAwQFBgcICQoLDA0ODw';
 
 function capability(id: string, role: 'sender' | 'receiver'): AdapterCapabilities {
   return {
-    implementation: id,
-    version: '1.0.0',
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id,
+      version: '1.0.0',
+      language: 'typescript',
+      runtime: 'node-24',
+    }),
+    roles: {
+      [role]: {
+        transports: ['http'],
+        profiles: ['delivery-v1'],
+        durability: 'persistent',
+        evidence: { tier: 'T1', sources: ['adapter', 'runner', 'transport'] },
+      },
+    },
     nuts: [3, 7, 18],
-    transports: ['http'],
-    evidenceTier: 'T1',
     encodings: ['creqA'],
-    profiles: [{ name: 'delivery-v1', roles: [role], status: 'supported' }],
+    mints: [],
   };
 }
 
@@ -237,6 +249,11 @@ describe('ExternalAdapterScenarioDriver', () => {
     );
     expect(attempts).toHaveLength(2);
     expect(new Set(attempts.map((attempt) => JSON.stringify(attempt.data))).size).toBe(1);
+    expect(
+      result.artifact.invariants.find(
+        (item) => item.id === 'at-most-one-merchant-credit-per-delivery',
+      ),
+    ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
   });
 
   it('backs off deterministically between transient delivery failures', async () => {

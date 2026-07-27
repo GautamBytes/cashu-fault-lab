@@ -25,8 +25,9 @@ paths:
       summary: Declare adapter capabilities
       operationId: getCapabilities
       description: |
-        Returns the adapter's identity, supported NUTs, transports, evidence tier,
-        encodings, and profile declarations. Called once at startup by the lab.
+        Returns schema-v2 implementation provenance, role-specific transport,
+        durability and evidence claims, supported NUTs/encodings, and mint identities.
+        Called once at startup by the lab.
       responses:
         '200':
           description: Adapter capabilities
@@ -35,16 +36,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdapterCapabilities'
               example:
-                implementation: 'my-wallet'
-                version: '1.2.3'
+                schemaVersion: 2
+                implementation:
+                  id: 'my-wallet'
+                  version: '1.2.3'
+                  language: 'rust'
+                  runtime: 'rust-1.97'
+                  sourceDigest: 'sha256:abababababababababababababababababababababababababababababababab'
+                  buildDigest: 'sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd'
+                roles:
+                  sender:
+                    transports: ['http', 'nostr']
+                    profiles: ['delivery-v1']
+                    durability: 'persistent'
+                    evidence:
+                      tier: 'T1'
+                      sources: ['adapter', 'runner', 'transport']
                 nuts: [18, 3, 7, 9, 19]
-                transports: ['http', 'nostr']
-                evidenceTier: 'T1'
                 encodings: ['creqA']
-                profiles:
-                  - name: 'delivery-v1'
-                    roles: ['sender']
-                    status: 'supported'
+                mints:
+                  - id: 'nutshell-local'
+                    implementation: 'nutshell'
+                    version: '0.17.0'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -298,16 +311,43 @@ components:
   schemas:
     AdapterCapabilities:
       type: object
-      required: [implementation, version, nuts, transports, evidenceTier]
+      required: [schemaVersion, implementation, roles, nuts, encodings, mints]
       properties:
+        schemaVersion:
+          type: integer
+          const: 2
         implementation:
-          type: string
-          minLength: 1
-          description: Stable implementation identifier
-        version:
-          type: string
-          minLength: 1
-          description: Exact version of the adapter
+          type: object
+          required: [id, version, language, runtime, sourceDigest, buildDigest]
+          properties:
+            id:
+              type: string
+              pattern: '^[a-z0-9][a-z0-9._-]{0,127}$'
+            version:
+              type: string
+              minLength: 1
+            language:
+              type: string
+              pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
+            runtime:
+              type: string
+              pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
+            sourceDigest:
+              type: string
+              pattern: '^sha256:(?!([0-9a-f])\1{63}$)[0-9a-f]{64}$'
+            buildDigest:
+              type: string
+              pattern: '^sha256:(?!([0-9a-f])\1{63}$)[0-9a-f]{64}$'
+          additionalProperties: false
+        roles:
+          type: object
+          minProperties: 1
+          properties:
+            sender:
+              $ref: '#/components/schemas/AdapterRoleCapability'
+            receiver:
+              $ref: '#/components/schemas/AdapterRoleCapability'
+          additionalProperties: false
         nuts:
           type: array
           uniqueItems: true
@@ -315,51 +355,68 @@ components:
             type: integer
             minimum: 0
           description: Supported NUT numbers (e.g. 18, 3, 7, 9, 19)
-        transports:
-          type: array
-          uniqueItems: true
-          items:
-            type: string
-            enum: ['http', 'nostr']
-          description: Supported transport protocols
-        evidenceTier:
-          type: string
-          enum: ['T0', 'T1', 'T2', 'T3']
-          description: Highest evidence tier the adapter passes
         encodings:
           type: array
+          minItems: 1
           uniqueItems: true
           items:
             type: string
             enum: ['creqA', 'creqB']
           description: Supported payment request encodings
-        profiles:
+        mints:
           type: array
           items:
             type: object
-            required: [name, roles, status]
+            required: [id, implementation]
             properties:
-              name:
+              id:
+                type: string
+                pattern: '^[a-z0-9][a-z0-9._-]{0,127}$'
+              implementation:
+                type: string
+                pattern: '^[a-z0-9][a-z0-9._-]{0,127}$'
+              version:
                 type: string
                 minLength: 1
-                description: Profile name (e.g. "delivery-v1")
-              roles:
-                type: array
-                minItems: 1
-                uniqueItems: true
-                items:
-                  type: string
-                  enum: ['sender', 'receiver']
-                description: Roles supported for this profile
-              status:
-                type: string
-                enum: ['supported', 'unsupported']
-                description: Whether the profile is fully implemented
-              reason:
-                type: string
-                minLength: 1
-                description: Reason for unsupported status
             additionalProperties: false
+      additionalProperties: false
+
+    AdapterRoleCapability:
+      type: object
+      required: [transports, profiles, durability, evidence]
+      properties:
+        transports:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: ['http', 'nostr']
+        profiles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
+        durability:
+          type: string
+          enum: ['process', 'persistent', 'restart_safe']
+        evidence:
+          type: object
+          required: [tier, sources]
+          properties:
+            tier:
+              type: string
+              enum: ['T0', 'T1', 'T2', 'T3']
+            sources:
+              type: array
+              minItems: 1
+              uniqueItems: true
+              items:
+                type: string
+                enum: ['adapter', 'runner', 'transport', 'mint', 'durable_ledger', 'durable_state']
+          additionalProperties: false
       additionalProperties: false
 
     CreateRequestInput:

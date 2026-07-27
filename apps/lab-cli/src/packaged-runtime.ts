@@ -1,4 +1,9 @@
-import type { AdapterCapabilities, AdapterTransport } from '@cashu-fault-lab/adapter-contract';
+import {
+  developmentIdentity,
+  type AdapterCapabilities,
+  type AdapterRoleCapability,
+  type AdapterTransport,
+} from '@cashu-fault-lab/adapter-contract';
 import {
   CompatibilityMatrix,
   DirectExternalFaultController,
@@ -15,6 +20,7 @@ import {
   runReferenceExpiryScenario,
   runReferenceConflictScenario,
   runReferenceNut19Scenario,
+  unobservableInvariantResults,
   type FailureArtifact,
   type ExternalFaultController,
   type MatrixCaseResult,
@@ -97,31 +103,30 @@ export class DockerComposeServiceController implements LabServiceController {
   }
 }
 
-function profile(
-  name: string,
-  status: 'supported' | 'unsupported',
-  reason?: string,
-): NonNullable<AdapterCapabilities['profiles']>[number] {
+function role(profiles: readonly string[]): AdapterRoleCapability {
   return {
-    name,
-    roles: ['sender', 'receiver'],
-    status,
-    ...(reason === undefined ? {} : { reason }),
+    transports: ['http', 'nostr'],
+    profiles,
+    durability: 'process',
+    evidence: { tier: 'T0', sources: ['adapter'] },
   };
 }
 
 const referenceCapabilities: AdapterCapabilities = {
-  implementation: 'reference-ts',
-  version: '0.0.0',
+  schemaVersion: 2,
+  implementation: developmentIdentity({
+    id: 'reference-ts',
+    version: '0.0.0',
+    language: 'typescript',
+    runtime: 'node-24',
+  }),
+  roles: {
+    sender: role(['legacy-nut18', 'delivery-v1']),
+    receiver: role(['legacy-nut18', 'delivery-v1']),
+  },
   nuts: [2, 3, 7, 9, 10, 12, 18, 19],
-  transports: ['http', 'nostr'],
-  evidenceTier: 'T0',
   encodings: ['creqA'],
-  profiles: [
-    profile('legacy-nut18', 'supported'),
-    profile('delivery-v1', 'supported'),
-    profile('nut26-nostr', 'unsupported', 'Reference adapter does not implement creqB'),
-  ],
+  mints: [],
 };
 
 function upstreamCapabilities(
@@ -129,21 +134,20 @@ function upstreamCapabilities(
   version: string,
 ): AdapterCapabilities {
   return {
-    implementation,
-    version,
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id: implementation,
+      version,
+      language: implementation === 'cdk' ? 'rust' : 'typescript',
+      runtime: implementation === 'cdk' ? 'native' : 'node-24',
+    }),
+    roles: {
+      sender: role(['legacy-nut18', 'nut26-nostr']),
+      receiver: role(['legacy-nut18', 'nut26-nostr']),
+    },
     nuts: [18, 26],
-    transports: ['http', 'nostr'],
-    evidenceTier: 'T0',
     encodings: ['creqA', 'creqB'],
-    profiles: [
-      profile('legacy-nut18', 'supported'),
-      profile(
-        'delivery-v1',
-        'unsupported',
-        `${implementation} does not implement the experimental receipt/idempotency profile`,
-      ),
-      profile('nut26-nostr', 'supported'),
-    ],
+    mints: [],
   };
 }
 
@@ -179,12 +183,15 @@ function failedScenario(scenario: ScenarioSpec, seed: string, message: string): 
     status: 'failed',
     error: { name: 'Error', message },
     artifact: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       seed,
       scenario: scenario.name,
       commands: scenario.commands,
       history: [],
       capabilities: {},
+      invariants: unobservableInvariantResults(
+        'Scenario setup failed before invariant evidence could be collected.',
+      ),
     },
   });
 }

@@ -35,6 +35,14 @@ export {
   type MatrixParticipant,
 } from './matrix.js';
 export {
+  evaluateReleasePolicy,
+  validateReleasePolicy,
+  type ReleaseGateReason,
+  type ReleaseGateReasonCode,
+  type ReleaseGateResult,
+  type ReleasePolicy,
+} from './release-policy.js';
+export {
   ScenarioRunner,
   type DriverSendResult,
   type FailureArtifact,
@@ -46,3 +54,11 @@ export {
   type ScenarioSpec,
 } from './runner.js';
 export { VirtualScheduler, type ScheduledHandle } from './scheduler.js';
+export { INVARIANT_REGISTRY, unobservableInvariantResults } from '@cashu-fault-lab/oracle';
+export type {
+  EvidenceConfidence,
+  InvariantEvidenceReference,
+  InvariantId,
+  InvariantResult,
+  InvariantStatus,
+} from '@cashu-fault-lab/oracle';

@@ -24,9 +24,17 @@ pnpm lab run scenarios/retry/response-lost.json --verbose
 # Compatibility matrix for delivery-v1 profile
 pnpm lab matrix --profile delivery-v1 --verbose
 
+# Provenance-aware release gate
+pnpm lab matrix --profile delivery-v1 \
+  --release-policy spec/release-policy.json
+
 # Generate JUnit report
 pnpm lab report artifacts/latest.json --format junit --output result.xml
 ```
+
+`--min-passes` remains a developer convenience. `--release-policy` validates the policy before
+starting adapters, evaluates every passing pair's identities, evidence tiers, mint provenance, and
+invariant evidence, then exits nonzero with stable rejection codes when the gate is not satisfied.
 
 ## Key exports
 

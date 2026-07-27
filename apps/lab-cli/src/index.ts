@@ -9,8 +9,11 @@ import {
 import { validateScenarioSpec } from '@cashu-fault-lab/adapter-contract';
 import {
   assertReplayableArtifact,
+  evaluateReleasePolicy,
+  validateReleasePolicy,
   type FailureArtifact,
   type MatrixCaseResult,
+  type ReleasePolicy,
   type ScenarioRunResult,
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
@@ -156,6 +159,14 @@ async function readAdapterManifest(
 ): Promise<AdapterManifest | undefined> {
   if (path === undefined) return undefined;
   return parseAdapterManifest(json(await io.readText(path)));
+}
+
+async function readReleasePolicy(
+  io: CliIo,
+  path: string | undefined,
+): Promise<ReleasePolicy | undefined> {
+  if (path === undefined) return undefined;
+  return validateReleasePolicy(json(await io.readText(path)));
 }
 
 function elapsed(start: number): string {
@@ -364,6 +375,7 @@ export async function runCli(
     )
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .option('--min-passes <count>', 'minimum passing pairs required')
+    .option('--release-policy <path>', 'release policy JSON file')
     .option('--adapters <path>', 'external adapter manifest')
     .addOption(
       new Option('--format <format>', 'report format for full matrix output')
@@ -377,6 +389,7 @@ export async function runCli(
         profile: string;
         seed: string;
         minPasses?: string;
+        releasePolicy?: string;
         adapters?: string;
         format: 'text' | 'json' | 'junit' | 'html';
         output?: string;
@@ -386,11 +399,19 @@ export async function runCli(
         if (!Number.isSafeInteger(minimum) || minimum < 0 || minimum > 10_000) {
           throw new Error('Minimum matrix passes must be a nonnegative safe integer');
         }
+        const releasePolicy = await readReleasePolicy(io, options.releasePolicy);
+        if (releasePolicy !== undefined && releasePolicy.profile !== options.profile) {
+          throw new Error(
+            `Release policy profile ${releasePolicy.profile} does not match matrix profile ${options.profile}`,
+          );
+        }
         verboseLine(options.verbose, io, `profile: ${options.profile}`);
         verboseLine(options.verbose, io, `seed: ${options.seed}`);
         const start = Date.now();
         const adapterManifest = await readAdapterManifest(io, options.adapters);
         const results = await runtime.matrix(options.profile, options.seed, adapterManifest);
+        const releaseGate =
+          releasePolicy === undefined ? undefined : evaluateReleasePolicy(releasePolicy, results);
 
         if (options.verbose || options.format === 'text') {
           for (const result of results) {
@@ -409,8 +430,21 @@ export async function runCli(
           io.stdout(
             `matrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A, ${expected} expected-failure (${elapsed(start)})\n`,
           );
+          if (releaseGate !== undefined) {
+            io.stdout(`release gate: ${releaseGate.passed ? 'passed' : 'failed'}\n`);
+            for (const reason of releaseGate.reasons) {
+              io.stderr(
+                `release gate ${reason.code}${reason.pair === undefined ? '' : ` [${reason.pair}]`}: ${reason.message}\n`,
+              );
+            }
+          }
         } else {
-          const matrixInput = { profile: options.profile, seed: options.seed, results };
+          const matrixInput = {
+            profile: options.profile,
+            seed: options.seed,
+            results,
+            ...(releaseGate === undefined ? {} : { releaseGate }),
+          };
           const rendered =
             options.format === 'html'
               ? renderMatrixHtml(matrixInput)
@@ -421,6 +455,7 @@ export async function runCli(
           else io.stdout(rendered);
         }
         if (failed > 0) exitCode = 1;
+        if (releaseGate !== undefined && !releaseGate.passed) exitCode = 1;
         if (passed < minimum) {
           io.stderr(
             `matrix ${options.profile} requires at least ${minimum} passing pairs; observed ${passed}\n`,
