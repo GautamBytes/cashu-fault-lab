@@ -4,22 +4,47 @@ export type EvidenceTier = 'T0' | 'T1' | 'T2' | 'T3';
 export type AdapterTransport = 'http' | 'nostr';
 export type AdapterEncoding = 'creqA' | 'creqB';
 export type AdapterRole = 'sender' | 'receiver';
+export type EvidenceSource =
+  'adapter' | 'runner' | 'transport' | 'mint' | 'durable_ledger' | 'durable_state';
+export type DurabilityLevel = 'process' | 'persistent' | 'restart_safe';
 
-export interface AdapterProfileCapability {
-  readonly name: string;
-  readonly roles: readonly AdapterRole[];
-  readonly status: 'supported' | 'unsupported';
-  readonly reason?: string;
+export interface AdapterImplementationIdentity {
+  readonly id: string;
+  readonly version: string;
+  readonly language: string;
+  readonly runtime: string;
+  readonly sourceDigest: string;
+  readonly buildDigest: string;
+}
+
+export interface AdapterRoleEvidence {
+  readonly tier: EvidenceTier;
+  readonly sources: readonly EvidenceSource[];
+}
+
+export interface AdapterRoleCapability {
+  readonly transports: readonly AdapterTransport[];
+  readonly profiles: readonly string[];
+  readonly durability: DurabilityLevel;
+  readonly evidence: AdapterRoleEvidence;
+}
+
+export interface AdapterMintIdentity {
+  readonly id: string;
+  readonly implementation: string;
+  readonly version?: string;
 }
 
 export interface AdapterCapabilities {
-  readonly implementation: string;
-  readonly version: string;
+  readonly schemaVersion: 2;
+  readonly implementation: AdapterImplementationIdentity;
+  readonly roles: {
+    readonly sender?: AdapterRoleCapability;
+    readonly receiver?: AdapterRoleCapability;
+  };
   readonly nuts: readonly number[];
-  readonly transports: readonly AdapterTransport[];
-  readonly evidenceTier: EvidenceTier;
-  readonly encodings?: readonly AdapterEncoding[];
-  readonly profiles?: readonly AdapterProfileCapability[];
+  readonly encodings: readonly AdapterEncoding[];
+  readonly mints: readonly AdapterMintIdentity[];
 }
 
 export interface ResetInput {

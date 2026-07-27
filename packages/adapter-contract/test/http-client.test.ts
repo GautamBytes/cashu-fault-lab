@@ -18,13 +18,26 @@ const receipt = (
 ).vectors[0]!.receipt;
 
 const capabilities = {
-  implementation: 'fixture-wallet',
-  version: '1.0.0',
+  schemaVersion: 2,
+  implementation: {
+    id: 'fixture-wallet',
+    version: '1.0.0',
+    language: 'typescript',
+    runtime: 'node-24',
+    sourceDigest: `sha256:${'a'.repeat(64)}`,
+    buildDigest: `sha256:${'b'.repeat(64)}`,
+  },
+  roles: {
+    sender: {
+      transports: ['http'],
+      profiles: ['delivery-v1'],
+      durability: 'persistent',
+      evidence: { tier: 'T1', sources: ['adapter', 'runner', 'transport'] },
+    },
+  },
   nuts: [18],
-  transports: ['http'],
-  evidenceTier: 'T1',
   encodings: ['creqA'],
-  profiles: [{ name: 'delivery-v1', roles: ['sender'], status: 'supported' }],
+  mints: [{ id: 'fixture-mint', implementation: 'fixture' }],
 } as const;
 
 const servers: Array<ReturnType<typeof createServer>> = [];
