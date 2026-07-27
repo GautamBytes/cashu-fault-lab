@@ -2,16 +2,33 @@ import { describe, expect, it } from 'vitest';
 import { parseAdapterManifest } from '../src/adapter-manifest.js';
 import { ExternalAdapterRegistry } from '../src/adapter-registry.js';
 
-function capability(implementation: string, version: string) {
+function capability(implementation: string, version: string): AdapterCapabilities {
   return {
-    implementation,
-    version,
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id: implementation,
+      version,
+      language: implementation === 'cdk' ? 'rust' : 'typescript',
+      runtime: implementation === 'cdk' ? 'native' : 'node-24',
+    }),
+    roles: {
+      sender: {
+        transports: ['http'],
+        profiles: ['delivery-v1'],
+        durability: 'persistent',
+        evidence: { tier: 'T1', sources: ['adapter'] },
+      },
+      receiver: {
+        transports: ['http'],
+        profiles: ['delivery-v1'],
+        durability: 'persistent',
+        evidence: { tier: 'T1', sources: ['adapter'] },
+      },
+    },
     nuts: [18],
-    transports: ['http'],
-    evidenceTier: 'T1',
     encodings: ['creqA'],
-    profiles: [{ name: 'delivery-v1', roles: ['sender', 'receiver'], status: 'supported' }],
-  } as const;
+    mints: [],
+  };
 }
 
 describe('ExternalAdapterRegistry', () => {
@@ -78,3 +95,4 @@ describe('ExternalAdapterRegistry', () => {
     ).rejects.toThrow(/identity/i);
   });
 });
+import { developmentIdentity, type AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';

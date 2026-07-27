@@ -8,7 +8,9 @@ Defines the language-neutral 7-route HTTP contract that every wallet adapter mus
 
 ## Key exports
 
-- **Types** — `AdapterClient`, `AdapterCapabilities`, `EvidenceTier`, `AdapterRole`
+- **Types** — `AdapterClient`, `AdapterCapabilities`, `AdapterImplementationIdentity`,
+  `AdapterRoleCapability`, `AdapterMintIdentity`, `EvidenceTier`, `EvidenceSource`
+- **Identity** — `developmentIdentity` for deterministic non-release source/build digests
 - **Client** — `HttpAdapterClient` (fetch-based HTTP client with schema validation)
 - **Validation** — `validateAdapterRequest`, `validateAdapterResponse` (AJV-based)
 - **Schemas** — Loaded from `spec/schemas/` at import time
@@ -38,3 +40,7 @@ pnpm --filter @cashu-fault-lab/adapter-contract test:consumer
 
 - `spec/openapi.yaml` — OpenAPI 3.1 specification
 - `docs/adapter-guide.md` — Full integration guide
+
+Capability schema v2 is intentionally role-specific. Sender and receiver transports, profiles,
+durability, tiers, and evidence sources cannot be collapsed into a global claim. Release builds
+should supply independently verifiable source/build digests and configured mint identities.

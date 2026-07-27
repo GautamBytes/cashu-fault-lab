@@ -147,6 +147,7 @@ function adapterErrorHint(error: unknown): string {
 }
 
 export class ExternalAdapterScenarioDriver implements ScenarioDriver {
+  readonly observationConfidence = 'adapter_claimed' as const;
   readonly #sender: AdapterClient;
   readonly #receiver: AdapterClient;
   readonly #faults: ExternalFaultController;
@@ -236,14 +237,13 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     return {
       sender: {
         implementation: this.#senderCapabilities.implementation,
-        version: this.#senderCapabilities.version,
+        role: this.#senderCapabilities.roles.sender,
       },
       receiver: {
         implementation: this.#receiverCapabilities.implementation,
-        version: this.#receiverCapabilities.version,
+        role: this.#receiverCapabilities.roles.receiver,
       },
       transports: this.#transports,
-      evidenceTier: 'T1',
     };
   }
 
@@ -262,7 +262,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       throw new Error('External scenario driver is not initialized');
     }
     if (
-      sender !== (this.#senderAlias ?? senderCapabilities.implementation) ||
+      sender !== (this.#senderAlias ?? senderCapabilities.implementation.id) ||
       requestId !== (this.#requestAlias ?? request.id)
     ) {
       throw new Error('Scenario sender or request does not match the selected adapter pair');
@@ -270,7 +270,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
 
     const deliveryId = seededProtocolId(
       this.#seed,
-      `external-delivery:${senderCapabilities.implementation}:${request.id}`,
+      `external-delivery:${senderCapabilities.implementation.id}:${request.id}`,
     );
     let sent: DeliveryReceipt | undefined;
     let lastSendError: unknown;

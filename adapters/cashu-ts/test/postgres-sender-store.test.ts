@@ -223,7 +223,7 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')(
       });
 
       await expect(replacement.capabilities()).resolves.toMatchObject({
-        durability: 'persistent',
+        roles: { sender: { durability: 'persistent' } },
       });
       await expect(
         replacement.send({ request: encodedRequest(), deliveryId }),

@@ -19,10 +19,16 @@ The lab implements an experimental `cashu-delivery-v1` application profile on ex
 pnpm install --frozen-lockfile
 pnpm format:check
 pnpm typecheck
-pnpm test
+pnpm test             # Docker-free default
+pnpm test:integration # PostgreSQL/Testcontainers; skips if Docker is unavailable
+pnpm test:funded      # strict real-mint and funded-wallet lanes
 pnpm build
 pnpm test:consumer
 ```
+
+`pnpm test:all` runs unit, integration, and funded tiers in order. Run `pnpm lab doctor`
+to see which tiers are runnable and the exact command for each one. Funded tests never
+turn missing Docker, credentials, or endpoints into a passing result.
 
 Run Rust adapter checks:
 
@@ -44,7 +50,10 @@ pnpm lab run scenarios/crash-recovery/mint-response-lost.json --seed crash-demo
 pnpm lab run scenarios/concurrency/cross-transport-storm.json --seed storm-demo
 ```
 
-Each run writes `artifacts/latest.json` with mode `0600`. The repository ignores `artifacts/`.
+Each run writes `artifacts/latest.json` with mode `0600`. Artifact schema v2 contains one
+structured result for each of the 18 invariants, including status, confidence, and safe evidence
+references. Missing evidence is recorded as `not_observable`; it is never upgraded to a pass. The
+repository ignores `artifacts/`.
 
 Replay or render that artifact:
 
@@ -61,9 +70,19 @@ pnpm lab report artifacts/latest.json --format html --output artifacts/result.ht
 pnpm lab matrix --profile delivery-v1
 pnpm lab matrix --profile legacy-nut18
 pnpm lab matrix --profile nut26-nostr
+
+# Hard release decision (currently expected to fail until the documented gaps close)
+pnpm lab matrix --profile delivery-v1 \
+  --release-policy spec/release-policy.json
 ```
 
 `delivery-v1` runs configured receipt and idempotency pairs. `legacy-nut18` reports `N/A` until executable legacy receiver adapters are wired; pinned `creqA` vectors remain covered by adapter contract tests. `nut26-nostr` reports the pinned NIP-04/raw-key versus NIP-17/`nprofile` mismatch as an expected failure.
+
+`--min-passes` is a developer smoke-test threshold. It is not a release claim. The release policy
+requires distinct implementations, languages, source/build digests, real-mint identities,
+role-specific evidence floors, and accepted evidence for every required invariant. Rejection codes
+are emitted in text, JSON, JUnit, and HTML reports. The checked-in policy deliberately keeps the
+release blocked while these requirements are unmet.
 
 Bundled cashu-ts 4.7.2 provides funded delivery-v1 sender and receiver operations. HTTP runs by default, NIP-17 Nostr is enabled with sender/receiver keys and relay URLs, and receiver evidence can be raised to T3 with PostgreSQL storage. CDK 0.17.3 remains a funded T1 HTTP sender and explicitly returns `N/A` for receiver operations. Release therefore remains blocked until independent wallet receivers produce at least two qualifying pairs.
 
@@ -114,7 +133,7 @@ Use `--sender cdk` to exercise the Rust wallet implementation. The stack is ephe
 | Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                                          | Packaged end-to-end lanes with injected clock        |
 | Sender restart                             | Durable state/reservation ports, terminal-state reconciliation, encrypted PostgreSQL sender state, and external receiver restart lane | Durable cashu-ts sender reservation/session wiring   |
 
-The packaged `mint-response-lost` scenario exercises recovery orchestration with in-memory fakes. Durable restart claims come only from PostgreSQL integration tests. Scenario artifacts are preview evidence; release-grade adapter/version/protocol-lock metadata remains part of the closed release gate.
+The packaged `mint-response-lost` scenario exercises recovery orchestration with in-memory fakes. Durable restart claims come only from PostgreSQL integration tests. Scenario artifacts carry versioned capability and invariant evidence, but only `spec/release-policy.json` decides whether that evidence is release-qualifying.
 
 `SenderState.withDeliveryLock` is a correctness boundary for sender adapters. Durable implementations must serialize one delivery across processes and bind the callback's `get`/`create`/`save` operations to the same lock or database session; nested lock acquisition is forbidden. The bundled in-memory state provides process-local serialization. `PostgresSenderState` provides cross-process delivery locks and AES-256-GCM encrypted records when initialized with a 32-byte state key and `migratePostgresSenderState(pool)`.
 

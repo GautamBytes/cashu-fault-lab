@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cashu-fault-lab.dev/schema/scenario-result-v1.json",
+  "$id": "https://cashu-fault-lab.dev/schema/scenario-result-v2.json",
   "title": "Cashu Fault Lab Scenario Result",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "scenarioId", "seed", "status", "invariants", "timeline"],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
     "scenarioId": { "type": "string", "minLength": 1 },
     "seed": { "type": "string", "minLength": 1 },
     "status": { "enum": ["passed", "failed", "skipped"] },
@@ -18,14 +18,18 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "implementation": { "type": "string" },
-        "version": { "type": "string" },
+        "schemaVersion": { "const": 2 },
+        "implementation": { "$ref": "#/$defs/implementation" },
+        "roles": { "$ref": "#/$defs/roles" },
         "nuts": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
-        "transports": { "type": "array", "items": { "type": "string" } },
-        "evidenceTier": { "type": "string" },
-        "durability": { "type": "string" },
-        "sender": { "type": "string" },
-        "receiver": { "type": "string" }
+        "encodings": { "type": "array", "items": { "type": "string" } },
+        "mints": { "type": "array", "items": { "$ref": "#/$defs/mint" } },
+        "sender": {
+          "anyOf": [{ "type": "string" }, { "$ref": "#/$defs/participant" }]
+        },
+        "receiver": {
+          "anyOf": [{ "type": "string" }, { "$ref": "#/$defs/participant" }]
+        }
       }
     },
     "componentVersions": {
@@ -34,20 +38,16 @@
     },
     "imageDigests": {
       "type": "object",
-      "additionalProperties": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:(?!([0-9a-f])\\1{63}$)[0-9a-f]{64}$"
+      }
     },
     "invariants": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["name", "passed"],
-        "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "passed": { "type": "boolean" },
-          "evidence": {}
-        }
-      }
+      "minItems": 18,
+      "maxItems": 18,
+      "items": { "$ref": "#/$defs/invariant" }
     },
     "timeline": {
       "type": "array",
@@ -74,6 +74,124 @@
       "properties": {
         "code": { "type": "string", "minLength": 1 },
         "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:(?!([0-9a-f])\\1{63}$)[0-9a-f]{64}$"
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "language", "runtime", "sourceDigest", "buildDigest"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 1 },
+        "runtime": { "type": "string", "minLength": 1 },
+        "sourceDigest": { "$ref": "#/$defs/digest" },
+        "buildDigest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transports", "profiles", "durability", "evidence"],
+      "properties": {
+        "transports": { "type": "array", "items": { "type": "string" } },
+        "profiles": { "type": "array", "items": { "type": "string" } },
+        "durability": { "type": "string", "minLength": 1 },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tier", "sources"],
+          "properties": {
+            "tier": { "enum": ["T0", "T1", "T2", "T3"] },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sender": { "$ref": "#/$defs/role" },
+        "receiver": { "$ref": "#/$defs/role" }
+      }
+    },
+    "mint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "implementation"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "implementation": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation"],
+      "properties": {
+        "implementation": { "$ref": "#/$defs/implementation" },
+        "role": { "$ref": "#/$defs/role" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "description"],
+      "properties": {
+        "source": {
+          "enum": ["timeline", "receipt", "ledger", "proofs", "capabilities"]
+        },
+        "index": { "type": "integer", "minimum": 0 },
+        "field": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "confidence", "evidence"],
+      "properties": {
+        "id": {
+          "enum": [
+            "at-most-once-redemption-start",
+            "at-most-one-merchant-credit-per-request",
+            "at-most-one-merchant-credit-per-delivery",
+            "proof-set-exclusivity",
+            "delivery-identity-immutability",
+            "exact-net-amount",
+            "no-premature-settlement",
+            "no-false-rejection-after-possible-consumption",
+            "monotonic-receipts",
+            "stable-duplicate-response",
+            "eventual-terminal-or-recovery-state",
+            "crash-recovery",
+            "retry-convergence",
+            "transport-convergence",
+            "independent-mint-evidence",
+            "independent-ledger-evidence",
+            "reproducibility",
+            "no-unsupported-pass"
+          ]
+        },
+        "status": {
+          "enum": ["passed", "failed", "not_applicable", "not_observable"]
+        },
+        "confidence": {
+          "enum": ["observed", "derived", "adapter_claimed"]
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "reason": { "type": "string", "minLength": 1 }
       }
     }
   }

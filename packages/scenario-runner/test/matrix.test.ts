@@ -1,4 +1,4 @@
-import type { AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
+import { developmentIdentity, type AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
 import { describe, expect, it } from 'vitest';
 import { CompatibilityMatrix, type MatrixExecutor, type MatrixParticipant } from '../src/index.js';
 
@@ -8,20 +8,27 @@ function participant(
   status: 'supported' | 'unsupported' = 'supported',
 ): MatrixParticipant {
   const capabilities: AdapterCapabilities = {
-    implementation: id,
-    version: '1.0.0',
-    nuts: [18],
-    transports: ['http', 'nostr'],
-    evidenceTier: status === 'supported' ? 'T3' : 'T0',
-    encodings: ['creqA'],
-    profiles: [
-      {
-        name: 'delivery-v1',
-        roles: [role],
-        status,
-        ...(status === 'unsupported' ? { reason: 'receipt profile is not implemented' } : {}),
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id,
+      version: '1.0.0',
+      language: 'typescript',
+      runtime: 'node-24',
+    }),
+    roles: {
+      [role]: {
+        transports: ['http', 'nostr'],
+        profiles: status === 'supported' ? ['delivery-v1'] : ['legacy-nut18'],
+        durability: status === 'supported' ? 'restart_safe' : 'process',
+        evidence: {
+          tier: status === 'supported' ? 'T3' : 'T0',
+          sources: ['adapter'],
+        },
       },
-    ],
+    },
+    nuts: [18],
+    encodings: ['creqA'],
+    mints: [],
   };
   return { id, capabilities };
 }
@@ -46,6 +53,10 @@ describe('CompatibilityMatrix', () => {
     expect(first?.status).toBe('passed');
     if (first?.status !== 'passed') throw new Error('Expected passing matrix result');
     expect(first.evidence).toEqual({ credits: 1, settlements: 1 });
+    expect(first.senderCapabilities.implementation.id).toBe('sender-a');
+    expect(first.receiverCapabilities.implementation.id).toBe('receiver-a');
+    expect(first.invariants).toEqual([]);
+    expect(first.mints).toEqual([]);
     expect(calls).toEqual(['delivery-v1:sender-a:receiver-a', 'delivery-v1:sender-b:receiver-a']);
   });
 
@@ -62,7 +73,7 @@ describe('CompatibilityMatrix', () => {
     expect(result).toEqual([
       expect.objectContaining({
         status: 'not_applicable',
-        reason: 'cashu-ts: receipt profile is not implemented',
+        reason: 'cashu-ts: delivery-v1 sender capability is not declared',
       }),
     ]);
   });
@@ -89,13 +100,24 @@ describe('CompatibilityMatrix', () => {
     const capability = (id: string, role: 'sender' | 'receiver'): MatrixParticipant => ({
       id,
       capabilities: {
-        implementation: id,
-        version: '1.0.0',
+        schemaVersion: 2,
+        implementation: developmentIdentity({
+          id,
+          version: '1.0.0',
+          language: 'typescript',
+          runtime: 'node-24',
+        }),
+        roles: {
+          [role]: {
+            transports: ['nostr'],
+            profiles: ['nut26-nostr'],
+            durability: 'process',
+            evidence: { tier: 'T0', sources: ['adapter'] },
+          },
+        },
         nuts: [18, 26],
-        transports: ['nostr'],
-        evidenceTier: 'T0',
         encodings: ['creqB'],
-        profiles: [{ name: 'nut26-nostr', roles: [role], status: 'supported' }],
+        mints: [],
       },
     });
     const result = await new CompatibilityMatrix(async () => ({

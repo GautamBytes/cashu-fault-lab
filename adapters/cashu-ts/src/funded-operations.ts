@@ -5,8 +5,8 @@ import {
 } from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
+  developmentIdentity,
   type AdapterCapabilities,
-  type AdapterDurability,
   type AdapterTransport,
   type DeliveryReceiptView,
   type LedgerCreditView,
@@ -72,8 +72,10 @@ export interface CashuTsStoredDelivery {
   readonly settledMarked: boolean;
 }
 
+export type CashuTsDeliveryStoreDurability = 'process-local' | 'persistent';
+
 export interface CashuTsDeliveryStore {
-  readonly durability?: AdapterDurability;
+  readonly durability?: CashuTsDeliveryStoreDurability;
   reset(seed: string): Promise<void>;
   get(deliveryId: string): Promise<CashuTsStoredDelivery | undefined>;
   put(record: CashuTsStoredDelivery): Promise<void>;
@@ -267,29 +269,31 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
   }
 
   async capabilities(): Promise<AdapterCapabilities> {
+    const persistent = this.#store.durability === 'persistent';
     return {
-      implementation: 'cashu-ts',
-      version: '4.7.2',
+      schemaVersion: 2,
+      implementation: developmentIdentity({
+        id: 'cashu-ts',
+        version: '4.7.2',
+        language: 'typescript',
+        runtime: 'node-24',
+      }),
+      roles: {
+        sender: {
+          transports: this.#supportedTransports,
+          profiles: ['delivery-v1'],
+          durability: persistent ? 'persistent' : 'process',
+          evidence: {
+            tier: 'T1',
+            sources: persistent
+              ? ['adapter', 'runner', 'transport', 'durable_state']
+              : ['adapter', 'runner', 'transport'],
+          },
+        },
+      },
       nuts: [3, 7, 18],
-      transports: this.#supportedTransports,
-      evidenceTier: 'T1',
-      durability: this.#store.durability ?? 'process-local',
       encodings: ['creqA', 'creqB'],
-      profiles: [
-        {
-          name: 'legacy-nut18',
-          roles: ['sender'],
-          status: 'unsupported',
-          reason: 'Funded operations require the delivery-v1 idempotency extension',
-        },
-        { name: 'delivery-v1', roles: ['sender'], status: 'supported' },
-        {
-          name: 'nut26-nostr',
-          roles: ['sender'],
-          status: 'unsupported',
-          reason: 'Funded operations use NUT-18 NIP-17 delivery-v1, not upstream NUT-26',
-        },
-      ],
+      mints: [],
     };
   }
 

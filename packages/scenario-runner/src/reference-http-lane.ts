@@ -31,6 +31,7 @@ import {
   type ScenarioRunResult,
   type ScenarioSpec,
 } from './runner.js';
+import { referenceCapabilities } from './reference-capabilities.js';
 import { seededProtocolId, seededSecret } from './seeded-fixture.js';
 
 const now = 1_784_399_400;
@@ -154,12 +155,7 @@ class ReferenceHttpDriver implements ScenarioDriver {
   }
 
   async capabilities(): Promise<Readonly<Record<string, unknown>>> {
-    return {
-      sender: 'reference-ts',
-      receiver: 'reference-ts',
-      transports: ['http'],
-      evidenceTier: 'T0',
-    };
+    return referenceCapabilities(['http']);
   }
 
   async configureFault(target: string, rule: FaultRule): Promise<void> {

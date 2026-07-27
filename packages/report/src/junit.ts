@@ -28,9 +28,11 @@ export function renderJunit(input: ReportInput): string {
 
 export function renderMatrixJunit(input: MatrixReportInput): string {
   const report = createMatrixReport(input);
+  const gateFailed = report.releaseGate !== undefined && !report.releaseGate.passed;
+  const gateTests = report.releaseGate === undefined ? 0 : 1;
   const lines: string[] = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<testsuite name="cashu-fault-lab.matrix" tests="${report.summary.total}" failures="${report.summary.failed}" errors="0" skipped="${report.summary.notApplicable + report.summary.expectedFailure}">`,
+    `<testsuite name="cashu-fault-lab.matrix" tests="${report.summary.total + gateTests}" failures="${report.summary.failed + (gateFailed ? 1 : 0)}" errors="0" skipped="${report.summary.notApplicable + report.summary.expectedFailure}">`,
   ];
   for (const result of report.cases) {
     const classname = `cashu-fault-lab.matrix.${xml(report.profile)}`;
@@ -49,6 +51,18 @@ export function renderMatrixJunit(input: MatrixReportInput): string {
       );
     } else {
       lines.push(`  <testcase classname="${classname}" name="${name}"/>`);
+    }
+  }
+  if (report.releaseGate !== undefined) {
+    if (report.releaseGate.passed) {
+      lines.push('  <testcase classname="cashu-fault-lab.release" name="release-policy"/>');
+    } else {
+      const message = report.releaseGate.reasons
+        .map((reason) => `${reason.code}: ${reason.message}`)
+        .join('; ');
+      lines.push(
+        `  <testcase classname="cashu-fault-lab.release" name="release-policy"><failure type="RELEASE_GATE_FAILED" message="${xml(message)}"/></testcase>`,
+      );
     }
   }
   lines.push('</testsuite>', '');

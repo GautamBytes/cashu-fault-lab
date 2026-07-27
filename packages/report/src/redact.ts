@@ -1,12 +1,18 @@
-import type {
-  FailureArtifact,
-  HistoryEvent,
-  ScenarioCommand,
-  ScenarioRunResult,
+import {
+  redact,
+  type EvidenceConfidence,
+  type FailureArtifact,
+  type HistoryEvent,
+  type InvariantEvidenceReference,
+  type InvariantId,
+  type InvariantResult,
+  type InvariantStatus,
+  type ScenarioCommand,
+  type ScenarioRunResult,
 } from '@cashu-fault-lab/scenario-runner';
 
 const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,127}$/;
-const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
+const DIGEST_PATTERN = /^sha256:(?!([0-9a-f])\1{63}$)[0-9a-f]{64}$/;
 const METADATA_KEY_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._/-]{0,127}$/;
 
 export interface ReportInput {
@@ -15,10 +21,7 @@ export interface ReportInput {
   readonly imageDigests?: Readonly<Record<string, string>>;
 }
 
-export interface ReportInvariant {
-  readonly name: 'scenario-conformance';
-  readonly passed: boolean;
-}
+export type ReportInvariant = InvariantResult;
 
 export interface ReportFailure {
   readonly code: string;
@@ -36,19 +39,55 @@ export interface ReportTimelineEvent {
   readonly data?: Readonly<Record<string, string | number | boolean>>;
 }
 
+export interface ReportImplementationIdentity {
+  readonly id: string;
+  readonly version: string;
+  readonly language: string;
+  readonly runtime: string;
+  readonly sourceDigest: string;
+  readonly buildDigest: string;
+}
+
+export interface ReportRoleCapability {
+  readonly transports: readonly string[];
+  readonly profiles: readonly string[];
+  readonly durability: string;
+  readonly evidence: {
+    readonly tier: string;
+    readonly sources: readonly string[];
+  };
+}
+
 export interface ReportCapabilities {
-  readonly implementation?: string;
-  readonly version?: string;
+  readonly schemaVersion?: 2;
+  readonly implementation?: ReportImplementationIdentity;
+  readonly roles?: {
+    readonly sender?: ReportRoleCapability;
+    readonly receiver?: ReportRoleCapability;
+  };
   readonly nuts?: readonly number[];
-  readonly transports?: readonly string[];
-  readonly evidenceTier?: string;
-  readonly durability?: string;
-  readonly sender?: string;
-  readonly receiver?: string;
+  readonly encodings?: readonly string[];
+  readonly mints?: readonly {
+    readonly id: string;
+    readonly implementation: string;
+    readonly version?: string;
+  }[];
+  readonly sender?:
+    | string
+    | {
+        readonly implementation: ReportImplementationIdentity;
+        readonly role?: ReportRoleCapability;
+      };
+  readonly receiver?:
+    | string
+    | {
+        readonly implementation: ReportImplementationIdentity;
+        readonly role?: ReportRoleCapability;
+      };
 }
 
 export interface ReportDocument {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly scenarioId: string;
   readonly seed: string;
   readonly status: ScenarioRunResult['status'];
@@ -158,28 +197,155 @@ function stringField(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function capabilitiesView(value: FailureArtifact['capabilities']): ReportCapabilities {
-  const implementation = stringField(value.implementation);
+function stringArray(value: unknown): readonly string[] | undefined {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : undefined;
+}
+
+function implementationView(value: unknown): ReportImplementationIdentity | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = stringField(value.id);
   const version = stringField(value.version);
-  const evidenceTier = stringField(value.evidenceTier);
+  const language = stringField(value.language);
+  const runtime = stringField(value.runtime);
+  const sourceDigest = stringField(value.sourceDigest);
+  const buildDigest = stringField(value.buildDigest);
+  if (
+    id === undefined ||
+    version === undefined ||
+    language === undefined ||
+    runtime === undefined ||
+    sourceDigest === undefined ||
+    buildDigest === undefined ||
+    !DIGEST_PATTERN.test(sourceDigest) ||
+    !DIGEST_PATTERN.test(buildDigest)
+  ) {
+    return undefined;
+  }
+  return { id, version, language, runtime, sourceDigest, buildDigest };
+}
+
+function roleView(value: unknown): ReportRoleCapability | undefined {
+  if (!isRecord(value) || !isRecord(value.evidence)) return undefined;
+  const transports = stringArray(value.transports);
+  const profiles = stringArray(value.profiles);
   const durability = stringField(value.durability);
-  const sender = stringField(value.sender);
-  const receiver = stringField(value.receiver);
+  const tier = stringField(value.evidence.tier);
+  const sources = stringArray(value.evidence.sources);
+  if (
+    transports === undefined ||
+    profiles === undefined ||
+    durability === undefined ||
+    tier === undefined ||
+    sources === undefined
+  ) {
+    return undefined;
+  }
+  return { transports, profiles, durability, evidence: { tier, sources } };
+}
+
+function participantView(
+  value: unknown,
+): Exclude<ReportCapabilities['sender'], string | undefined> | undefined {
+  if (!isRecord(value)) return undefined;
+  const implementation = implementationView(value.implementation);
+  if (implementation === undefined) return undefined;
+  const role = roleView(value.role);
+  return {
+    implementation,
+    ...(role === undefined ? {} : { role }),
+  };
+}
+
+function capabilitiesView(value: FailureArtifact['capabilities']): ReportCapabilities {
+  const implementation = implementationView(value.implementation);
+  const sender = participantView(value.sender) ?? stringField(value.sender);
+  const receiver = participantView(value.receiver) ?? stringField(value.receiver);
+  const senderRole = isRecord(value.roles) ? roleView(value.roles.sender) : undefined;
+  const receiverRole = isRecord(value.roles) ? roleView(value.roles.receiver) : undefined;
+  const roles =
+    senderRole === undefined && receiverRole === undefined
+      ? undefined
+      : {
+          ...(senderRole === undefined ? {} : { sender: senderRole }),
+          ...(receiverRole === undefined ? {} : { receiver: receiverRole }),
+        };
   const nuts = Array.isArray(value.nuts)
     ? value.nuts.filter((item): item is number => Number.isSafeInteger(item) && Number(item) >= 0)
     : undefined;
-  const transports = Array.isArray(value.transports)
-    ? value.transports.filter((item): item is string => typeof item === 'string')
+  const encodings = stringArray(value.encodings);
+  const mints = Array.isArray(value.mints)
+    ? value.mints.flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const id = stringField(item.id);
+        const mintImplementation = stringField(item.implementation);
+        const version = stringField(item.version);
+        return id === undefined || mintImplementation === undefined
+          ? []
+          : [{ id, implementation: mintImplementation, ...(version ? { version } : {}) }];
+      })
     : undefined;
   return {
+    ...(value.schemaVersion === 2 ? { schemaVersion: 2 as const } : {}),
     ...(implementation ? { implementation } : {}),
-    ...(version ? { version } : {}),
+    ...(roles && Object.keys(roles).length > 0 ? { roles } : {}),
     ...(nuts ? { nuts } : {}),
-    ...(transports ? { transports } : {}),
-    ...(evidenceTier ? { evidenceTier } : {}),
-    ...(durability ? { durability } : {}),
+    ...(encodings ? { encodings } : {}),
+    ...(mints ? { mints } : {}),
     ...(sender ? { sender } : {}),
     ...(receiver ? { receiver } : {}),
+  };
+}
+
+const INVARIANT_STATUSES = new Set<InvariantStatus>([
+  'passed',
+  'failed',
+  'not_applicable',
+  'not_observable',
+]);
+const EVIDENCE_CONFIDENCE = new Set<EvidenceConfidence>(['observed', 'derived', 'adapter_claimed']);
+const EVIDENCE_SOURCES = new Set<InvariantEvidenceReference['source']>([
+  'timeline',
+  'receipt',
+  'ledger',
+  'proofs',
+  'capabilities',
+]);
+
+function safeText(value: string): string {
+  const sanitized = redact(value);
+  return typeof sanitized === 'string' ? sanitized : '';
+}
+
+function invariantView(value: InvariantResult): ReportInvariant {
+  if (
+    typeof value.id !== 'string' ||
+    !INVARIANT_STATUSES.has(value.status) ||
+    !EVIDENCE_CONFIDENCE.has(value.confidence) ||
+    !Array.isArray(value.evidence)
+  ) {
+    throw new Error('Invariant result is invalid');
+  }
+  const evidence = value.evidence.map((reference): InvariantEvidenceReference => {
+    if (!EVIDENCE_SOURCES.has(reference.source)) {
+      throw new Error('Invariant evidence source is invalid');
+    }
+    return {
+      source: reference.source,
+      ...(reference.index === undefined
+        ? {}
+        : { index: safeInteger(reference.index, 'Invariant evidence index') }),
+      ...(reference.field === undefined ? {} : { field: safeText(reference.field) }),
+      description: safeText(reference.description),
+    };
+  });
+  return {
+    id: value.id as InvariantId,
+    status: value.status,
+    confidence: value.confidence,
+    evidence,
+    ...(value.reason === undefined ? {} : { reason: safeText(value.reason) }),
   };
 }
 
@@ -220,11 +386,11 @@ export function createReport(input: ReportInput): ReportDocument {
     ...(input.imageDigests ?? {}),
   };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     scenarioId: artifact.scenario,
     seed: artifact.seed,
     status: input.result.status,
-    invariants: [{ name: 'scenario-conformance', passed: input.result.status === 'passed' }],
+    invariants: artifact.invariants.map(invariantView),
     commands: artifact.commands.map(commandView),
     timeline: artifact.history.map(timelineView),
     capabilities: capabilitiesView(artifact.capabilities),

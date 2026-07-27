@@ -1,5 +1,13 @@
-import type { MatrixCaseResult, ScenarioRunResult } from '@cashu-fault-lab/scenario-runner';
-import { validateScenarioResult } from '@cashu-fault-lab/adapter-contract';
+import {
+  INVARIANT_REGISTRY,
+  type MatrixCaseResult,
+  type ScenarioRunResult,
+} from '@cashu-fault-lab/scenario-runner';
+import {
+  developmentIdentity,
+  validateScenarioResult,
+  type AdapterCapabilities,
+} from '@cashu-fault-lab/adapter-contract';
 import { describe, expect, it } from 'vitest';
 import {
   createMatrixReport,
@@ -16,7 +24,7 @@ const result: ScenarioRunResult = {
   status: 'failed',
   error: { name: 'UnsafeError', message: 'Bearer top-secret must-not-leak' },
   artifact: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     seed: 'seed-1',
     scenario: 'response-loss <script>alert(1)</script>',
     commands: [
@@ -35,15 +43,52 @@ const result: ScenarioRunResult = {
       { type: 'await_send', operationId: 'op-1' },
     ],
     capabilities: {
-      implementation: 'reference',
-      version: '1.2.3',
+      schemaVersion: 2,
+      implementation: {
+        id: 'reference',
+        version: '1.2.3',
+        language: 'typescript',
+        runtime: 'node-24',
+        sourceDigest: `sha256:${'de'.repeat(32)}`,
+        buildDigest: `sha256:${'ef'.repeat(32)}`,
+      },
+      roles: {
+        sender: {
+          transports: ['http'],
+          profiles: ['delivery-v1'],
+          durability: 'persistent',
+          evidence: { tier: 'T1', sources: ['runner', 'transport'] },
+        },
+        receiver: {
+          transports: ['http'],
+          profiles: ['delivery-v1'],
+          durability: 'restart_safe',
+          evidence: { tier: 'T3', sources: ['durable_ledger', 'durable_state'] },
+        },
+      },
       nuts: [3, 7, 9, 19],
-      transports: ['http'],
-      evidenceTier: 'T3',
-      durability: 'persistent',
+      encodings: ['creqA'],
+      mints: [{ id: 'nutshell-local', implementation: 'nutshell', version: '0.17.0' }],
       secret: 'secret-a',
       bearer: 'top-secret',
     },
+    invariants: INVARIANT_REGISTRY.map((definition, index) => ({
+      id: definition.id,
+      status: index === 2 ? ('failed' as const) : ('not_applicable' as const),
+      confidence: index === 2 ? ('observed' as const) : ('derived' as const),
+      evidence:
+        index === 2
+          ? [
+              {
+                source: 'ledger' as const,
+                index: 2,
+                field: 'creditId',
+                description: 'Durable ledger contains duplicate credit evidence.',
+              },
+            ]
+          : [],
+      ...(index === 2 ? { reason: 'A delivery produced duplicate merchant credits.' } : {}),
+    })),
     history: [
       {
         sequence: 0,
@@ -103,22 +148,28 @@ describe('allowlist report rendering', () => {
     const report = createReport({
       result,
       componentVersions: { receiver: '1.2.3' },
-      imageDigests: { mint: `sha256:${'c'.repeat(64)}` },
+      imageDigests: { mint: `sha256:${'cd'.repeat(32)}` },
     });
 
     expect(report).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       scenarioId: result.artifact.scenario,
       seed: 'seed-1',
       status: 'failed',
-      invariants: [{ name: 'scenario-conformance', passed: false }],
+      invariants: result.artifact.invariants,
       capabilities: {
-        implementation: 'reference',
-        version: '1.2.3',
+        schemaVersion: 2,
+        implementation: {
+          id: 'reference',
+          version: '1.2.3',
+          language: 'typescript',
+          runtime: 'node-24',
+        },
+        roles: {
+          sender: { evidence: { tier: 'T1' } },
+          receiver: { evidence: { tier: 'T3' } },
+        },
         nuts: [3, 7, 9, 19],
-        transports: ['http'],
-        evidenceTier: 'T3',
-        durability: 'persistent',
       },
     });
     expect(validateScenarioResult(report)).toEqual({ ok: true });
@@ -151,13 +202,13 @@ describe('allowlist report rendering', () => {
       artifact: {
         ...result.artifact,
         componentVersions: { receiver: '1.2.3' },
-        imageDigests: { mint: `sha256:${'d'.repeat(64)}` },
+        imageDigests: { mint: `sha256:${'de'.repeat(32)}` },
       },
     };
 
     expect(createReport({ result: resultWithMetadata })).toMatchObject({
       componentVersions: { receiver: '1.2.3' },
-      imageDigests: { mint: `sha256:${'d'.repeat(64)}` },
+      imageDigests: { mint: `sha256:${'de'.repeat(32)}` },
     });
   });
 
@@ -179,8 +230,44 @@ describe('allowlist report rendering', () => {
   });
 });
 
+const matrixCapability: AdapterCapabilities = {
+  schemaVersion: 2,
+  implementation: developmentIdentity({
+    id: 'ref',
+    version: '0.0.0',
+    language: 'typescript',
+    runtime: 'node-24',
+  }),
+  roles: {
+    sender: {
+      transports: ['http'],
+      profiles: ['delivery-v1'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter'] },
+    },
+    receiver: {
+      transports: ['http'],
+      profiles: ['delivery-v1'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter'] },
+    },
+  },
+  nuts: [18],
+  encodings: ['creqA'],
+  mints: [],
+};
+
 const matrixResults: readonly MatrixCaseResult[] = [
-  { profile: 'delivery-v1', sender: 'ref', receiver: 'ref', status: 'passed' },
+  {
+    profile: 'delivery-v1',
+    sender: 'ref',
+    receiver: 'ref',
+    status: 'passed',
+    senderCapabilities: matrixCapability,
+    receiverCapabilities: matrixCapability,
+    invariants: [],
+    mints: [],
+  },
   {
     profile: 'delivery-v1',
     sender: 'cashu-ts',
@@ -207,6 +294,21 @@ const matrixResults: readonly MatrixCaseResult[] = [
 ];
 
 describe('matrix report rendering', () => {
+  const releaseGate = {
+    passed: false,
+    qualifyingPairs: [],
+    reasons: [
+      {
+        code: 'MINIMUM_QUALIFYING_PAIRS' as const,
+        message: 'Release requires two qualifying pairs.',
+      },
+      {
+        code: 'MINIMUM_DISTINCT_MINTS' as const,
+        message: 'Release requires two distinct mints.',
+      },
+    ],
+  };
+
   it('summarizes pass/fail/N/A/expected counts across cases', () => {
     const report = createMatrixReport({
       profile: 'delivery-v1',
@@ -236,6 +338,24 @@ describe('matrix report rendering', () => {
     expect(json).toContain('"total": 4');
     expect(json).toContain('NUT26_NIP_MAPPING_MISMATCH');
     expect(json).toContain('cashu-ts does not implement receipts');
+  });
+
+  it('includes release-gate failures in JSON, JUnit, and HTML', () => {
+    const input = {
+      profile: 'delivery-v1',
+      seed: 'matrix-seed',
+      results: matrixResults,
+      releaseGate,
+    };
+
+    const json = renderMatrixJson(input);
+    expect(json).toContain('"schemaVersion": 2');
+    expect(json).toContain('"releaseGate"');
+    expect(json).toContain('MINIMUM_QUALIFYING_PAIRS');
+    expect(renderMatrixJunit(input)).toContain('<failure type="RELEASE_GATE_FAILED"');
+    const html = renderMatrixHtml(input);
+    expect(html).toContain('Release gate failed');
+    expect(html).toContain('MINIMUM_DISTINCT_MINTS');
   });
 
   it('renders JUnit with one testcase per pair and correct skip/failure counts', () => {

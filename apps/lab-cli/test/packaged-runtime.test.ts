@@ -10,6 +10,30 @@ async function scenario(path: string): Promise<ScenarioSpec> {
   ) as ScenarioSpec;
 }
 
+function externalCapability(sender: boolean): AdapterCapabilities {
+  const role = sender ? 'sender' : 'receiver';
+  return {
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id: sender ? 'wallet-sender' : 'wallet-receiver',
+      version: '1.0.0',
+      language: 'typescript',
+      runtime: 'node-24',
+    }),
+    roles: {
+      [role]: {
+        transports: ['http'],
+        profiles: ['delivery-v1'],
+        durability: 'persistent',
+        evidence: { tier: 'T1', sources: ['adapter', 'runner', 'transport'] },
+      },
+    },
+    nuts: [3, 7, 18],
+    encodings: ['creqA'],
+    mints: [],
+  };
+}
+
 describe('PackagedLabRuntime', () => {
   it('restarts one adapter service without converging its shared Compose dependencies', async () => {
     const invocations: Array<{ readonly file: string; readonly args: readonly string[] }> = [];
@@ -54,7 +78,14 @@ describe('PackagedLabRuntime', () => {
         (event) => event.phase === 'observation' && event.event === 'merchant_credited',
       ),
     ).toHaveLength(1);
-    expect(first.artifact.capabilities).toMatchObject({ evidenceTier: 'T0' });
+    expect(first.artifact.capabilities).toMatchObject({
+      schemaVersion: 2,
+      implementation: { id: 'reference-ts' },
+      roles: {
+        sender: { evidence: { tier: 'T0' } },
+        receiver: { evidence: { tier: 'T0' } },
+      },
+    });
 
     const replayed = await runtime.replay(first.artifact);
     expect(replayed.status).toBe('passed');
@@ -78,13 +109,46 @@ describe('PackagedLabRuntime', () => {
 
   it('uses the matrix seed in reference probe evidence', async () => {
     const runtime = new PackagedLabRuntime();
-    const evidence = async (seed: string) => {
+    const passedCase = async (seed: string) => {
       const results = await runtime.matrix('delivery-v1', seed);
-      return results.find((result) => result.status === 'passed')?.evidence;
+      return results.find((result) => result.status === 'passed');
     };
 
-    expect(await evidence('seed-a')).not.toEqual(await evidence('seed-b'));
-    expect(await evidence('seed-a')).toEqual(await evidence('seed-a'));
+    expect((await passedCase('seed-a'))?.evidence).not.toEqual(
+      (await passedCase('seed-b'))?.evidence,
+    );
+    expect((await passedCase('seed-a'))?.evidence).toEqual((await passedCase('seed-a'))?.evidence);
+    expect((await passedCase('seed-a'))?.invariants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'stable-duplicate-response',
+          status: 'passed',
+        }),
+        expect.objectContaining({
+          id: 'crash-recovery',
+          status: 'not_applicable',
+        }),
+        expect.objectContaining({
+          id: 'independent-mint-evidence',
+          status: 'passed',
+          confidence: 'observed',
+        }),
+      ]),
+    );
+  });
+
+  it('allows a compose-only fault gateway token without enabling HTTP fault injection', async () => {
+    const runtime = new PackagedLabRuntime({
+      env: { CFL_HTTP_FAULT_GATEWAY_TOKEN: 'compose-only-fault-token' },
+    });
+
+    await expect(runtime.matrix('delivery-v1', 'compose-token')).resolves.toContainEqual(
+      expect.objectContaining({
+        sender: 'reference-ts',
+        receiver: 'reference-ts',
+        status: 'passed',
+      }),
+    );
   });
 
   it('allows a compose-only fault gateway token without enabling HTTP fault injection', async () => {
@@ -132,21 +196,7 @@ describe('PackagedLabRuntime', () => {
       const sender = url.port === '4101';
       const body = (() => {
         if (url.pathname === '/v1/capabilities') {
-          return {
-            implementation: sender ? 'wallet-sender' : 'wallet-receiver',
-            version: '1.0.0',
-            nuts: [3, 7, 18],
-            transports: ['http'],
-            evidenceTier: 'T1',
-            encodings: ['creqA'],
-            profiles: [
-              {
-                name: 'delivery-v1',
-                roles: [sender ? 'sender' : 'receiver'],
-                status: 'supported',
-              },
-            ],
-          };
+          return externalCapability(sender);
         }
         if (url.pathname === '/v1/reset') return { ok: true };
         if (url.pathname === '/v1/requests') {
@@ -202,13 +252,32 @@ describe('PackagedLabRuntime', () => {
 
     const results = await runtime.matrix('delivery-v1', 'external-seed', manifest);
 
-    expect(results).toContainEqual({
-      profile: 'delivery-v1',
-      sender: 'wallet-sender',
-      receiver: 'wallet-receiver',
-      status: 'passed',
-      evidence: expect.objectContaining({ tier: 'T1', credits: 1, seed: 'external-seed' }),
-    });
+    expect(results).toContainEqual(
+      expect.objectContaining({
+        profile: 'delivery-v1',
+        sender: 'wallet-sender',
+        receiver: 'wallet-receiver',
+        status: 'passed',
+        senderCapabilities: expect.objectContaining({
+          implementation: expect.objectContaining({ id: 'wallet-sender' }),
+        }),
+        receiverCapabilities: expect.objectContaining({
+          implementation: expect.objectContaining({ id: 'wallet-receiver' }),
+        }),
+        invariants: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'at-most-one-merchant-credit-per-delivery',
+            status: 'passed',
+            confidence: 'adapter_claimed',
+          }),
+          expect.objectContaining({
+            id: 'at-most-once-redemption-start',
+            status: 'not_observable',
+          }),
+        ]),
+        evidence: expect.objectContaining({ credits: 1, seed: 'external-seed' }),
+      }),
+    );
     expect(fetchCalls).toContain('4101/v1/send');
     expect(fetchCalls).toContain(`4102/v1/deliveries/${activeDeliveryId}`);
 
@@ -228,7 +297,16 @@ describe('PackagedLabRuntime', () => {
       },
     );
     expect(scenarioResult.status).toBe('passed');
-    expect(scenarioResult.artifact.capabilities).toMatchObject({ evidenceTier: 'T1' });
+    expect(scenarioResult.artifact.capabilities).toMatchObject({
+      sender: {
+        implementation: { id: 'wallet-sender' },
+        role: { evidence: { tier: 'T1' } },
+      },
+      receiver: {
+        implementation: { id: 'wallet-receiver' },
+        role: { evidence: { tier: 'T1' } },
+      },
+    });
   });
 
   it('maps external restart commands to the selected adapter services', async () => {
@@ -265,21 +343,7 @@ describe('PackagedLabRuntime', () => {
       const sender = url.port === '4101';
       const body = (() => {
         if (url.pathname === '/v1/capabilities') {
-          return {
-            implementation: sender ? 'wallet-sender' : 'wallet-receiver',
-            version: '1.0.0',
-            nuts: [3, 7, 18],
-            transports: ['http'],
-            evidenceTier: 'T1',
-            encodings: ['creqA'],
-            profiles: [
-              {
-                name: 'delivery-v1',
-                roles: [sender ? 'sender' : 'receiver'],
-                status: 'supported',
-              },
-            ],
-          };
+          return externalCapability(sender);
         }
         if (url.pathname === '/v1/reset') return { ok: true };
         if (url.pathname === '/v1/requests') {
@@ -610,3 +674,4 @@ describe('PackagedLabRuntime', () => {
     await expect(runtime.shrink(passing.artifact)).rejects.toThrow(/cannot be minimized/i);
   });
 });
+import { developmentIdentity, type AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';

@@ -103,25 +103,35 @@ describe('adapter HTTP contract', () => {
     const receipt = validVectors[0]!.receipt;
     expect(
       validateAdapterResponse('capabilities', {
-        implementation: 'memory-reference',
-        version: '0.0.0',
+        schemaVersion: 2,
+        implementation: {
+          id: 'memory-reference',
+          version: '0.0.0',
+          language: 'typescript',
+          runtime: 'node-24',
+          sourceDigest: `sha256:${'ab'.repeat(32)}`,
+          buildDigest: `sha256:${'cd'.repeat(32)}`,
+        },
+        roles: {
+          sender: {
+            transports: ['http', 'nostr'],
+            profiles: ['delivery-v1'],
+            durability: 'process',
+            evidence: { tier: 'T1', sources: ['runner', 'transport'] },
+          },
+          receiver: {
+            transports: ['http', 'nostr'],
+            profiles: ['delivery-v1'],
+            durability: 'restart_safe',
+            evidence: {
+              tier: 'T3',
+              sources: ['mint', 'durable_ledger', 'durable_state'],
+            },
+          },
+        },
         nuts: [2, 3, 7, 9, 18, 19],
-        transports: ['http', 'nostr'],
-        evidenceTier: 'T3',
         encodings: ['creqA'],
-        profiles: [
-          {
-            name: 'delivery-v1',
-            roles: ['sender', 'receiver'],
-            status: 'supported',
-          },
-          {
-            name: 'nut26-nostr',
-            roles: ['sender'],
-            status: 'unsupported',
-            reason: 'NIP-04 and NIP-17 mappings differ',
-          },
-        ],
+        mints: [{ id: 'nutshell-local', implementation: 'nutshell', version: '0.17.0' }],
       }),
     ).toEqual({ ok: true });
     expect(validateAdapterResponse('reset', { ok: true })).toEqual({ ok: true });
@@ -171,5 +181,47 @@ describe('adapter HTTP contract', () => {
       ok: false,
       errorCode: 'UNKNOWN_OPERATION',
     });
+  });
+
+  it('rejects capability schema v1 instead of silently upgrading its evidence', () => {
+    expect(
+      validateAdapterResponse('capabilities', {
+        implementation: 'memory-reference',
+        version: '0.0.0',
+        nuts: [18],
+        transports: ['http'],
+        evidenceTier: 'T3',
+      }),
+    ).toMatchObject({
+      ok: false,
+      errorCode: 'SCHEMA_ADDITIONAL_PROPERTY',
+    });
+  });
+
+  it('rejects placeholder implementation digests', () => {
+    expect(
+      validateAdapterResponse('capabilities', {
+        schemaVersion: 2,
+        implementation: {
+          id: 'placeholder',
+          version: '1.0.0',
+          language: 'typescript',
+          runtime: 'node-24',
+          sourceDigest: `sha256:${'a'.repeat(64)}`,
+          buildDigest: `sha256:${'b'.repeat(64)}`,
+        },
+        roles: {
+          sender: {
+            transports: ['http'],
+            profiles: ['delivery-v1'],
+            durability: 'process',
+            evidence: { tier: 'T0', sources: ['adapter'] },
+          },
+        },
+        nuts: [],
+        encodings: ['creqA'],
+        mints: [],
+      }),
+    ).toMatchObject({ ok: false });
   });
 });

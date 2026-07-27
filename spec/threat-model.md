@@ -22,6 +22,7 @@ The lab tests payment-delivery interoperability and fault tolerance. It aims to 
 4. Receiver wallet to mint endpoints.
 5. Runner to implementation adapters.
 6. Runner report to human or CI consumer.
+7. Adapter capability and build identity claims to the release-policy evaluator.
 
 The mint is authoritative for proof state and signatures, but its network can fail at any byte boundary. An adapter is not trusted to self-report a passing result without independent evidence.
 
@@ -54,6 +55,9 @@ Inputs may include:
 - HTTPS except explicit loopback test mints.
 - NIP-17/NIP-59 author/seal validation and replay deduplication.
 - Reports distinguish observed evidence, adapter claims, skipped capabilities, and runner inference.
+- Release decisions require distinct implementation, language, source/build, and mint provenance.
+- Adapter-claimed invariant evidence never qualifies, even when the scenario otherwise passes.
+- Docker or funded-service absence never becomes a release pass.
 
 ## Out of scope
 
@@ -71,3 +75,4 @@ Inputs may include:
 - Clock skew beyond the bounded allowance can reject otherwise valid attempts.
 - Database loss or rollback can defeat local idempotency unless deployment-level durability and backups are sound.
 - Current NUT-26 and NUT-18/NIP-17 descriptions can produce incompatible Nostr messages; the lab surfaces rather than hides this mismatch.
+- Deterministic development digests identify local fixtures but are not substitutes for signed or independently reproduced release-build provenance.

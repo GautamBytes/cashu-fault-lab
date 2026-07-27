@@ -1,7 +1,9 @@
 import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
+  developmentIdentity,
   type AdapterCapabilities,
+  type DurabilityLevel,
   type AdapterTransport,
   type CreateRequestInput,
   type DeliveryReceiptView,
@@ -116,6 +118,12 @@ function evidenceTier(store: ResettableReceiverStore): EvidenceTier {
   return 'receiverEvidenceTier' in store && store.receiverEvidenceTier === 'T3' ? 'T3' : 'T1';
 }
 
+function durability(store: ResettableReceiverStore): DurabilityLevel {
+  return 'receiverEvidenceTier' in store && store.receiverEvidenceTier === 'T3'
+    ? 'restart_safe'
+    : 'process';
+}
+
 export class FundedCashuTsReceiverOperations {
   readonly #store: ResettableReceiverStore;
   readonly #mintUrl: string;
@@ -123,6 +131,7 @@ export class FundedCashuTsReceiverOperations {
   readonly #now: () => number;
   readonly #accept: AcceptDeliveryDependencies;
   readonly #evidenceTier: EvidenceTier;
+  readonly #durability: DurabilityLevel;
   readonly #nostr: CashuTsNostrReceiver | undefined;
   #seed = '';
   #ordinal = 0;
@@ -134,6 +143,7 @@ export class FundedCashuTsReceiverOperations {
       options.paymentTarget === undefined ? undefined : paymentTarget(options.paymentTarget);
     this.#now = options.now;
     this.#evidenceTier = evidenceTier(this.#store);
+    this.#durability = durability(this.#store);
     this.#accept = {
       store: this.#store,
       mint:
@@ -172,27 +182,30 @@ export class FundedCashuTsReceiverOperations {
   async capabilities(): Promise<AdapterCapabilities> {
     const transports = this.#transports();
     return {
-      implementation: 'cashu-ts',
-      version: CASHU_TS_VERSION,
+      schemaVersion: 2,
+      implementation: developmentIdentity({
+        id: 'cashu-ts',
+        version: CASHU_TS_VERSION,
+        language: 'typescript',
+        runtime: 'node-24',
+      }),
+      roles: {
+        receiver: {
+          transports,
+          profiles: ['delivery-v1'],
+          durability: this.#durability,
+          evidence: {
+            tier: this.#evidenceTier,
+            sources:
+              this.#evidenceTier === 'T3'
+                ? ['adapter', 'runner', 'transport', 'mint', 'durable_ledger', 'durable_state']
+                : ['adapter', 'runner', 'transport', 'mint'],
+          },
+        },
+      },
       nuts: [2, 3, 7, 9, 12, 18, 19],
-      transports,
-      evidenceTier: this.#evidenceTier,
       encodings: ['creqA'],
-      profiles: [
-        { name: 'delivery-v1', roles: ['receiver'], status: 'supported' },
-        {
-          name: 'legacy-nut18',
-          roles: ['receiver'],
-          status: 'unsupported',
-          reason: 'Funded receiver operations require the delivery-v1 idempotency extension',
-        },
-        {
-          name: 'nut26-nostr',
-          roles: ['receiver'],
-          status: 'unsupported',
-          reason: 'Funded receiver operations use NUT-18 NIP-17 delivery-v1, not upstream NUT-26',
-        },
-      ],
+      mints: [],
     };
   }
 
@@ -355,27 +368,15 @@ export class FundedCashuTsDualRoleOperations implements CashuTsAdapterOperations
     const receiver = await this.#receiver.capabilities();
     const sender = await this.#sender.capabilities();
     return {
-      implementation: 'cashu-ts',
-      version: CASHU_TS_VERSION,
+      schemaVersion: 2,
+      implementation: sender.implementation,
+      roles: {
+        ...(sender.roles.sender === undefined ? {} : { sender: sender.roles.sender }),
+        ...(receiver.roles.receiver === undefined ? {} : { receiver: receiver.roles.receiver }),
+      },
       nuts: [2, 3, 7, 9, 12, 18, 19],
-      transports: [...new Set([...sender.transports, ...receiver.transports])],
-      evidenceTier: 'T1',
       encodings: ['creqA', 'creqB'],
-      profiles: [
-        { name: 'delivery-v1', roles: ['sender', 'receiver'], status: 'supported' },
-        {
-          name: 'legacy-nut18',
-          roles: ['sender', 'receiver'],
-          status: 'unsupported',
-          reason: 'Funded operations require the delivery-v1 idempotency extension',
-        },
-        {
-          name: 'nut26-nostr',
-          roles: ['sender', 'receiver'],
-          status: 'unsupported',
-          reason: 'Funded operations use NUT-18 NIP-17 delivery-v1, not upstream NUT-26',
-        },
-      ],
+      mints: [...sender.mints, ...receiver.mints],
     };
   }
 

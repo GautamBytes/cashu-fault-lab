@@ -1,4 +1,8 @@
-import type { AdapterCapabilities, SendPaymentInput } from '@cashu-fault-lab/adapter-contract';
+import {
+  developmentIdentity,
+  type AdapterCapabilities,
+  type SendPaymentInput,
+} from '@cashu-fault-lab/adapter-contract';
 import type { DeliveryReceiptWire } from '@cashu-fault-lab/delivery-core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildSenderAdapterServer, type SenderAdapterControl } from '../src/http/adapter-server.js';
@@ -22,11 +26,24 @@ class FakeControl implements SenderAdapterControl {
 
   async capabilities(): Promise<AdapterCapabilities> {
     return {
-      implementation: 'reference-sender',
-      version: '0.0.0',
+      schemaVersion: 2,
+      implementation: developmentIdentity({
+        id: 'reference-sender',
+        version: '0.0.0',
+        language: 'typescript',
+        runtime: 'node-24',
+      }),
+      roles: {
+        sender: {
+          transports: ['http'],
+          profiles: ['delivery-v1'],
+          durability: 'restart_safe',
+          evidence: { tier: 'T3', sources: ['adapter', 'durable_state'] },
+        },
+      },
       nuts: [18],
-      transports: ['http'],
-      evidenceTier: 'T3',
+      encodings: ['creqA'],
+      mints: [],
     };
   }
 

@@ -32,9 +32,23 @@ describe('cashu-ts adapter contract', () => {
       const capabilities = (await app.inject({ method: 'GET', url: '/v1/capabilities' })).json();
       expect(validateAdapterResponse('capabilities', capabilities)).toEqual({ ok: true });
       expect(capabilities).toMatchObject({
-        implementation: 'cashu-ts',
-        version: '4.7.2',
-        evidenceTier: 'T0',
+        schemaVersion: 2,
+        implementation: {
+          id: 'cashu-ts',
+          version: '4.7.2',
+          language: 'typescript',
+          runtime: 'node-24',
+        },
+        roles: {
+          sender: {
+            profiles: ['legacy-nut18', 'nut26-nostr'],
+            evidence: { tier: 'T0', sources: ['adapter'] },
+          },
+          receiver: {
+            profiles: ['legacy-nut18', 'nut26-nostr'],
+            evidence: { tier: 'T0', sources: ['adapter'] },
+          },
+        },
         encodings: ['creqA', 'creqB'],
       });
 

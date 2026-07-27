@@ -1,11 +1,13 @@
 import {
   AdapterClientError,
   AdapterNotApplicableError,
+  developmentIdentity,
   type AdapterCapabilities,
   type AdapterClient,
   type CreateRequestInput,
   type DeliveryReceiptView,
   type LedgerCreditView,
+  type AdapterMintIdentity,
   type PaymentRequestView,
   type ProofEvidenceView,
   type SendPaymentInput,
@@ -58,15 +60,33 @@ const proof: ProofEvidenceView = {
   state: 'spent',
 };
 
-function capabilities(implementation: string, role: 'sender' | 'receiver'): AdapterCapabilities {
+function capabilities(
+  implementation: string,
+  role: 'sender' | 'receiver',
+  mints: readonly AdapterMintIdentity[],
+): AdapterCapabilities {
   return {
-    implementation,
-    version: '1.0.0',
+    schemaVersion: 2,
+    implementation: developmentIdentity({
+      id: implementation,
+      version: '1.0.0',
+      language: 'typescript',
+      runtime: 'node-24',
+    }),
+    roles: {
+      [role]: {
+        transports: ['http'],
+        profiles: ['delivery-v1'],
+        durability: role === 'sender' ? 'persistent' : 'restart_safe',
+        evidence: {
+          tier: role === 'sender' ? 'T1' : 'T3',
+          sources: role === 'sender' ? ['adapter', 'runner'] : ['adapter', 'durable_ledger'],
+        },
+      },
+    },
     nuts: [3, 7, 18],
-    transports: ['http'],
-    evidenceTier: role === 'sender' ? 'T1' : 'T3',
     encodings: ['creqA'],
-    profiles: [{ name: 'delivery-v1', roles: [role], status: 'supported' }],
+    mints,
   };
 }
 
@@ -79,6 +99,7 @@ interface FakeOptions {
   readonly proofEvidence?: readonly ProofEvidenceView[];
   readonly sendError?: Error;
   readonly sendErrors?: Error[];
+  readonly mints?: readonly AdapterMintIdentity[];
 }
 
 class FakeAdapter implements AdapterClient {
@@ -86,7 +107,11 @@ class FakeAdapter implements AdapterClient {
 
   async capabilities(): Promise<AdapterCapabilities> {
     this.options.calls.push(`${this.options.role}.capabilities`);
-    return capabilities(this.options.role, this.options.role);
+    return capabilities(
+      this.options.role,
+      this.options.role,
+      this.options.mints ?? [{ id: 'nutshell-local', implementation: 'nutshell' }],
+    );
   }
 
   async reset(): Promise<void> {
@@ -149,10 +174,10 @@ describe('runExternalDeliveryPair', () => {
       unit: 'sat',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: true,
+      mints: [{ id: 'nutshell-local', implementation: 'nutshell' }],
       evidence: {
-        tier: 'T1',
         requestId,
         deliveryId,
         payloadHash,
@@ -164,17 +189,49 @@ describe('runExternalDeliveryPair', () => {
         seed: 'pair-seed',
       },
     });
+    if (!result.ok) throw new Error('Expected passing external pair');
+    expect(
+      result.invariants?.find((item) => item.id === 'independent-mint-evidence'),
+    ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+    expect(
+      result.invariants?.find((item) => item.id === 'at-most-one-merchant-credit-per-delivery'),
+    ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+    expect(result.invariants?.find((item) => item.id === 'no-premature-settlement')).toMatchObject({
+      status: 'failed',
+      confidence: 'adapter_claimed',
+    });
+    expect(
+      result.invariants?.find((item) => item.id === 'at-most-once-redemption-start'),
+    ).toMatchObject({ status: 'not_observable' });
     expect(fixture.calls).toEqual([
       'receiver.reset',
       'sender.reset',
-      'receiver.request',
       'sender.capabilities',
       'receiver.capabilities',
+      'receiver.request',
       'sender.send',
       'receiver.delivery',
       'receiver.ledger',
       'receiver.proofs',
     ]);
+  });
+
+  it('counts only mint identities advertised by both exercised adapters', async () => {
+    const fixture = pair({
+      sender: { mints: [{ id: 'sender-only', implementation: 'nutshell' }] },
+      receiver: { mints: [{ id: 'receiver-only', implementation: 'nutshell' }] },
+    });
+
+    const result = await runExternalDeliveryPair({
+      profile: 'delivery-v1',
+      seed: 'pair-seed',
+      sender: fixture.sender,
+      receiver: fixture.receiver,
+      amount: 8,
+      unit: 'sat',
+    });
+
+    expect(result).toMatchObject({ ok: true, mints: [] });
   });
 
   it('retries transient sender failures with one deterministic delivery id', async () => {

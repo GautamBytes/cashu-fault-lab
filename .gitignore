@@ -5,6 +5,7 @@ dist/
 adapters/cdk/target/
 artifacts/
 graphify-out/
+.worktrees/
 .env
 .env.*
 !.env.example

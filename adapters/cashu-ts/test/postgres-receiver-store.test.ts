@@ -148,7 +148,18 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')(
         }),
       );
 
-      await expect(restarted.capabilities()).resolves.toMatchObject({ evidenceTier: 'T3' });
+      await expect(restarted.capabilities()).resolves.toMatchObject({
+        schemaVersion: 2,
+        roles: {
+          receiver: {
+            durability: 'restart_safe',
+            evidence: {
+              tier: 'T3',
+              sources: expect.arrayContaining(['mint', 'durable_ledger', 'durable_state']),
+            },
+          },
+        },
+      });
       await expect(restarted.delivery(deliveryId)).resolves.toEqual(receipt);
       await expect(restarted.ledger()).resolves.toEqual([
         {

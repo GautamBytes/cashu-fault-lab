@@ -1,13 +1,17 @@
 import type { FailureArtifact, ScenarioCommand } from './runner.js';
+import { INVARIANT_REGISTRY } from '@cashu-fault-lab/oracle';
 
 export function assertReplayableArtifact(value: FailureArtifact): void {
-  if (value.schemaVersion !== 1) throw new Error('Unsupported artifact schema version');
+  if (value.schemaVersion !== 2) throw new Error('Unsupported artifact schema version');
   if (
     typeof value.seed !== 'string' ||
     value.seed.length === 0 ||
     typeof value.scenario !== 'string' ||
     value.scenario.length === 0 ||
-    !Array.isArray(value.commands)
+    !Array.isArray(value.commands) ||
+    !Array.isArray(value.invariants) ||
+    value.invariants.length !== INVARIANT_REGISTRY.length ||
+    value.invariants.some((result, index) => result.id !== INVARIANT_REGISTRY[index]?.id)
   ) {
     throw new Error('Invalid replay artifact');
   }

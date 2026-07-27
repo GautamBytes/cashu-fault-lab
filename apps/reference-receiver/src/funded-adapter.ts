@@ -1,10 +1,11 @@
 import { PaymentRequest, PaymentRequestTransportType } from '@cashu/cashu-ts';
-import type {
-  AdapterCapabilities,
-  CreateRequestInput,
-  LedgerCreditView,
-  PaymentRequestView,
-  ProofEvidenceView,
+import {
+  developmentIdentity,
+  type AdapterCapabilities,
+  type CreateRequestInput,
+  type LedgerCreditView,
+  type PaymentRequestView,
+  type ProofEvidenceView,
 } from '@cashu-fault-lab/adapter-contract';
 import {
   normalizeMintUrl,
@@ -79,27 +80,27 @@ export class FundedReceiverAdapterControl implements ReceiverAdapterControl {
 
   async capabilities(): Promise<AdapterCapabilities> {
     return {
-      implementation: 'reference-receiver',
-      version: '0.0.0',
+      schemaVersion: 2,
+      implementation: developmentIdentity({
+        id: 'reference-receiver',
+        version: '0.0.0',
+        language: 'typescript',
+        runtime: 'node-24',
+      }),
+      roles: {
+        receiver: {
+          transports: ['http'],
+          profiles: ['delivery-v1'],
+          durability: 'process',
+          evidence: {
+            tier: 'T1',
+            sources: ['adapter', 'runner', 'transport', 'mint'],
+          },
+        },
+      },
       nuts: [2, 3, 7, 9, 12, 18, 19],
-      transports: ['http'],
-      evidenceTier: 'T1',
       encodings: ['creqA'],
-      profiles: [
-        { name: 'delivery-v1', roles: ['receiver'], status: 'supported' },
-        {
-          name: 'legacy-nut18',
-          roles: ['receiver'],
-          status: 'unsupported',
-          reason: 'Funded receiver operations require the delivery-v1 idempotency extension',
-        },
-        {
-          name: 'nut26-nostr',
-          roles: ['receiver'],
-          status: 'unsupported',
-          reason: 'Funded receiver operations currently implement HTTP delivery only',
-        },
-      ],
+      mints: [],
     };
   }
 

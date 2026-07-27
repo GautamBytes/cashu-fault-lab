@@ -6,15 +6,15 @@ An adapter gives the lab one control surface for a wallet or service. Keep walle
 
 Serve these routes on loopback unless your test network provides equivalent isolation:
 
-| Method | Route                | Purpose                                                                    |
-| ------ | -------------------- | -------------------------------------------------------------------------- |
-| `GET`  | `/v1/capabilities`   | Declare implementation, profiles, encodings, transports, and evidence tier |
-| `POST` | `/v1/reset`          | Reset deterministic test state from a seed                                 |
-| `POST` | `/v1/requests`       | Create a payment request                                                   |
-| `POST` | `/v1/send`           | Send or resume one logical payment                                         |
-| `GET`  | `/v1/deliveries/:id` | Read the current receipt                                                   |
-| `GET`  | `/v1/ledger`         | Return allowlisted merchant credit evidence                                |
-| `GET`  | `/v1/proofs`         | Return proof-state hashes and states                                       |
+| Method | Route                | Purpose                                                              |
+| ------ | -------------------- | -------------------------------------------------------------------- |
+| `GET`  | `/v1/capabilities`   | Declare versioned implementation identity and role-specific evidence |
+| `POST` | `/v1/reset`          | Reset deterministic test state from a seed                           |
+| `POST` | `/v1/requests`       | Create a payment request                                             |
+| `POST` | `/v1/send`           | Send or resume one logical payment                                   |
+| `GET`  | `/v1/deliveries/:id` | Read the current receipt                                             |
+| `GET`  | `/v1/ledger`         | Return allowlisted merchant credit evidence                          |
+| `GET`  | `/v1/proofs`         | Return proof-state hashes and states                                 |
 
 Use `spec/schemas/adapter-capabilities.schema.json` and the request and response types from `@cashu-fault-lab/adapter-contract`. Require a bearer control token outside explicit test mode. Do not place that token in reports.
 
@@ -29,7 +29,11 @@ Use `spec/schemas/adapter-capabilities.schema.json` and the request and response
 
 These tiers follow the canonical definitions in the [design](superpowers/specs/2026-07-19-cashu-fault-lab-design.md#34-evidence-tiers). Fault classes and real-mint execution are scenario requirements, not alternate meanings for an evidence tier.
 
-Declare each profile by role. Return HTTP `501` with `{ "status": "N/A", "reason": "..." }` when the adapter lacks funded wallet state or a profile. A matrix skips that pair. Do not return synthetic success.
+Capability schema v2 requires `schemaVersion`, source/build digests, language/runtime identity,
+separate `roles.sender` and `roles.receiver` objects, and configured mint identities. Each role
+owns its transports, supported profiles, durability, evidence tier, and evidence sources. Omit an
+unsupported role or profile. Return HTTP `501` with `{ "status": "N/A", "reason": "..." }` when
+the adapter lacks funded wallet state. A matrix skips that pair. Do not return synthetic success.
 
 Evidence is role-specific. A funded sender can claim T1 after it reserves real proofs, delivers them through its declared transport, and reconciles a receiver receipt. It cannot claim T3: durable merchant credit is receiver-owned evidence and must come from an independently inspectable receiver ledger. Likewise, the bundled reference receiver's T1 evidence does not turn a sender-only cashu-ts or CDK adapter into a receiver implementation.
 
@@ -65,6 +69,8 @@ pnpm build
 pnpm lab matrix --profile legacy-nut18
 pnpm lab matrix --profile delivery-v1
 pnpm lab matrix --profile nut26-nostr
+pnpm lab matrix --profile delivery-v1 \
+  --release-policy spec/release-policy.json
 ```
 
 Rust adapters also run:

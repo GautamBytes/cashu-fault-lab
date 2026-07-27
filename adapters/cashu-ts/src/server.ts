@@ -5,6 +5,7 @@ import {
 } from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
+  developmentIdentity,
   validateAdapterRequest,
   validateAdapterResponse,
   type AdapterCapabilities,
@@ -27,26 +28,30 @@ import { createHash } from 'node:crypto';
 const PAYMENT_BODY_LIMIT = 65_536;
 
 const capabilities: AdapterCapabilities = {
-  implementation: 'cashu-ts',
-  version: '4.7.2',
+  schemaVersion: 2,
+  implementation: developmentIdentity({
+    id: 'cashu-ts',
+    version: '4.7.2',
+    language: 'typescript',
+    runtime: 'node-24',
+  }),
+  roles: {
+    sender: {
+      transports: ['http', 'nostr'],
+      profiles: ['legacy-nut18', 'nut26-nostr'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter'] },
+    },
+    receiver: {
+      transports: ['http', 'nostr'],
+      profiles: ['legacy-nut18', 'nut26-nostr'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter'] },
+    },
+  },
   nuts: [18, 26],
-  transports: ['http', 'nostr'],
-  evidenceTier: 'T0',
   encodings: ['creqA', 'creqB'],
-  profiles: [
-    { name: 'legacy-nut18', roles: ['sender', 'receiver'], status: 'supported' },
-    {
-      name: 'delivery-v1',
-      roles: ['sender', 'receiver'],
-      status: 'unsupported',
-      reason: 'cashu-ts does not implement the experimental receipt/idempotency profile',
-    },
-    {
-      name: 'nut26-nostr',
-      roles: ['sender', 'receiver'],
-      status: 'supported',
-    },
-  ],
+  mints: [],
 };
 
 export interface CashuTsAdapterOperations {

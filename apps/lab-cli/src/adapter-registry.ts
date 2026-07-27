@@ -45,9 +45,9 @@ export class ExternalAdapterRegistry {
       };
       const client = new HttpAdapterClient(options);
       const capabilities = await client.capabilities();
-      if (capabilities.implementation !== registration.id) {
+      if (capabilities.implementation.id !== registration.id) {
         throw new Error(
-          `Adapter identity mismatch: expected ${registration.id}, received ${capabilities.implementation}`,
+          `Adapter identity mismatch: expected ${registration.id}, received ${capabilities.implementation.id}`,
         );
       }
       clients.set(registration.id, client);

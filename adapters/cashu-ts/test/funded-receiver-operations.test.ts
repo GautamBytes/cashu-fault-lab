@@ -228,10 +228,20 @@ describe('FundedCashuTsReceiverOperations', () => {
     });
     try {
       const capabilities = (await app.inject({ method: 'GET', url: '/v1/capabilities' })).json();
-      expect(capabilities.profiles).toContainEqual({
-        name: 'delivery-v1',
-        roles: ['sender', 'receiver'],
-        status: 'supported',
+      expect(capabilities).toMatchObject({
+        schemaVersion: 2,
+        roles: {
+          sender: {
+            profiles: ['delivery-v1'],
+            durability: 'process',
+            evidence: { tier: 'T1' },
+          },
+          receiver: {
+            profiles: ['delivery-v1'],
+            durability: 'process',
+            evidence: { tier: 'T1' },
+          },
+        },
       });
 
       await expect(sender.reset('dual-role-seed')).resolves.toBeUndefined();

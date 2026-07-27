@@ -5,8 +5,11 @@ import {
   randomBytes as secureRandomBytes,
 } from 'node:crypto';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
-import type { AdapterDurability } from '@cashu-fault-lab/adapter-contract';
-import type { CashuTsDeliveryStore, CashuTsStoredDelivery } from './funded-operations.js';
+import type {
+  CashuTsDeliveryStore,
+  CashuTsDeliveryStoreDurability,
+  CashuTsStoredDelivery,
+} from './funded-operations.js';
 
 interface SenderDeliveryRow extends QueryResultRow {
   readonly delivery_id: string;
@@ -268,7 +271,7 @@ export async function migratePostgresCashuTsSenderStore(pool: Pool): Promise<voi
 }
 
 export class PostgresCashuTsSenderStore implements CashuTsDeliveryStore {
-  readonly durability: AdapterDurability = 'persistent';
+  readonly durability: CashuTsDeliveryStoreDurability = 'persistent';
   readonly #pool: Pool;
   readonly #keyRing: CashuTsSenderStateKeyRing;
   readonly #tenantId: string;
