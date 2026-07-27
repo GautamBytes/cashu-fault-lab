@@ -56,6 +56,30 @@ describe('runDoctor', () => {
     expect(report.checks.filter((c) => c.status === 'fail')).toEqual([]);
   });
 
+  it('reports the exact runnable test commands when Docker is healthy', async () => {
+    const report = await runDoctor({
+      env: healthyEnv,
+      execFile: healthyExec(),
+      isPortFree: async () => true,
+    });
+
+    expect(report.checks).toContainEqual({
+      name: 'test:unit',
+      status: 'ok',
+      detail: 'runnable: pnpm test:unit',
+    });
+    expect(report.checks).toContainEqual({
+      name: 'test:integration',
+      status: 'ok',
+      detail: 'runnable: pnpm test:integration',
+    });
+    expect(report.checks).toContainEqual({
+      name: 'test:funded',
+      status: 'ok',
+      detail: 'runnable: pnpm test:funded',
+    });
+  });
+
   it('fails when required env vars are missing', async () => {
     const report = await runDoctor({
       env: {},
@@ -185,6 +209,21 @@ describe('runDoctor', () => {
       name: 'testcontainers',
       status: 'fail',
       detail: 'Docker daemon unavailable for PostgreSQL/Testcontainers lanes',
+    });
+    expect(report.checks).toContainEqual({
+      name: 'test:unit',
+      status: 'ok',
+      detail: 'runnable: pnpm test:unit',
+    });
+    expect(report.checks).toContainEqual({
+      name: 'test:integration',
+      status: 'warn',
+      detail: 'skipped: Docker daemon unavailable; run pnpm test:unit',
+    });
+    expect(report.checks).toContainEqual({
+      name: 'test:funded',
+      status: 'fail',
+      detail: 'blocked: Docker daemon unavailable',
     });
   });
 

@@ -151,6 +151,55 @@ function testcontainersCheck(dockerDaemon: DoctorCheck): DoctorCheck {
   };
 }
 
+function testTierChecks(
+  dockerDaemon: DoctorCheck,
+  environmentChecks: readonly DoctorCheck[],
+): DoctorCheck[] {
+  const unit: DoctorCheck = {
+    name: 'test:unit',
+    status: 'ok',
+    detail: 'runnable: pnpm test:unit',
+  };
+  if (dockerDaemon.status !== 'ok') {
+    return [
+      unit,
+      {
+        name: 'test:integration',
+        status: 'warn',
+        detail: 'skipped: Docker daemon unavailable; run pnpm test:unit',
+      },
+      {
+        name: 'test:funded',
+        status: 'fail',
+        detail: 'blocked: Docker daemon unavailable',
+      },
+    ];
+  }
+  const blockedEnvironment = environmentChecks.find(
+    (check) =>
+      (REQUIRED_ENV_VARS as readonly string[]).includes(check.name) && check.status !== 'ok',
+  );
+  return [
+    unit,
+    {
+      name: 'test:integration',
+      status: 'ok',
+      detail: 'runnable: pnpm test:integration',
+    },
+    blockedEnvironment
+      ? {
+          name: 'test:funded',
+          status: 'fail',
+          detail: `blocked: ${blockedEnvironment.name} ${blockedEnvironment.detail}`,
+        }
+      : {
+          name: 'test:funded',
+          status: 'ok',
+          detail: 'runnable: pnpm test:funded',
+        },
+  ];
+}
+
 async function portChecks(
   probe: DoctorProbes,
   ports: readonly { readonly label: string; readonly port: number }[],
@@ -172,7 +221,8 @@ export async function runDoctor(
   options: { readonly ports?: readonly { readonly label: string; readonly port: number }[] } = {},
 ): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
-  checks.push(...envCheck(probes.env));
+  const environmentChecks = envCheck(probes.env);
+  checks.push(...environmentChecks);
   checks.push(await nodeVersionCheck(probes));
   checks.push(await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm'));
   checks.push(
@@ -181,6 +231,7 @@ export async function runDoctor(
   const dockerDaemon = await dockerDaemonCheck(probes);
   checks.push(dockerDaemon);
   checks.push(testcontainersCheck(dockerDaemon));
+  checks.push(...testTierChecks(dockerDaemon, environmentChecks));
   checks.push(
     await versionCheck(probes, 'cargo', ['--version'], /^cargo \d+\.\d+/, 'cargo (CDK adapter)'),
   );

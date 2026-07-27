@@ -19,10 +19,16 @@ The lab implements an experimental `cashu-delivery-v1` application profile on ex
 pnpm install --frozen-lockfile
 pnpm format:check
 pnpm typecheck
-pnpm test
+pnpm test             # Docker-free default
+pnpm test:integration # PostgreSQL/Testcontainers; skips if Docker is unavailable
+pnpm test:funded      # strict real-mint and funded-wallet lanes
 pnpm build
 pnpm test:consumer
 ```
+
+`pnpm test:all` runs unit, integration, and funded tiers in order. Run `pnpm lab doctor`
+to see which tiers are runnable and the exact command for each one. Funded tests never
+turn missing Docker, credentials, or endpoints into a passing result.
 
 Run Rust adapter checks:
 

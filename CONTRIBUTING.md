@@ -42,8 +42,13 @@ pnpm build
 
 ## Tests
 
-- `pnpm test` runs all unit and integration tests.
-- Docker-dependent tests are skipped when Docker is unavailable.
+- `pnpm test` and `pnpm test:unit` run the Docker-free default suite.
+- `pnpm test:integration` runs PostgreSQL/Testcontainers suites and prints an explicit
+  skipped-tier reason when Docker is unavailable.
+- `pnpm test:funded` runs strict real-mint, funded-wallet, restart, and relay lanes;
+  missing prerequisites fail the command.
+- `pnpm test:all` runs unit, integration, and funded tiers in order.
+- `pnpm lab doctor` prints tier readiness and the exact runnable commands.
 - Rust tests: `cargo test --manifest-path adapters/cdk/Cargo.toml`.
 
 ## Commit messages
