@@ -1,6 +1,7 @@
 import {
   AdapterClientError,
   AdapterNotApplicableError,
+  currentAdapterContract,
   developmentIdentity,
   type AdapterCapabilities,
   type AdapterClient,
@@ -100,6 +101,7 @@ interface FakeOptions {
   readonly sendError?: Error;
   readonly sendErrors?: Error[];
   readonly mints?: readonly AdapterMintIdentity[];
+  readonly capabilities?: AdapterCapabilities;
 }
 
 class FakeAdapter implements AdapterClient {
@@ -107,6 +109,7 @@ class FakeAdapter implements AdapterClient {
 
   async capabilities(): Promise<AdapterCapabilities> {
     this.options.calls.push(`${this.options.role}.capabilities`);
+    if (this.options.capabilities !== undefined) return this.options.capabilities;
     return capabilities(
       this.options.role,
       this.options.role,
@@ -204,10 +207,10 @@ describe('runExternalDeliveryPair', () => {
       result.invariants?.find((item) => item.id === 'at-most-once-redemption-start'),
     ).toMatchObject({ status: 'not_observable' });
     expect(fixture.calls).toEqual([
-      'receiver.reset',
-      'sender.reset',
       'sender.capabilities',
       'receiver.capabilities',
+      'receiver.reset',
+      'sender.reset',
       'receiver.request',
       'sender.send',
       'receiver.delivery',
@@ -232,6 +235,46 @@ describe('runExternalDeliveryPair', () => {
     });
 
     expect(result).toMatchObject({ ok: true, mints: [] });
+  });
+
+  it('rejects incompatible adapter contract metadata before resetting adapters', async () => {
+    const fixture = pair({
+      sender: {
+        capabilities: {
+          ...capabilities('sender', 'sender', [
+            { id: 'nutshell-local', implementation: 'nutshell' },
+          ]),
+          contract: currentAdapterContract(),
+        },
+      },
+      receiver: {
+        capabilities: {
+          ...capabilities('receiver', 'receiver', [
+            { id: 'nutshell-local', implementation: 'nutshell' },
+          ]),
+          contract: {
+            ...currentAdapterContract(),
+            specDigest: `sha256:${'12'.repeat(32)}`,
+          },
+        },
+      },
+    });
+
+    const result = await runExternalDeliveryPair({
+      profile: 'delivery-v1',
+      seed: 'pair-seed',
+      sender: fixture.sender,
+      receiver: fixture.receiver,
+      amount: 8,
+      unit: 'sat',
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'ADAPTER_CONTRACT_INCOMPATIBLE',
+      reason: expect.stringContaining('regeneration'),
+    });
+    expect(fixture.calls).toEqual(['sender.capabilities', 'receiver.capabilities']);
   });
 
   it('retries transient sender failures with one deterministic delivery id', async () => {

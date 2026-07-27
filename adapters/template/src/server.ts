@@ -7,7 +7,7 @@ import type {
   ProofEvidenceView,
   SendPaymentInput,
 } from '@cashu-fault-lab/adapter-contract';
-import { developmentIdentity } from '@cashu-fault-lab/adapter-contract';
+import { currentAdapterContract, developmentIdentity } from '@cashu-fault-lab/adapter-contract';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 const UNAUTH = { statusCode: 401, error: 'Unauthorized' } as const;
@@ -31,6 +31,7 @@ export function createAdapterServer(options: AdapterServerOptions): FastifyInsta
   server.get('/v1/capabilities', async (_request, reply) => {
     const capabilities: AdapterCapabilities = {
       schemaVersion: 2,
+      contract: currentAdapterContract(),
       implementation: developmentIdentity({
         id: 'template',
         version: '0.0.0',

@@ -316,6 +316,8 @@ components:
         schemaVersion:
           type: integer
           const: 2
+        contract:
+          $ref: '#/components/schemas/AdapterContractMetadata'
         implementation:
           type: object
           required: [id, version, language, runtime, sourceDigest, buildDigest]
@@ -379,6 +381,23 @@ components:
                 type: string
                 minLength: 1
             additionalProperties: false
+      additionalProperties: false
+
+    AdapterContractMetadata:
+      type: object
+      required: [apiVersion, schemaVersion, specDigest]
+      properties:
+        apiVersion:
+          type: integer
+          minimum: 1
+          maximum: 255
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 255
+        specDigest:
+          type: string
+          pattern: '^sha256:(?!([0-9a-f])\1{63}$)[0-9a-f]{64}$'
       additionalProperties: false
 
     AdapterRoleCapability:

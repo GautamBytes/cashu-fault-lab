@@ -135,7 +135,15 @@ describe('runDoctor', () => {
     });
 
     expect(report.ok).toBe(false);
-    expect(report.checks.some((c) => c.name === 'docker' && c.status === 'fail')).toBe(true);
+    expect(report.checks).toContainEqual({
+      name: 'docker',
+      status: 'fail',
+      detail: 'docker: not found',
+      diagnostic: expect.objectContaining({
+        code: 'DOCKER_NOT_INSTALLED',
+        nextCommand: 'docker --version',
+      }),
+    });
     expect(report.checks.some((c) => c.name === 'cargo (CDK adapter)' && c.status === 'fail')).toBe(
       true,
     );
@@ -213,6 +221,13 @@ describe('runDoctor', () => {
       status: 'fail',
       detail: 'blocked: node requires Node 24.x; found v22.18.0',
     });
+    expect(nodeCheck?.diagnostic).toMatchObject({
+      code: 'NODE_VERSION_UNSUPPORTED',
+      problem: expect.stringContaining('Node.js'),
+      likelyCause: expect.any(String),
+      remediation: expect.any(String),
+      nextCommand: 'node --version',
+    });
   });
 
   it('fails Docker-dependent readiness when the daemon is unreachable', async () => {
@@ -230,6 +245,10 @@ describe('runDoctor', () => {
       name: 'docker daemon',
       status: 'fail',
       detail: 'daemon unavailable',
+      diagnostic: expect.objectContaining({
+        code: 'DOCKER_DAEMON_UNAVAILABLE',
+        nextCommand: 'docker info',
+      }),
     });
     expect(report.checks).toContainEqual({
       name: 'testcontainers',

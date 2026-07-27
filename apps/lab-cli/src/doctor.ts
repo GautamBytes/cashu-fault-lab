@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { Socket } from 'node:net';
 import { promisify } from 'node:util';
+import { createDiagnostic, type LabDiagnostic } from './diagnostics.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -8,6 +9,7 @@ export interface DoctorCheck {
   readonly name: string;
   readonly status: 'ok' | 'warn' | 'fail';
   readonly detail: string;
+  readonly diagnostic?: LabDiagnostic;
 }
 
 export interface DoctorProbes {
@@ -197,12 +199,18 @@ async function nodeVersionCheck(probe: DoctorProbes): Promise<DoctorCheck> {
         name: 'node',
         status: 'fail',
         detail: `requires Node 24.x; found ${trimmed}`,
+        diagnostic: createDiagnostic('NODE_VERSION_UNSUPPORTED'),
       };
     }
     return { name: 'node', status: 'ok', detail: trimmed };
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'command failed';
-    return { name: 'node', status: 'fail', detail: truncate(reason) };
+    return {
+      name: 'node',
+      status: 'fail',
+      detail: truncate(reason),
+      diagnostic: createDiagnostic('NODE_VERSION_UNSUPPORTED'),
+    };
   }
 }
 
@@ -217,7 +225,12 @@ async function dockerDaemonCheck(probe: DoctorProbes): Promise<DoctorCheck> {
     };
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'command failed';
-    return { name: 'docker daemon', status: 'fail', detail: truncate(reason) };
+    return {
+      name: 'docker daemon',
+      status: 'fail',
+      detail: truncate(reason),
+      diagnostic: createDiagnostic('DOCKER_DAEMON_UNAVAILABLE'),
+    };
   }
 }
 
@@ -323,6 +336,7 @@ async function portChecks(
       name: `port ${port} (${label})`,
       status: free ? 'ok' : 'warn',
       detail: free ? 'free' : 'in use (stop any running lab stack before funded lanes)',
+      ...(free ? {} : { diagnostic: createDiagnostic('PORT_IN_USE') }),
     });
   }
   return checks;
@@ -340,8 +354,17 @@ export async function runDoctor(
   checks.push(node);
   const pnpm = await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm');
   checks.push(pnpm);
+  const docker = await versionCheck(
+    probes,
+    'docker',
+    ['--version'],
+    /^Docker version \d+\.\d+/,
+    'docker',
+  );
   checks.push(
-    await versionCheck(probes, 'docker', ['--version'], /^Docker version \d+\.\d+/, 'docker'),
+    docker.status === 'fail'
+      ? { ...docker, diagnostic: createDiagnostic('DOCKER_NOT_INSTALLED') }
+      : docker,
   );
   const dockerDaemon = await dockerDaemonCheck(probes);
   checks.push(dockerDaemon);

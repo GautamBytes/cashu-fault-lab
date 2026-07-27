@@ -5,6 +5,7 @@ import {
 } from '@cashu/cashu-ts';
 import {
   AdapterNotApplicableError,
+  currentAdapterContract,
   developmentIdentity,
   type AdapterCapabilities,
   type AdapterTransport,
@@ -272,6 +273,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
     const persistent = this.#store.durability === 'persistent';
     return {
       schemaVersion: 2,
+      contract: currentAdapterContract(),
       implementation: developmentIdentity({
         id: 'cashu-ts',
         version: '4.7.2',

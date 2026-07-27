@@ -27,8 +27,13 @@ export {
   isDevelopmentIdentity,
   type DevelopmentIdentityInput,
 } from './identity.js';
+export { currentAdapterContract, validateAdapterCompatibility } from './contract-metadata.js';
+export * as generatedAdapterContract from './generated/typescript/index.js';
 export type {
   AdapterCapabilities,
+  AdapterCompatibilityResult,
+  AdapterCompatibilityWarning,
+  AdapterContractMetadata,
   AdapterClient,
   AdapterEncoding,
   AdapterImplementationIdentity,

@@ -1,4 +1,5 @@
 import {
+  currentAdapterContract,
   developmentIdentity,
   type AdapterCapabilities,
   type AdapterTransport,
@@ -16,6 +17,7 @@ export function referenceCapabilities(
     }) as const;
   const capabilities: AdapterCapabilities = {
     schemaVersion: 2,
+    contract: currentAdapterContract(),
     implementation: developmentIdentity({
       id: 'reference-ts',
       version: '0.0.0',

@@ -1,13 +1,20 @@
-import type {
-  AdapterCapabilities,
-  AdapterMintIdentity,
-  AdapterRole,
+import {
+  validateAdapterCompatibility,
+  type AdapterCompatibilityResult,
+  type AdapterCapabilities,
+  type AdapterMintIdentity,
+  type AdapterRole,
 } from '@cashu-fault-lab/adapter-contract';
 import type { InvariantResult } from '@cashu-fault-lab/oracle';
 
 export interface MatrixParticipant {
   readonly id: string;
   readonly capabilities: AdapterCapabilities;
+}
+
+export interface MatrixCaseCompatibility {
+  readonly sender: AdapterCompatibilityResult;
+  readonly receiver: AdapterCompatibilityResult;
 }
 
 export type MatrixExecutionResult =
@@ -30,6 +37,7 @@ interface MatrixCaseIdentity {
   readonly profile: string;
   readonly sender: string;
   readonly receiver: string;
+  readonly compatibility?: MatrixCaseCompatibility;
 }
 
 export type MatrixCaseResult =
@@ -85,11 +93,29 @@ export class CompatibilityMatrix {
           sender: sender.id,
           receiver: receiver.id,
         };
+        const compatibility: MatrixCaseCompatibility = {
+          sender: validateAdapterCompatibility(sender.capabilities),
+          receiver: validateAdapterCompatibility(receiver.capabilities),
+        };
+        const incompatible = [compatibility.sender, compatibility.receiver].find(
+          (result): result is Extract<AdapterCompatibilityResult, { readonly ok: false }> =>
+            !result.ok,
+        );
+        const compatibleIdentity = { ...identity, compatibility };
+        if (incompatible !== undefined) {
+          results.push({
+            ...compatibleIdentity,
+            status: 'failed',
+            code: incompatible.code,
+            reason: incompatible.reason,
+          });
+          continue;
+        }
         const unsupported =
           unsupportedReason(profile, sender, 'sender') ??
           unsupportedReason(profile, receiver, 'receiver');
         if (unsupported) {
-          results.push({ ...identity, status: 'not_applicable', reason: unsupported });
+          results.push({ ...compatibleIdentity, status: 'not_applicable', reason: unsupported });
           continue;
         }
         let execution: MatrixExecutionResult;
@@ -97,7 +123,7 @@ export class CompatibilityMatrix {
           execution = await this.#execute(profile, sender, receiver);
         } catch {
           results.push({
-            ...identity,
+            ...compatibleIdentity,
             status: 'failed',
             code: 'MATRIX_EXECUTION_ERROR',
             reason: 'Matrix executor failed',
@@ -105,12 +131,16 @@ export class CompatibilityMatrix {
           continue;
         }
         if (execution.ok === null) {
-          results.push({ ...identity, status: 'not_applicable', reason: execution.reason });
+          results.push({
+            ...compatibleIdentity,
+            status: 'not_applicable',
+            reason: execution.reason,
+          });
           continue;
         }
         if (execution.ok) {
           results.push({
-            ...identity,
+            ...compatibleIdentity,
             status: 'passed',
             senderCapabilities: structuredClone(sender.capabilities),
             receiverCapabilities: structuredClone(receiver.capabilities),
@@ -123,7 +153,7 @@ export class CompatibilityMatrix {
         const expected =
           profile === 'nut26-nostr' && execution.code === 'NUT26_NIP_MAPPING_MISMATCH';
         results.push({
-          ...identity,
+          ...compatibleIdentity,
           status: expected ? 'expected_failure' : 'failed',
           code: execution.code,
           reason: execution.reason,

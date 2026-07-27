@@ -4,6 +4,7 @@ import {
   type ScenarioRunResult,
 } from '@cashu-fault-lab/scenario-runner';
 import {
+  currentAdapterContract,
   developmentIdentity,
   validateScenarioResult,
   type AdapterCapabilities,
@@ -265,6 +266,19 @@ const matrixResults: readonly MatrixCaseResult[] = [
     status: 'passed',
     senderCapabilities: matrixCapability,
     receiverCapabilities: matrixCapability,
+    compatibility: {
+      sender: { ok: true, metadata: currentAdapterContract(), warnings: [] },
+      receiver: {
+        ok: true,
+        warnings: [
+          {
+            code: 'ADAPTER_CONTRACT_LEGACY',
+            message: 'legacy receiver',
+            remediation: 'regenerate',
+          },
+        ],
+      },
+    },
     invariants: [],
     mints: [],
   },
@@ -338,6 +352,18 @@ describe('matrix report rendering', () => {
     expect(json).toContain('"total": 4');
     expect(json).toContain('NUT26_NIP_MAPPING_MISMATCH');
     expect(json).toContain('cashu-ts does not implement receipts');
+  });
+
+  it('includes adapter contract compatibility in matrix JSON reports', () => {
+    const json = renderMatrixJson({
+      profile: 'delivery-v1',
+      seed: 'matrix-seed',
+      results: matrixResults,
+    });
+
+    expect(json).toContain('"compatibility"');
+    expect(json).toContain('"ADAPTER_CONTRACT_LEGACY"');
+    expect(json).toContain(currentAdapterContract().specDigest);
   });
 
   it('includes release-gate failures in JSON, JUnit, and HTML', () => {

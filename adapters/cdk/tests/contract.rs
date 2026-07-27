@@ -1,3 +1,4 @@
+use bitcoin::hashes::{Hash, sha256};
 use cashu_fault_lab_cdk_adapter::{
     CompatibilityEvidence, capabilities, decode_request, funded_capabilities,
     nut26_nostr_mapping_evidence,
@@ -19,6 +20,13 @@ fn vectors() -> Vec<Vector> {
     serde_json::from_value(value["vectors"].clone()).expect("published vectors must be valid")
 }
 
+fn expected_spec_digest() -> String {
+    format!(
+        "sha256:{}",
+        sha256::Hash::hash(include_bytes!("../../../spec/openapi.yaml"))
+    )
+}
+
 #[test]
 fn publishes_honest_legacy_capabilities() {
     let value = capabilities();
@@ -26,6 +34,9 @@ fn publishes_honest_legacy_capabilities() {
     assert_eq!(value.implementation.id, "cdk");
     assert_eq!(value.implementation.version, "0.17.3");
     assert_eq!(value.encodings, ["creqA", "creqB"]);
+    assert_eq!(value.contract.api_version, 1);
+    assert_eq!(value.contract.schema_version, 2);
+    assert_eq!(value.contract.spec_digest, expected_spec_digest());
     let sender = value.roles.sender.expect("sender role must be declared");
     assert_eq!(sender.evidence.tier, "T0");
     assert!(!sender.profiles.contains(&"delivery-v1".to_owned()));
@@ -34,6 +45,7 @@ fn publishes_honest_legacy_capabilities() {
 #[test]
 fn does_not_claim_restart_durability_for_in_memory_funded_state() {
     let value = funded_capabilities();
+    assert_eq!(value.contract.spec_digest, expected_spec_digest());
     let sender = value
         .roles
         .sender

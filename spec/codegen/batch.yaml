@@ -1,0 +1,4 @@
+batch:
+  - spec/codegen/config.typescript.json
+  - spec/codegen/config.rust.json
+  - spec/codegen/config.python.json

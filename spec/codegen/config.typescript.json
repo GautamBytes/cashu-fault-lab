@@ -1,0 +1,10 @@
+{
+  "generatorName": "typescript-fetch",
+  "inputSpec": "spec/openapi.yaml",
+  "outputDir": "packages/adapter-contract/src/generated/typescript",
+  "additionalProperties": {
+    "supportsES6": true,
+    "typescriptThreePlus": true,
+    "useSingleRequestParameter": true
+  }
+}

@@ -8,8 +8,10 @@ import {
   deliveryReceiptSchema,
   deliveryRequestSchema,
   scenarioResultSchema,
+  currentAdapterContract,
   validateAdapterRequest,
   validateAdapterResponse,
+  validateAdapterCompatibility,
   validateDeliveryPayload,
   validateDeliveryReceipt,
   validateDeliveryRequest,
@@ -223,5 +225,61 @@ describe('adapter HTTP contract', () => {
         mints: [],
       }),
     ).toMatchObject({ ok: false });
+  });
+
+  it('accepts contract metadata and reports legacy or incompatible adapters separately', () => {
+    const base = {
+      schemaVersion: 2,
+      implementation: {
+        id: 'contract-fixture',
+        version: '1.0.0',
+        language: 'typescript',
+        runtime: 'node-24',
+        sourceDigest: `sha256:${'ab'.repeat(32)}`,
+        buildDigest: `sha256:${'cd'.repeat(32)}`,
+      },
+      roles: {
+        sender: {
+          transports: ['http'],
+          profiles: ['delivery-v1'],
+          durability: 'process',
+          evidence: { tier: 'T0', sources: ['adapter'] },
+        },
+      },
+      nuts: [18],
+      encodings: ['creqA'],
+      mints: [],
+    } as const;
+
+    expect(
+      validateAdapterResponse('capabilities', {
+        ...base,
+        contract: currentAdapterContract(),
+      }),
+    ).toEqual({ ok: true });
+    expect(validateAdapterCompatibility(base)).toMatchObject({
+      ok: true,
+      warnings: [expect.objectContaining({ code: 'ADAPTER_CONTRACT_LEGACY' })],
+    });
+    expect(
+      validateAdapterCompatibility({
+        ...base,
+        contract: { ...currentAdapterContract(), apiVersion: 99 },
+      }),
+    ).toMatchObject({
+      ok: false,
+      code: 'ADAPTER_CONTRACT_INCOMPATIBLE',
+      reason: expect.stringContaining('apiVersion'),
+    });
+    expect(
+      validateAdapterCompatibility({
+        ...base,
+        contract: { ...currentAdapterContract(), specDigest: `sha256:${'12'.repeat(32)}` },
+      }),
+    ).toMatchObject({
+      ok: false,
+      code: 'ADAPTER_CONTRACT_INCOMPATIBLE',
+      reason: expect.stringContaining('regeneration'),
+    });
   });
 });
