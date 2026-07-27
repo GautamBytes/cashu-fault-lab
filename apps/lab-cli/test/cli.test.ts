@@ -48,8 +48,14 @@ const matrixCapability: AdapterCapabilities = {
   },
   nuts: [18],
   encodings: ['creqA'],
-  mints: [],
+  mints: [{ id: 'test-mint', implementation: 'test-mint' }],
 };
+const gateInvariant = {
+  id: 'independent-ledger-evidence',
+  status: 'passed',
+  confidence: 'observed',
+  evidence: [{ source: 'ledger', description: 'Test ledger evidence.' }],
+} as const;
 
 class FakeRuntime implements LabRuntime {
   runs = 0;
@@ -58,6 +64,7 @@ class FakeRuntime implements LabRuntime {
   shrinkRunLimit: number | undefined;
   selection: { sender: string; receiver: string } | undefined;
   adapterManifest: AdapterManifest | undefined;
+  matrices = 0;
 
   async up(): Promise<void> {}
   async down(): Promise<void> {}
@@ -89,6 +96,7 @@ class FakeRuntime implements LabRuntime {
     _seed?: string,
     adapterManifest?: AdapterManifest,
   ): Promise<readonly MatrixCaseResult[]> {
+    this.matrices += 1;
     this.adapterManifest = adapterManifest;
     return [
       {
@@ -98,8 +106,8 @@ class FakeRuntime implements LabRuntime {
         status: 'passed',
         senderCapabilities: matrixCapability,
         receiverCapabilities: matrixCapability,
-        invariants: [],
-        mints: [],
+        invariants: [gateInvariant],
+        mints: [{ id: 'test-mint', implementation: 'test-mint' }],
       },
     ];
   }
@@ -395,6 +403,80 @@ describe('lab CLI', () => {
 
     expect(outcome.exitCode).toBe(1);
     expect(setup.stderr()).toMatch(/requires at least 2 passing pairs/i);
+  });
+
+  it('rejects a malformed release policy before starting the matrix', async () => {
+    const setup = fixture({ 'bad-policy.json': JSON.stringify({ schemaVersion: 99 }) });
+    const runtime = new FakeRuntime();
+
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'matrix', '--release-policy', 'bad-policy.json'],
+      { runtime, io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(2);
+    expect(runtime.matrices).toBe(0);
+    expect(setup.stderr()).toMatch(/release policy/i);
+  });
+
+  it('evaluates a release policy and prints every rejection reason', async () => {
+    const selectedPolicy = {
+      schemaVersion: 1,
+      profile: 'delivery-v1',
+      minimumQualifyingPairs: 2,
+      requireCrossImplementation: true,
+      requireCrossLanguage: true,
+      requireDistinctBuilds: true,
+      minimumDistinctMints: 2,
+      minimumEvidence: { sender: 'T1', receiver: 'T3' },
+      requiredInvariants: ['independent-ledger-evidence'],
+      acceptedConfidence: ['observed', 'derived'],
+    };
+    const setup = fixture({ 'policy.json': JSON.stringify(selectedPolicy) });
+    const runtime = new FakeRuntime();
+    const baseMatrix = runtime.matrix.bind(runtime);
+    runtime.matrix = async (...args) =>
+      (await baseMatrix(...args)).map((result) =>
+        result.status === 'passed' ? { ...result, mints: [] } : result,
+      );
+
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'matrix', '--release-policy', 'policy.json'],
+      { runtime, io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(1);
+    expect(setup.stderr()).toContain('CROSS_IMPLEMENTATION_REQUIRED');
+    expect(setup.stderr()).toContain('CROSS_LANGUAGE_REQUIRED');
+    expect(setup.stderr()).toContain('SENDER_EVIDENCE_TOO_LOW');
+    expect(setup.stderr()).toContain('RECEIVER_EVIDENCE_TOO_LOW');
+    expect(setup.stderr()).toContain('MINT_IDENTITY_REQUIRED');
+    expect(setup.stderr()).toContain('MINIMUM_QUALIFYING_PAIRS');
+    expect(setup.stderr()).toContain('MINIMUM_DISTINCT_MINTS');
+  });
+
+  it('exits zero for a satisfied release policy', async () => {
+    const selectedPolicy = {
+      schemaVersion: 1,
+      profile: 'delivery-v1',
+      minimumQualifyingPairs: 1,
+      requireCrossImplementation: false,
+      requireCrossLanguage: false,
+      requireDistinctBuilds: false,
+      minimumDistinctMints: 0,
+      minimumEvidence: { sender: 'T0', receiver: 'T0' },
+      requiredInvariants: ['independent-ledger-evidence'],
+      acceptedConfidence: ['observed'],
+    };
+    const setup = fixture({ 'policy.json': JSON.stringify(selectedPolicy) });
+
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'matrix', '--release-policy', 'policy.json'],
+      { runtime: new FakeRuntime(), io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(0);
+    expect(setup.stdout()).toContain('release gate: passed');
   });
 
   it('writes a JSON matrix report when --format json is given', async () => {

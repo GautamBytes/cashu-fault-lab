@@ -280,6 +280,21 @@ const matrixResults: readonly MatrixCaseResult[] = [
 ];
 
 describe('matrix report rendering', () => {
+  const releaseGate = {
+    passed: false,
+    qualifyingPairs: [],
+    reasons: [
+      {
+        code: 'MINIMUM_QUALIFYING_PAIRS' as const,
+        message: 'Release requires two qualifying pairs.',
+      },
+      {
+        code: 'MINIMUM_DISTINCT_MINTS' as const,
+        message: 'Release requires two distinct mints.',
+      },
+    ],
+  };
+
   it('summarizes pass/fail/N/A/expected counts across cases', () => {
     const report = createMatrixReport({
       profile: 'delivery-v1',
@@ -309,6 +324,24 @@ describe('matrix report rendering', () => {
     expect(json).toContain('"total": 4');
     expect(json).toContain('NUT26_NIP_MAPPING_MISMATCH');
     expect(json).toContain('cashu-ts does not implement receipts');
+  });
+
+  it('includes release-gate failures in JSON, JUnit, and HTML', () => {
+    const input = {
+      profile: 'delivery-v1',
+      seed: 'matrix-seed',
+      results: matrixResults,
+      releaseGate,
+    };
+
+    const json = renderMatrixJson(input);
+    expect(json).toContain('"schemaVersion": 2');
+    expect(json).toContain('"releaseGate"');
+    expect(json).toContain('MINIMUM_QUALIFYING_PAIRS');
+    expect(renderMatrixJunit(input)).toContain('<failure type="RELEASE_GATE_FAILED"');
+    const html = renderMatrixHtml(input);
+    expect(html).toContain('Release gate failed');
+    expect(html).toContain('MINIMUM_DISTINCT_MINTS');
   });
 
   it('renders JUnit with one testcase per pair and correct skip/failure counts', () => {

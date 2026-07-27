@@ -59,6 +59,16 @@ export function renderMatrixHtml(input: MatrixReportInput): string {
       return `      <tr><td>${html(result.sender)}</td><td>→</td><td>${html(result.receiver)}</td><td class="${cls}">${html(label)}</td><td>${detail}</td></tr>`;
     })
     .join('\n');
+  const releaseGate =
+    report.releaseGate === undefined
+      ? ''
+      : report.releaseGate.passed
+        ? '<section><h2>Release gate passed</h2></section>'
+        : `<section><h2>Release gate failed</h2><ul>${report.releaseGate.reasons
+            .map(
+              (reason) => `<li><strong>${html(reason.code)}</strong>: ${html(reason.message)}</li>`,
+            )
+            .join('')}</ul></section>`;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -79,6 +89,7 @@ export function renderMatrixHtml(input: MatrixReportInput): string {
     <span class="status na">${report.summary.notApplicable} N/A</span>
     <span class="status expected">${report.summary.expectedFailure} expected-failure</span>
   </p>
+  ${releaseGate}
   <table>
     <thead><tr><th>Sender</th><th></th><th>Receiver</th><th>Status</th><th></th></tr></thead>
     <tbody>

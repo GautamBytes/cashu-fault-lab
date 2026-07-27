@@ -1,13 +1,14 @@
-import type { MatrixCaseResult } from '@cashu-fault-lab/scenario-runner';
+import type { MatrixCaseResult, ReleaseGateResult } from '@cashu-fault-lab/scenario-runner';
 
 export interface MatrixReportInput {
   readonly profile: string;
   readonly seed: string;
   readonly results: readonly MatrixCaseResult[];
+  readonly releaseGate?: ReleaseGateResult;
 }
 
 export interface MatrixReportDocument {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly profile: string;
   readonly seed: string;
   readonly summary: {
@@ -18,6 +19,7 @@ export interface MatrixReportDocument {
     readonly total: number;
   };
   readonly cases: readonly MatrixCaseResult[];
+  readonly releaseGate?: ReleaseGateResult;
 }
 
 export function createMatrixReport(input: MatrixReportInput): MatrixReportDocument {
@@ -28,7 +30,7 @@ export function createMatrixReport(input: MatrixReportInput): MatrixReportDocume
     (result) => result.status === 'expected_failure',
   ).length;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     profile: input.profile,
     seed: input.seed,
     summary: {
@@ -39,5 +41,6 @@ export function createMatrixReport(input: MatrixReportInput): MatrixReportDocume
       total: input.results.length,
     },
     cases: [...input.results],
+    ...(input.releaseGate === undefined ? {} : { releaseGate: structuredClone(input.releaseGate) }),
   };
 }

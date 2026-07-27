@@ -109,13 +109,34 @@ describe('PackagedLabRuntime', () => {
 
   it('uses the matrix seed in reference probe evidence', async () => {
     const runtime = new PackagedLabRuntime();
-    const evidence = async (seed: string) => {
+    const passedCase = async (seed: string) => {
       const results = await runtime.matrix('delivery-v1', seed);
-      return results.find((result) => result.status === 'passed')?.evidence;
+      return results.find((result) => result.status === 'passed');
     };
 
-    expect(await evidence('seed-a')).not.toEqual(await evidence('seed-b'));
-    expect(await evidence('seed-a')).toEqual(await evidence('seed-a'));
+    expect((await passedCase('seed-a'))?.evidence).not.toEqual(
+      (await passedCase('seed-b'))?.evidence,
+    );
+    expect((await passedCase('seed-a'))?.evidence).toEqual(
+      (await passedCase('seed-a'))?.evidence,
+    );
+    expect((await passedCase('seed-a'))?.invariants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'stable-duplicate-response',
+          status: 'passed',
+        }),
+        expect.objectContaining({
+          id: 'crash-recovery',
+          status: 'not_applicable',
+        }),
+        expect.objectContaining({
+          id: 'independent-mint-evidence',
+          status: 'passed',
+          confidence: 'observed',
+        }),
+      ]),
+    );
   });
 
   it('allows a compose-only fault gateway token without enabling HTTP fault injection', async () => {
@@ -219,13 +240,32 @@ describe('PackagedLabRuntime', () => {
 
     const results = await runtime.matrix('delivery-v1', 'external-seed', manifest);
 
-    expect(results).toContainEqual({
-      profile: 'delivery-v1',
-      sender: 'wallet-sender',
-      receiver: 'wallet-receiver',
-      status: 'passed',
-      evidence: expect.objectContaining({ tier: 'T1', credits: 1, seed: 'external-seed' }),
-    });
+    expect(results).toContainEqual(
+      expect.objectContaining({
+        profile: 'delivery-v1',
+        sender: 'wallet-sender',
+        receiver: 'wallet-receiver',
+        status: 'passed',
+        senderCapabilities: expect.objectContaining({
+          implementation: expect.objectContaining({ id: 'wallet-sender' }),
+        }),
+        receiverCapabilities: expect.objectContaining({
+          implementation: expect.objectContaining({ id: 'wallet-receiver' }),
+        }),
+        invariants: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'at-most-one-merchant-credit-per-delivery',
+            status: 'passed',
+            confidence: 'observed',
+          }),
+          expect.objectContaining({
+            id: 'at-most-once-redemption-start',
+            status: 'not_observable',
+          }),
+        ]),
+        evidence: expect.objectContaining({ credits: 1, seed: 'external-seed' }),
+      }),
+    );
     expect(fetchCalls).toContain('4101/v1/send');
     expect(fetchCalls).toContain(`4102/v1/deliveries/${activeDeliveryId}`);
 

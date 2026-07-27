@@ -7,12 +7,13 @@ import {
 export function referenceCapabilities(
   transports: readonly AdapterTransport[],
 ): Readonly<Record<string, unknown>> {
-  const role = {
-    transports,
-    profiles: ['delivery-v1'],
-    durability: 'process',
-    evidence: { tier: 'T0', sources: ['adapter', 'runner', 'transport'] },
-  } as const;
+  const role = () =>
+    ({
+      transports: [...transports],
+      profiles: ['delivery-v1'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter', 'runner', 'transport'] },
+    }) as const;
   const capabilities: AdapterCapabilities = {
     schemaVersion: 2,
     implementation: developmentIdentity({
@@ -21,7 +22,9 @@ export function referenceCapabilities(
       language: 'typescript',
       runtime: 'node-24',
     }),
-    roles: { sender: role, receiver: role },
+    // Keep role records structurally independent. The artifact redactor treats
+    // repeated object identities as cycles, even when the data is acyclic.
+    roles: { sender: role(), receiver: role() },
     nuts: [2, 3, 7, 9, 10, 12, 18, 19],
     encodings: ['creqA'],
     mints: [],

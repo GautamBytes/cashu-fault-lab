@@ -25,8 +25,15 @@ import {
   type SenderWallet,
   type TransportResult,
 } from '@cashu-fault-lab/reference-sender';
+import {
+  applyObservation,
+  emptyOracleModel,
+  evaluateInvariants,
+  type Observation,
+} from '@cashu-fault-lab/oracle';
 import { createHash } from 'node:crypto';
 import type { MatrixExecutionResult } from './matrix.js';
+import { referenceCapabilities } from './reference-capabilities.js';
 import { seededProtocolId, seededSecret } from './seeded-fixture.js';
 
 const now = 1_784_399_400;
@@ -154,6 +161,7 @@ export async function runReferenceDeliveryProbe(seed: string): Promise<MatrixExe
   );
   const credits = await store.credits();
   const plans = await store.settlementPlans();
+  const record = await store.current(deliveryId);
   const invariant =
     outcome.status === 'settled' &&
     transport.attempts === 2 &&
@@ -161,7 +169,8 @@ export async function runReferenceDeliveryProbe(seed: string): Promise<MatrixExe
     wallet.reserveCalls === 1 &&
     mint.swapCalls === 1 &&
     plans.length === 1 &&
-    credits.length === 1;
+    credits.length === 1 &&
+    record !== undefined;
   if (!invariant) {
     return {
       ok: false,
@@ -178,8 +187,67 @@ export async function runReferenceDeliveryProbe(seed: string): Promise<MatrixExe
     createdAt: now,
     expiresAt: now + 900,
   });
+  const receipt = outcome.receipt;
+  const observations: readonly Observation[] = [
+    { type: 'request_observed', requestId, singleUse: true },
+    ...Array.from({ length: transport.attempts }, () => ({
+      type: 'delivery_attempted' as const,
+      requestId,
+      deliveryId,
+      payloadHash,
+      proofSetHash: record.proofSetHash,
+      transport: 'http' as const,
+    })),
+    {
+      type: 'redemption_started',
+      deliveryId,
+      proofSetHash: record.proofSetHash,
+    },
+    { type: 'mint_proofs_state', proofSetHash: record.proofSetHash, state: 'SPENT' },
+    {
+      type: 'receiver_settled',
+      deliveryId,
+      replacementPlanHash: record.replacementPlanHash!,
+    },
+    { type: 'merchant_credited', ...credits[0]! },
+    {
+      type: 'receipt_observed',
+      requestId: receipt.requestId,
+      deliveryId: receipt.deliveryId,
+      payloadHash: receipt.payloadHash,
+      status: receipt.status,
+      detailCode: receipt.detailCode,
+      version: receipt.statusVersion,
+      amount: receipt.amount,
+      unit: receipt.unit,
+    },
+  ];
+  const capabilities = referenceCapabilities(['http']);
+  const invariants = evaluateInvariants({
+    model: observations.reduce(applyObservation, emptyOracleModel()),
+    history: observations.map((observation, sequence) => ({
+      sequence,
+      phase: 'observation',
+      event: observation.type,
+      data: observation,
+    })),
+    commands: [
+      { type: 'send' },
+      { type: 'send' },
+      { type: 'assert_quiescent' },
+    ],
+    capabilities,
+    metadata: {
+      scenarioId: 'matrix:delivery-v1',
+      seed,
+      componentVersions: { 'reference-ts': '0.0.0' },
+    },
+    profile: 'delivery-v1',
+  });
   return {
     ok: true,
+    invariants,
+    mints: [],
     evidence: {
       tier: 'T0',
       attempts: 2,
