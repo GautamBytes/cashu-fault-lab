@@ -3,7 +3,11 @@ import {
   type MatrixCaseResult,
   type ScenarioRunResult,
 } from '@cashu-fault-lab/scenario-runner';
-import { validateScenarioResult } from '@cashu-fault-lab/adapter-contract';
+import {
+  developmentIdentity,
+  validateScenarioResult,
+  type AdapterCapabilities,
+} from '@cashu-fault-lab/adapter-contract';
 import { describe, expect, it } from 'vitest';
 import {
   createMatrixReport,
@@ -212,8 +216,44 @@ describe('allowlist report rendering', () => {
   });
 });
 
+const matrixCapability: AdapterCapabilities = {
+  schemaVersion: 2,
+  implementation: developmentIdentity({
+    id: 'ref',
+    version: '0.0.0',
+    language: 'typescript',
+    runtime: 'node-24',
+  }),
+  roles: {
+    sender: {
+      transports: ['http'],
+      profiles: ['delivery-v1'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter'] },
+    },
+    receiver: {
+      transports: ['http'],
+      profiles: ['delivery-v1'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter'] },
+    },
+  },
+  nuts: [18],
+  encodings: ['creqA'],
+  mints: [],
+};
+
 const matrixResults: readonly MatrixCaseResult[] = [
-  { profile: 'delivery-v1', sender: 'ref', receiver: 'ref', status: 'passed' },
+  {
+    profile: 'delivery-v1',
+    sender: 'ref',
+    receiver: 'ref',
+    status: 'passed',
+    senderCapabilities: matrixCapability,
+    receiverCapabilities: matrixCapability,
+    invariants: [],
+    mints: [],
+  },
   {
     profile: 'delivery-v1',
     sender: 'cashu-ts',

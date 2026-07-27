@@ -2,6 +2,7 @@ import {
   AdapterClientError,
   AdapterNotApplicableError,
   type AdapterClient,
+  type AdapterMintIdentity,
   type AdapterTransport,
   type LedgerCreditView,
   type PaymentRequestView,
@@ -12,6 +13,12 @@ import {
   parseDeliveryReceipt,
   type DeliveryReceipt,
 } from '@cashu-fault-lab/delivery-core';
+import {
+  applyObservation,
+  emptyOracleModel,
+  evaluateInvariants,
+  type Observation,
+} from '@cashu-fault-lab/oracle';
 import type { MatrixExecutionResult } from './matrix.js';
 import { seededProtocolId } from './seeded-fixture.js';
 
@@ -98,6 +105,18 @@ function relatedProofs(
   return proofs.filter((proof) => proof.deliveryId === deliveryId);
 }
 
+function mintIdentities(values: readonly AdapterMintIdentity[]): readonly AdapterMintIdentity[] {
+  const result = new Map<string, AdapterMintIdentity>();
+  for (const value of values) {
+    result.set(`${value.id}\0${value.implementation}\0${value.version ?? ''}`, value);
+  }
+  return [...result.values()].sort((left, right) =>
+    `${left.id}:${left.implementation}:${left.version ?? ''}`.localeCompare(
+      `${right.id}:${right.implementation}:${right.version ?? ''}`,
+    ),
+  );
+}
+
 export async function runExternalDeliveryPair(
   input: ExternalDeliveryPairInput,
 ): Promise<MatrixExecutionResult> {
@@ -121,6 +140,7 @@ export async function runExternalDeliveryPair(
     await input.receiver.reset(input.seed);
     await input.sender.reset(input.seed);
     const senderCapabilities = await input.sender.capabilities();
+    const receiverCapabilities = await input.receiver.capabilities();
 
     const request = await input.receiver.createRequest({
       amount: input.amount,
@@ -142,8 +162,10 @@ export async function runExternalDeliveryPair(
     );
     let sent: DeliveryReceipt | undefined;
     let lastSendError: unknown;
+    let sendAttempts = 0;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
+        sendAttempts += 1;
         sent = parseDeliveryReceipt(await input.sender.send({ request: request.raw, deliveryId }));
         break;
       } catch (error) {
@@ -218,10 +240,77 @@ export async function runExternalDeliveryPair(
       );
     }
 
+    const deliveryObservations: Observation[] = Array.from({ length: sendAttempts }, () => ({
+      type: 'delivery_attempted',
+      requestId: observed.requestId,
+      deliveryId: observed.deliveryId,
+      payloadHash: observed.payloadHash,
+      proofSetHash: proof.proofSetHash,
+      transport: transports[0]!,
+    }));
+    const invariantObservations: readonly Observation[] = [
+      { type: 'request_observed', requestId: request.id, singleUse: request.singleUse },
+      ...deliveryObservations,
+      { type: 'mint_proofs_state', proofSetHash: proof.proofSetHash, state: 'SPENT' },
+      {
+        type: 'merchant_credited',
+        creditId: `external-ledger:${credit.requestId}:${credit.deliveryId}:${credit.createdAt}`,
+        requestId: credit.requestId,
+        deliveryId: credit.deliveryId,
+        amount: credit.amount,
+        unit: credit.unit,
+      },
+      {
+        type: 'receipt_observed',
+        requestId: observed.requestId,
+        deliveryId: observed.deliveryId,
+        payloadHash: observed.payloadHash,
+        status: observed.status,
+        detailCode: observed.detailCode,
+        version: observed.statusVersion,
+        amount: observed.amount,
+        unit: observed.unit,
+      },
+    ];
+    const capabilities = {
+      sender: {
+        implementation: senderCapabilities.implementation,
+        role: senderCapabilities.roles.sender,
+      },
+      receiver: {
+        implementation: receiverCapabilities.implementation,
+        role: receiverCapabilities.roles.receiver,
+      },
+    };
+    const invariants = evaluateInvariants({
+      model: invariantObservations.reduce(applyObservation, emptyOracleModel()),
+      history: invariantObservations.map((observation, index) => ({
+        sequence: index,
+        phase: 'observation',
+        event: observation.type,
+        data: observation,
+      })),
+      commands: Array.from({ length: sendAttempts }, () => ({ type: 'send' })),
+      capabilities,
+      metadata: {
+        scenarioId: `matrix:${input.profile}`,
+        seed: input.seed,
+        componentVersions: {
+          [`sender/${senderCapabilities.implementation.id}`]:
+            senderCapabilities.implementation.version,
+          [`receiver/${receiverCapabilities.implementation.id}`]:
+            receiverCapabilities.implementation.version,
+        },
+      },
+      profile: input.profile,
+    });
+    const mints = mintIdentities([...senderCapabilities.mints, ...receiverCapabilities.mints]);
+
     return {
       ok: true,
+      invariants,
+      mints,
       evidence: {
-        tier: 'T1',
         requestId: observed.requestId,
         deliveryId: observed.deliveryId,
         payloadHash: observed.payloadHash,

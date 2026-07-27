@@ -35,6 +35,14 @@ export {
   type MatrixParticipant,
 } from './matrix.js';
 export {
+  evaluateReleasePolicy,
+  validateReleasePolicy,
+  type ReleaseGateReason,
+  type ReleaseGateReasonCode,
+  type ReleaseGateResult,
+  type ReleasePolicy,
+} from './release-policy.js';
+export {
   ScenarioRunner,
   type DriverSendResult,
   type FailureArtifact,

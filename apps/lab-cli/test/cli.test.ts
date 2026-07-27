@@ -5,6 +5,7 @@ import {
   type ScenarioRunResult,
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
+import { developmentIdentity, type AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
 import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,6 +24,32 @@ const artifact: FailureArtifact = {
   invariants: unobservableInvariantResults('Test fixture has no invariant evidence.'),
 };
 const passed: ScenarioRunResult = { status: 'passed', artifact };
+const matrixCapability: AdapterCapabilities = {
+  schemaVersion: 2,
+  implementation: developmentIdentity({
+    id: 'fake',
+    version: '1.0.0',
+    language: 'typescript',
+    runtime: 'node-24',
+  }),
+  roles: {
+    sender: {
+      transports: ['http'],
+      profiles: ['delivery-v1'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter'] },
+    },
+    receiver: {
+      transports: ['http'],
+      profiles: ['delivery-v1'],
+      durability: 'process',
+      evidence: { tier: 'T0', sources: ['adapter'] },
+    },
+  },
+  nuts: [18],
+  encodings: ['creqA'],
+  mints: [],
+};
 
 class FakeRuntime implements LabRuntime {
   runs = 0;
@@ -69,6 +96,10 @@ class FakeRuntime implements LabRuntime {
         sender: 'fake',
         receiver: 'fake',
         status: 'passed',
+        senderCapabilities: matrixCapability,
+        receiverCapabilities: matrixCapability,
+        invariants: [],
+        mints: [],
       },
     ];
   }

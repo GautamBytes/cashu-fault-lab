@@ -81,7 +81,7 @@ function capabilities(implementation: string, role: 'sender' | 'receiver'): Adap
     },
     nuts: [3, 7, 18],
     encodings: ['creqA'],
-    mints: [],
+    mints: [{ id: 'nutshell-local', implementation: 'nutshell' }],
   };
 }
 
@@ -164,10 +164,10 @@ describe('runExternalDeliveryPair', () => {
       unit: 'sat',
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: true,
+      mints: [{ id: 'nutshell-local', implementation: 'nutshell' }],
       evidence: {
-        tier: 'T1',
         requestId,
         deliveryId,
         payloadHash,
@@ -179,10 +179,18 @@ describe('runExternalDeliveryPair', () => {
         seed: 'pair-seed',
       },
     });
+    if (!result.ok) throw new Error('Expected passing external pair');
+    expect(
+      result.invariants?.find((item) => item.id === 'independent-mint-evidence'),
+    ).toMatchObject({ status: 'passed', confidence: 'observed' });
+    expect(
+      result.invariants?.find((item) => item.id === 'at-most-once-redemption-start'),
+    ).toMatchObject({ status: 'not_observable' });
     expect(fixture.calls).toEqual([
       'receiver.reset',
       'sender.reset',
       'sender.capabilities',
+      'receiver.capabilities',
       'receiver.request',
       'sender.send',
       'receiver.delivery',

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schema/release-policy-v1.json",
+  "title": "Cashu Fault Lab Release Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "profile",
+    "minimumQualifyingPairs",
+    "requireCrossImplementation",
+    "requireCrossLanguage",
+    "requireDistinctBuilds",
+    "minimumDistinctMints",
+    "minimumEvidence",
+    "requiredInvariants",
+    "acceptedConfidence"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "profile": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "minimumQualifyingPairs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "requireCrossImplementation": { "type": "boolean" },
+    "requireCrossLanguage": { "type": "boolean" },
+    "requireDistinctBuilds": { "type": "boolean" },
+    "minimumDistinctMints": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "minimumEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sender", "receiver"],
+      "properties": {
+        "sender": { "enum": ["T0", "T1", "T2", "T3"] },
+        "receiver": { "enum": ["T0", "T1", "T2", "T3"] }
+      }
+    },
+    "requiredInvariants": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "at-most-once-redemption-start",
+          "at-most-one-merchant-credit-per-request",
+          "at-most-one-merchant-credit-per-delivery",
+          "proof-set-exclusivity",
+          "delivery-identity-immutability",
+          "exact-net-amount",
+          "no-premature-settlement",
+          "no-false-rejection-after-possible-consumption",
+          "monotonic-receipts",
+          "stable-duplicate-response",
+          "eventual-terminal-or-recovery-state",
+          "crash-recovery",
+          "retry-convergence",
+          "transport-convergence",
+          "independent-mint-evidence",
+          "independent-ledger-evidence",
+          "reproducibility",
+          "no-unsupported-pass"
+        ]
+      }
+    },
+    "acceptedConfidence": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["observed", "derived"]
+      }
+    }
+  }
+}

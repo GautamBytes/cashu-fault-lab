@@ -53,6 +53,10 @@ describe('CompatibilityMatrix', () => {
     expect(first?.status).toBe('passed');
     if (first?.status !== 'passed') throw new Error('Expected passing matrix result');
     expect(first.evidence).toEqual({ credits: 1, settlements: 1 });
+    expect(first.senderCapabilities.implementation.id).toBe('sender-a');
+    expect(first.receiverCapabilities.implementation.id).toBe('receiver-a');
+    expect(first.invariants).toEqual([]);
+    expect(first.mints).toEqual([]);
     expect(calls).toEqual(['delivery-v1:sender-a:receiver-a', 'delivery-v1:sender-b:receiver-a']);
   });
 
