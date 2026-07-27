@@ -96,6 +96,37 @@ describe('invariant evidence', () => {
     });
   });
 
+  it('preserves adapter-claimed provenance instead of upgrading it to observation', () => {
+    const selected = evaluateInvariants({
+      model: model(observations),
+      commands: [{ type: 'send' }],
+      history: observations.map((observation, index) => ({
+        sequence: index,
+        phase: 'observation',
+        event: observation.type,
+        data: observation,
+      })),
+      observationConfidence: 'adapter_claimed',
+    }).find((candidate) => candidate.id === 'at-most-one-merchant-credit-per-delivery');
+
+    expect(selected).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+  });
+
+  it('requires at least one ordered history entry for reproducibility', () => {
+    const selected = evaluateInvariants({
+      model: model([]),
+      commands: [],
+      history: [],
+      metadata: {
+        scenarioId: 'empty-run',
+        seed: 'seed-1',
+        componentVersions: { oracle: '0.0.0' },
+      },
+    }).find((candidate) => candidate.id === 'reproducibility');
+
+    expect(selected).toMatchObject({ status: 'not_observable' });
+  });
+
   it('marks crash recovery not applicable without a restart command', () => {
     expect(result('crash-recovery')).toMatchObject({
       status: 'not_applicable',

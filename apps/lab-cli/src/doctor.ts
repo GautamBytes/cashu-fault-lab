@@ -30,9 +30,10 @@ const REQUIRED_ENV_VARS = [
   'CFL_REFERENCE_RECEIVER_TOKEN',
   'CFL_REFERENCE_RECEIVER_CLAIM_KEY',
   'CFL_HTTP_FAULT_GATEWAY_TOKEN',
+  'CFL_REAL_MINT_URL',
 ] as const;
 
-const OPTIONAL_ENV_VARS = ['CFL_HTTP_FAULT_GATEWAY_URL', 'CFL_REAL_MINT_URL'] as const;
+const OPTIONAL_ENV_VARS = ['CFL_HTTP_FAULT_GATEWAY_URL'] as const;
 
 const DEFAULT_PORTS: readonly { readonly label: string; readonly port: number }[] = [
   { label: 'nutshell-mint', port: 3338 },
@@ -52,6 +53,17 @@ function envCheck(env: Readonly<Record<string, string | undefined>>): DoctorChec
       checks.push({ name, status: 'fail', detail: 'missing' });
     } else if (/\r|\n/.test(value)) {
       checks.push({ name, status: 'fail', detail: 'contains newline' });
+    } else if (name === 'CFL_REAL_MINT_URL') {
+      try {
+        const url = new URL(value);
+        checks.push(
+          url.protocol === 'http:' || url.protocol === 'https:'
+            ? { name, status: 'ok', detail: 'set' }
+            : { name, status: 'fail', detail: 'must use http or https' },
+        );
+      } catch {
+        checks.push({ name, status: 'fail', detail: 'invalid URL' });
+      }
     } else if (!ENV_TOKEN_PATTERN.test(value)) {
       checks.push({ name, status: 'warn', detail: 'looks like a placeholder token' });
     } else {
@@ -152,14 +164,40 @@ function testcontainersCheck(dockerDaemon: DoctorCheck): DoctorCheck {
 }
 
 function testTierChecks(
+  node: DoctorCheck,
+  pnpm: DoctorCheck,
+  cargo: DoctorCheck,
   dockerDaemon: DoctorCheck,
   environmentChecks: readonly DoctorCheck[],
 ): DoctorCheck[] {
-  const unit: DoctorCheck = {
-    name: 'test:unit',
-    status: 'ok',
-    detail: 'runnable: pnpm test:unit',
-  };
+  const unitBlocker = [node, pnpm].find((check) => check.status !== 'ok');
+  const unit: DoctorCheck =
+    unitBlocker === undefined
+      ? {
+          name: 'test:unit',
+          status: 'ok',
+          detail: 'runnable: pnpm test:unit',
+        }
+      : {
+          name: 'test:unit',
+          status: 'fail',
+          detail: `blocked: ${unitBlocker.name} ${unitBlocker.detail}`,
+        };
+  if (unitBlocker !== undefined) {
+    return [
+      unit,
+      {
+        name: 'test:integration',
+        status: 'fail',
+        detail: `blocked: ${unitBlocker.name} ${unitBlocker.detail}`,
+      },
+      {
+        name: 'test:funded',
+        status: 'fail',
+        detail: `blocked: ${unitBlocker.name} ${unitBlocker.detail}`,
+      },
+    ];
+  }
   if (dockerDaemon.status !== 'ok') {
     return [
       unit,
@@ -179,6 +217,7 @@ function testTierChecks(
     (check) =>
       (REQUIRED_ENV_VARS as readonly string[]).includes(check.name) && check.status !== 'ok',
   );
+  const fundedBlocker = cargo.status === 'ok' ? blockedEnvironment : cargo;
   return [
     unit,
     {
@@ -186,11 +225,11 @@ function testTierChecks(
       status: 'ok',
       detail: 'runnable: pnpm test:integration',
     },
-    blockedEnvironment
+    fundedBlocker
       ? {
           name: 'test:funded',
           status: 'fail',
-          detail: `blocked: ${blockedEnvironment.name} ${blockedEnvironment.detail}`,
+          detail: `blocked: ${fundedBlocker.name} ${fundedBlocker.detail}`,
         }
       : {
           name: 'test:funded',
@@ -223,18 +262,25 @@ export async function runDoctor(
   const checks: DoctorCheck[] = [];
   const environmentChecks = envCheck(probes.env);
   checks.push(...environmentChecks);
-  checks.push(await nodeVersionCheck(probes));
-  checks.push(await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm'));
+  const node = await nodeVersionCheck(probes);
+  checks.push(node);
+  const pnpm = await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm');
+  checks.push(pnpm);
   checks.push(
     await versionCheck(probes, 'docker', ['--version'], /^Docker version \d+\.\d+/, 'docker'),
   );
   const dockerDaemon = await dockerDaemonCheck(probes);
   checks.push(dockerDaemon);
   checks.push(testcontainersCheck(dockerDaemon));
-  checks.push(...testTierChecks(dockerDaemon, environmentChecks));
-  checks.push(
-    await versionCheck(probes, 'cargo', ['--version'], /^cargo \d+\.\d+/, 'cargo (CDK adapter)'),
+  const cargo = await versionCheck(
+    probes,
+    'cargo',
+    ['--version'],
+    /^cargo \d+\.\d+/,
+    'cargo (CDK adapter)',
   );
+  checks.push(cargo);
+  checks.push(...testTierChecks(node, pnpm, cargo, dockerDaemon, environmentChecks));
   checks.push(...(await portChecks(probes, options.ports ?? DEFAULT_PORTS)));
   return { checks, ok: checks.every((check) => check.status !== 'fail') };
 }

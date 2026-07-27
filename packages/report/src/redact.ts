@@ -12,7 +12,7 @@ import {
 } from '@cashu-fault-lab/scenario-runner';
 
 const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,127}$/;
-const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
+const DIGEST_PATTERN = /^sha256:(?!([0-9a-f])\1{63}$)[0-9a-f]{64}$/;
 const METADATA_KEY_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._/-]{0,127}$/;
 
 export interface ReportInput {
@@ -253,16 +253,15 @@ function capabilitiesView(value: FailureArtifact['capabilities']): ReportCapabil
   const implementation = implementationView(value.implementation);
   const sender = participantView(value.sender) ?? stringField(value.sender);
   const receiver = participantView(value.receiver) ?? stringField(value.receiver);
-  const roles = isRecord(value.roles)
-    ? {
-        ...(roleView(value.roles.sender) === undefined
-          ? {}
-          : { sender: roleView(value.roles.sender)! }),
-        ...(roleView(value.roles.receiver) === undefined
-          ? {}
-          : { receiver: roleView(value.roles.receiver)! }),
-      }
-    : undefined;
+  const senderRole = isRecord(value.roles) ? roleView(value.roles.sender) : undefined;
+  const receiverRole = isRecord(value.roles) ? roleView(value.roles.receiver) : undefined;
+  const roles =
+    senderRole === undefined && receiverRole === undefined
+      ? undefined
+      : {
+          ...(senderRole === undefined ? {} : { sender: senderRole }),
+          ...(receiverRole === undefined ? {} : { receiver: receiverRole }),
+        };
   const nuts = Array.isArray(value.nuts)
     ? value.nuts.filter((item): item is number => Number.isSafeInteger(item) && Number(item) >= 0)
     : undefined;

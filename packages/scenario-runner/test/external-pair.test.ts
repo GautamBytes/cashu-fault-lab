@@ -7,6 +7,7 @@ import {
   type CreateRequestInput,
   type DeliveryReceiptView,
   type LedgerCreditView,
+  type AdapterMintIdentity,
   type PaymentRequestView,
   type ProofEvidenceView,
   type SendPaymentInput,
@@ -59,7 +60,11 @@ const proof: ProofEvidenceView = {
   state: 'spent',
 };
 
-function capabilities(implementation: string, role: 'sender' | 'receiver'): AdapterCapabilities {
+function capabilities(
+  implementation: string,
+  role: 'sender' | 'receiver',
+  mints: readonly AdapterMintIdentity[],
+): AdapterCapabilities {
   return {
     schemaVersion: 2,
     implementation: developmentIdentity({
@@ -81,7 +86,7 @@ function capabilities(implementation: string, role: 'sender' | 'receiver'): Adap
     },
     nuts: [3, 7, 18],
     encodings: ['creqA'],
-    mints: [{ id: 'nutshell-local', implementation: 'nutshell' }],
+    mints,
   };
 }
 
@@ -94,6 +99,7 @@ interface FakeOptions {
   readonly proofEvidence?: readonly ProofEvidenceView[];
   readonly sendError?: Error;
   readonly sendErrors?: Error[];
+  readonly mints?: readonly AdapterMintIdentity[];
 }
 
 class FakeAdapter implements AdapterClient {
@@ -101,7 +107,11 @@ class FakeAdapter implements AdapterClient {
 
   async capabilities(): Promise<AdapterCapabilities> {
     this.options.calls.push(`${this.options.role}.capabilities`);
-    return capabilities(this.options.role, this.options.role);
+    return capabilities(
+      this.options.role,
+      this.options.role,
+      this.options.mints ?? [{ id: 'nutshell-local', implementation: 'nutshell' }],
+    );
   }
 
   async reset(): Promise<void> {
@@ -182,7 +192,14 @@ describe('runExternalDeliveryPair', () => {
     if (!result.ok) throw new Error('Expected passing external pair');
     expect(
       result.invariants?.find((item) => item.id === 'independent-mint-evidence'),
-    ).toMatchObject({ status: 'passed', confidence: 'observed' });
+    ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+    expect(
+      result.invariants?.find((item) => item.id === 'at-most-one-merchant-credit-per-delivery'),
+    ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+    expect(result.invariants?.find((item) => item.id === 'no-premature-settlement')).toMatchObject({
+      status: 'failed',
+      confidence: 'adapter_claimed',
+    });
     expect(
       result.invariants?.find((item) => item.id === 'at-most-once-redemption-start'),
     ).toMatchObject({ status: 'not_observable' });
@@ -197,6 +214,24 @@ describe('runExternalDeliveryPair', () => {
       'receiver.ledger',
       'receiver.proofs',
     ]);
+  });
+
+  it('counts only mint identities advertised by both exercised adapters', async () => {
+    const fixture = pair({
+      sender: { mints: [{ id: 'sender-only', implementation: 'nutshell' }] },
+      receiver: { mints: [{ id: 'receiver-only', implementation: 'nutshell' }] },
+    });
+
+    const result = await runExternalDeliveryPair({
+      profile: 'delivery-v1',
+      seed: 'pair-seed',
+      sender: fixture.sender,
+      receiver: fixture.receiver,
+      amount: 8,
+      unit: 'sat',
+    });
+
+    expect(result).toMatchObject({ ok: true, mints: [] });
   });
 
   it('retries transient sender failures with one deterministic delivery id', async () => {

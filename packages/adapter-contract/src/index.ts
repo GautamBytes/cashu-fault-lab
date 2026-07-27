@@ -22,7 +22,11 @@ export {
   HttpAdapterClient,
   type HttpAdapterClientOptions,
 } from './http-client.js';
-export { developmentIdentity, type DevelopmentIdentityInput } from './identity.js';
+export {
+  developmentIdentity,
+  isDevelopmentIdentity,
+  type DevelopmentIdentityInput,
+} from './identity.js';
 export type {
   AdapterCapabilities,
   AdapterClient,

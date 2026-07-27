@@ -42,8 +42,8 @@ paths:
                   version: '1.2.3'
                   language: 'rust'
                   runtime: 'rust-1.97'
-                  sourceDigest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-                  buildDigest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+                  sourceDigest: 'sha256:abababababababababababababababababababababababababababababababab'
+                  buildDigest: 'sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd'
                 roles:
                   sender:
                     transports: ['http', 'nostr']
@@ -334,10 +334,10 @@ components:
               pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
             sourceDigest:
               type: string
-              pattern: '^sha256:[0-9a-f]{64}$'
+              pattern: '^sha256:(?!([0-9a-f])\1{63}$)[0-9a-f]{64}$'
             buildDigest:
               type: string
-              pattern: '^sha256:[0-9a-f]{64}$'
+              pattern: '^sha256:(?!([0-9a-f])\1{63}$)[0-9a-f]{64}$'
           additionalProperties: false
         roles:
           type: object

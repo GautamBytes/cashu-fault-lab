@@ -109,8 +109,8 @@ describe('adapter HTTP contract', () => {
           version: '0.0.0',
           language: 'typescript',
           runtime: 'node-24',
-          sourceDigest: `sha256:${'a'.repeat(64)}`,
-          buildDigest: `sha256:${'b'.repeat(64)}`,
+          sourceDigest: `sha256:${'ab'.repeat(32)}`,
+          buildDigest: `sha256:${'cd'.repeat(32)}`,
         },
         roles: {
           sender: {
@@ -196,5 +196,32 @@ describe('adapter HTTP contract', () => {
       ok: false,
       errorCode: 'SCHEMA_ADDITIONAL_PROPERTY',
     });
+  });
+
+  it('rejects placeholder implementation digests', () => {
+    expect(
+      validateAdapterResponse('capabilities', {
+        schemaVersion: 2,
+        implementation: {
+          id: 'placeholder',
+          version: '1.0.0',
+          language: 'typescript',
+          runtime: 'node-24',
+          sourceDigest: `sha256:${'a'.repeat(64)}`,
+          buildDigest: `sha256:${'b'.repeat(64)}`,
+        },
+        roles: {
+          sender: {
+            transports: ['http'],
+            profiles: ['delivery-v1'],
+            durability: 'process',
+            evidence: { tier: 'T0', sources: ['adapter'] },
+          },
+        },
+        nuts: [],
+        encodings: ['creqA'],
+        mints: [],
+      }),
+    ).toMatchObject({ ok: false });
   });
 });

@@ -38,7 +38,10 @@
     },
     "imageDigests": {
       "type": "object",
-      "additionalProperties": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:(?!([0-9a-f])\\1{63}$)[0-9a-f]{64}$"
+      }
     },
     "invariants": {
       "type": "array",
@@ -77,7 +80,7 @@
   "$defs": {
     "digest": {
       "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+      "pattern": "^sha256:(?!([0-9a-f])\\1{63}$)[0-9a-f]{64}$"
     },
     "implementation": {
       "type": "object",

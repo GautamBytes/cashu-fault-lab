@@ -233,7 +233,7 @@ describe('FundedCashuTsReceiverOperations', () => {
         roles: {
           sender: {
             profiles: ['delivery-v1'],
-            durability: 'persistent',
+            durability: 'process',
             evidence: { tier: 'T1' },
           },
           receiver: {

@@ -5,9 +5,11 @@ import {
   emptyOracleModel,
   evaluateInvariants,
   type InvariantResult,
+  type EvidenceConfidence,
   type Observation,
   type OracleModel,
 } from '@cashu-fault-lab/oracle';
+import { isDeepStrictEqual } from 'node:util';
 import { containsSensitiveData, HistoryRecorder, redact, type HistoryEvent } from './history.js';
 import { assertReplayableArtifact, minimizeFailingCommands } from './replay.js';
 import { VirtualScheduler } from './scheduler.js';
@@ -43,6 +45,7 @@ export interface DriverSendResult {
 }
 
 export interface ScenarioDriver {
+  readonly observationConfidence?: Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>;
   reset(seed: string): Promise<void>;
   capabilities(): Promise<Readonly<Record<string, unknown>>>;
   configureFault(target: string, rule: FaultRule): Promise<void>;
@@ -250,6 +253,9 @@ export class ScenarioRunner {
           seed,
           componentVersions,
         },
+        ...(this.#driver.observationConfidence === undefined
+          ? {}
+          : { observationConfidence: this.#driver.observationConfidence }),
       }),
       componentVersions,
       imageDigests: imageDigestsFromCapabilities(capabilities),
@@ -261,7 +267,14 @@ export class ScenarioRunner {
 
   async replay(artifact: FailureArtifact): Promise<ScenarioRunResult> {
     assertReplayableArtifact(artifact);
-    return this.run({ name: artifact.scenario, commands: artifact.commands }, artifact.seed);
+    const result = await this.run(
+      { name: artifact.scenario, commands: artifact.commands },
+      artifact.seed,
+    );
+    if (!isDeepStrictEqual(result.artifact.invariants, artifact.invariants)) {
+      throw new Error('Recorded invariant evidence does not reproduce');
+    }
+    return result;
   }
 
   async shrink(artifact: FailureArtifact, runLimit = 100): Promise<FailureArtifact> {

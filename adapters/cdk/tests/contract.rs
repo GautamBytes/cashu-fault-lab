@@ -1,5 +1,6 @@
 use cashu_fault_lab_cdk_adapter::{
-    CompatibilityEvidence, capabilities, decode_request, nut26_nostr_mapping_evidence,
+    CompatibilityEvidence, capabilities, decode_request, funded_capabilities,
+    nut26_nostr_mapping_evidence,
 };
 use serde::Deserialize;
 
@@ -28,6 +29,22 @@ fn publishes_honest_legacy_capabilities() {
     let sender = value.roles.sender.expect("sender role must be declared");
     assert_eq!(sender.evidence.tier, "T0");
     assert!(!sender.profiles.contains(&"delivery-v1".to_owned()));
+}
+
+#[test]
+fn does_not_claim_restart_durability_for_in_memory_funded_state() {
+    let value = funded_capabilities();
+    let sender = value
+        .roles
+        .sender
+        .expect("funded sender role must be declared");
+    assert_eq!(sender.durability, "process");
+    assert!(
+        !sender
+            .evidence
+            .sources
+            .contains(&"durable_state".to_owned())
+    );
 }
 
 #[test]

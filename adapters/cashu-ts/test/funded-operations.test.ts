@@ -143,10 +143,10 @@ describe('FundedCashuTsOperations', () => {
         roles: {
           sender: {
             profiles: ['delivery-v1'],
-            durability: 'persistent',
+            durability: 'process',
             evidence: {
               tier: 'T1',
-              sources: ['adapter', 'runner', 'transport', 'durable_state'],
+              sources: ['adapter', 'runner', 'transport'],
             },
           },
         },

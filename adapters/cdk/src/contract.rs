@@ -140,9 +140,9 @@ pub fn funded_capabilities() -> AdapterCapabilities {
             sender: Some(role(
                 &["http"],
                 &["delivery-v1"],
-                "persistent",
+                "process",
                 "T1",
-                &["adapter", "runner", "transport", "durable_state"],
+                &["adapter", "runner", "transport"],
             )),
             receiver: None,
         },

@@ -147,6 +147,7 @@ function adapterErrorHint(error: unknown): string {
 }
 
 export class ExternalAdapterScenarioDriver implements ScenarioDriver {
+  readonly observationConfidence = 'adapter_claimed' as const;
   readonly #sender: AdapterClient;
   readonly #receiver: AdapterClient;
   readonly #faults: ExternalFaultController;

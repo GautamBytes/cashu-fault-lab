@@ -24,8 +24,8 @@ const capabilities = {
     version: '1.0.0',
     language: 'typescript',
     runtime: 'node-24',
-    sourceDigest: `sha256:${'a'.repeat(64)}`,
-    buildDigest: `sha256:${'b'.repeat(64)}`,
+    sourceDigest: `sha256:${'ab'.repeat(32)}`,
+    buildDigest: `sha256:${'cd'.repeat(32)}`,
   },
   roles: {
     sender: {

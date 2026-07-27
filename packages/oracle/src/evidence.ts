@@ -171,6 +171,7 @@ export interface EvaluateInvariantsInput {
   readonly capabilities?: Readonly<Record<string, unknown>>;
   readonly metadata?: InvariantRunMetadata;
   readonly profile?: string;
+  readonly observationConfidence?: Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>;
 }
 
 function evidence(
@@ -324,6 +325,7 @@ function receiptReference(model: OracleModel): InvariantEvidenceReference {
 
 function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly InvariantResult[] {
   const { model, commands } = input;
+  const observationConfidence = input.observationConfidence ?? 'observed';
   const attempts = observations(model, 'delivery_attempted');
   const requests = observations(model, 'request_observed');
   const redemptions = observations(model, 'redemption_started');
@@ -349,7 +351,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
         ? failed(redemptionId, 'A delivery started mint redemption more than once.', [
             evidence('timeline', 'Redemption-start observations contain a duplicate delivery.'),
           ])
-        : passed(redemptionId, 'observed', [
+        : passed(redemptionId, observationConfidence, [
             evidence(
               'timeline',
               'Redemption-start observations contain one start per delivery.',
@@ -378,7 +380,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
         ? failed(requestCreditId, 'A single-use request produced more than one credit.', [
             ledgerReference(model),
           ])
-        : passed(requestCreditId, 'observed', [ledgerReference(model)]),
+        : passed(requestCreditId, observationConfidence, [ledgerReference(model)]),
     );
   }
 
@@ -398,7 +400,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
         ? failed(deliveryCreditId, 'A delivery produced more than one merchant credit.', [
             ledgerReference(model),
           ])
-        : passed(deliveryCreditId, 'observed', [ledgerReference(model)]),
+        : passed(deliveryCreditId, observationConfidence, [ledgerReference(model)]),
     );
   }
 
@@ -470,7 +472,10 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
             receiptReference(model),
             ledgerReference(model),
           ])
-        : passed(amountId, 'observed', [receiptReference(model), ledgerReference(model)]),
+        : passed(amountId, observationConfidence, [
+            receiptReference(model),
+            ledgerReference(model),
+          ]),
     );
   }
 
@@ -488,7 +493,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
         ? failed(prematureId, 'Settlement lacks recovered-output or durable-credit evidence.', [
             receiptReference(model),
           ])
-        : passed(prematureId, 'observed', [
+        : passed(prematureId, observationConfidence, [
             receiptReference(model),
             ledgerReference(model),
             evidence(
@@ -512,7 +517,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
     const violation = matchingSafetyFailure(safety, /rejected proofs after they may/u);
     results.push(
       violation === undefined
-        ? passed(rejectionId, 'observed', [
+        ? passed(rejectionId, observationConfidence, [
             receiptReference(model),
             evidence(
               'proofs',
@@ -651,6 +656,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
 
 function evaluateEvidence(input: EvaluateInvariantsInput): readonly InvariantResult[] {
   const { model, metadata, capabilities } = input;
+  const observationConfidence = input.observationConfidence ?? 'observed';
   const attempts = observations(model, 'delivery_attempted');
   const proofStates = observations(model, 'mint_proofs_state');
   const credits = observations(model, 'merchant_credited');
@@ -663,7 +669,7 @@ function evaluateEvidence(input: EvaluateInvariantsInput): readonly InvariantRes
     results.push(notObservable(mintId, 'Independent mint proof evidence is unavailable.'));
   } else {
     results.push(
-      passed(mintId, 'observed', [
+      passed(mintId, observationConfidence, [
         evidence(
           'proofs',
           'Mint proof-state endpoint observation records the input state.',
@@ -679,7 +685,7 @@ function evaluateEvidence(input: EvaluateInvariantsInput): readonly InvariantRes
   } else if (credits.length === 0) {
     results.push(notObservable(ledgerId, 'Independent durable ledger evidence is unavailable.'));
   } else {
-    results.push(passed(ledgerId, 'observed', [ledgerReference(model)]));
+    results.push(passed(ledgerId, observationConfidence, [ledgerReference(model)]));
   }
 
   const reproducibilityId: InvariantId = 'reproducibility';
@@ -689,6 +695,7 @@ function evaluateEvidence(input: EvaluateInvariantsInput): readonly InvariantRes
     typeof metadata.seed === 'string' &&
     metadata.seed.length > 0 &&
     Object.keys(metadata.componentVersions ?? {}).length > 0 &&
+    input.history.length > 0 &&
     input.history.every((entry, index) => entry.sequence === index);
   results.push(
     reproducible
@@ -746,7 +753,9 @@ export function evaluateInvariants(input: EvaluateInvariantsInput): readonly Inv
     if (result === undefined) {
       throw new Error(`Invariant evaluator omitted ${definition.id}`);
     }
-    return result;
+    return input.observationConfidence === 'adapter_claimed' && result.confidence === 'observed'
+      ? { ...result, confidence: 'adapter_claimed' }
+      : result;
   });
 }
 

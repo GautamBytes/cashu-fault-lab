@@ -3,6 +3,7 @@ import {
   type AdapterCapabilities,
   type AdapterMintIdentity,
 } from '@cashu-fault-lab/adapter-contract';
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
@@ -39,12 +40,17 @@ function capability(
   mint: AdapterMintIdentity,
   buildAlias?: string,
 ): AdapterCapabilities {
-  const identity = developmentIdentity({
-    id: buildAlias ?? id,
+  const identityId = buildAlias ?? id;
+  const digest = (domain: string) =>
+    `sha256:${createHash('sha256').update(`release-test/${domain}/${identityId}`).digest('hex')}`;
+  const identity = {
+    id: identityId,
     version: '1.0.0',
     language,
     runtime: language === 'rust' ? 'native' : 'node-24',
-  });
+    sourceDigest: digest('source'),
+    buildDigest: digest('build'),
+  };
   return {
     schemaVersion: 2,
     implementation: { ...identity, id },
@@ -183,6 +189,21 @@ describe('release policy', () => {
     expect(codes([passingCase({ senderTier: 'T0', receiverTier: 'T1' })])).toEqual(
       expect.arrayContaining(['SENDER_EVIDENCE_TOO_LOW', 'RECEIVER_EVIDENCE_TOO_LOW']),
     );
+  });
+
+  it('rejects deterministic development identities as release evidence', () => {
+    const selected = passingCase();
+    const sender = selected.senderCapabilities.implementation;
+    const identity = developmentIdentity(sender);
+
+    expect(
+      codes([
+        {
+          ...selected,
+          senderCapabilities: { ...selected.senderCapabilities, implementation: identity },
+        },
+      ]),
+    ).toContain('DEVELOPMENT_IDENTITY_NOT_RELEASE_ELIGIBLE');
   });
 
   it('rejects missing and adapter-claimed invariant evidence', () => {

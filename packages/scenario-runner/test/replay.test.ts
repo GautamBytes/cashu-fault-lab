@@ -72,6 +72,19 @@ describe('scenario replay', () => {
     ).rejects.toThrowError(/schema version/i);
   });
 
+  it('rejects recorded invariant evidence that does not reproduce', async () => {
+    const runner = new ScenarioRunner(new ReplayDriver());
+    const first = await runner.run(scenario, 'seed-replay');
+    const [invariant, ...rest] = first.artifact.invariants;
+    if (invariant === undefined) throw new Error('Expected invariant evidence');
+    const artifact = {
+      ...first.artifact,
+      invariants: [{ ...invariant, status: 'failed' as const }, ...rest],
+    };
+
+    await expect(runner.replay(artifact)).rejects.toThrowError(/invariant evidence/i);
+  });
+
   it('contains no wall-clock scheduling APIs', () => {
     for (const name of ['scheduler.ts', 'runner.ts', 'replay.ts']) {
       const path = fileURLToPath(new URL(`../src/${name}`, import.meta.url));

@@ -42,8 +42,8 @@ const result: ScenarioRunResult = {
         version: '1.2.3',
         language: 'typescript',
         runtime: 'node-24',
-        sourceDigest: `sha256:${'d'.repeat(64)}`,
-        buildDigest: `sha256:${'e'.repeat(64)}`,
+        sourceDigest: `sha256:${'de'.repeat(32)}`,
+        buildDigest: `sha256:${'ef'.repeat(32)}`,
       },
       roles: {
         sender: {
@@ -141,7 +141,7 @@ describe('allowlist report rendering', () => {
     const report = createReport({
       result,
       componentVersions: { receiver: '1.2.3' },
-      imageDigests: { mint: `sha256:${'c'.repeat(64)}` },
+      imageDigests: { mint: `sha256:${'cd'.repeat(32)}` },
     });
 
     expect(report).toMatchObject({
@@ -188,13 +188,13 @@ describe('allowlist report rendering', () => {
       artifact: {
         ...result.artifact,
         componentVersions: { receiver: '1.2.3' },
-        imageDigests: { mint: `sha256:${'d'.repeat(64)}` },
+        imageDigests: { mint: `sha256:${'de'.repeat(32)}` },
       },
     };
 
     expect(createReport({ result: resultWithMetadata })).toMatchObject({
       componentVersions: { receiver: '1.2.3' },
-      imageDigests: { mint: `sha256:${'d'.repeat(64)}` },
+      imageDigests: { mint: `sha256:${'de'.repeat(32)}` },
     });
   });
 

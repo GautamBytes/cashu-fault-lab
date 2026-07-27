@@ -105,10 +105,19 @@ function relatedProofs(
   return proofs.filter((proof) => proof.deliveryId === deliveryId);
 }
 
-function mintIdentities(values: readonly AdapterMintIdentity[]): readonly AdapterMintIdentity[] {
+function mintIdentityKey(value: AdapterMintIdentity): string {
+  return `${value.id}\0${value.implementation}\0${value.version ?? ''}`;
+}
+
+function sharedMintIdentities(
+  sender: readonly AdapterMintIdentity[],
+  receiver: readonly AdapterMintIdentity[],
+): readonly AdapterMintIdentity[] {
+  const receiverKeys = new Set(receiver.map(mintIdentityKey));
   const result = new Map<string, AdapterMintIdentity>();
-  for (const value of values) {
-    result.set(`${value.id}\0${value.implementation}\0${value.version ?? ''}`, value);
+  for (const value of sender) {
+    const key = mintIdentityKey(value);
+    if (receiverKeys.has(key)) result.set(key, value);
   }
   return [...result.values()].sort((left, right) =>
     `${left.id}:${left.implementation}:${left.version ?? ''}`.localeCompare(
@@ -303,8 +312,9 @@ export async function runExternalDeliveryPair(
         },
       },
       profile: input.profile,
+      observationConfidence: 'adapter_claimed',
     });
-    const mints = mintIdentities([...senderCapabilities.mints, ...receiverCapabilities.mints]);
+    const mints = sharedMintIdentities(senderCapabilities.mints, receiverCapabilities.mints);
 
     return {
       ok: true,

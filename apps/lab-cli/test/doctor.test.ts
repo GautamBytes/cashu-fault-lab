@@ -17,6 +17,7 @@ const healthyEnv: Readonly<Record<string, string | undefined>> = {
   CFL_REFERENCE_RECEIVER_CLAIM_KEY: 'ERERERERERERERERERERERERERERERERERERERERERE',
   CFL_HTTP_FAULT_GATEWAY_TOKEN: 'lab-only-fault-token',
   CFL_HTTP_FAULT_GATEWAY_URL: 'http://127.0.0.1:4300',
+  CFL_REAL_MINT_URL: 'http://127.0.0.1:3338',
 };
 
 const toolVersions: Readonly<Record<string, { readonly stdout: string; readonly stderr: string }>> =
@@ -77,6 +78,26 @@ describe('runDoctor', () => {
       name: 'test:funded',
       status: 'ok',
       detail: 'runnable: pnpm test:funded',
+    });
+  });
+
+  it('blocks funded tests when the real mint URL is missing', async () => {
+    const { CFL_REAL_MINT_URL: _missing, ...env } = healthyEnv;
+    const report = await runDoctor({
+      env,
+      execFile: healthyExec(),
+      isPortFree: async () => true,
+    });
+
+    expect(report.checks).toContainEqual({
+      name: 'CFL_REAL_MINT_URL',
+      status: 'fail',
+      detail: 'missing',
+    });
+    expect(report.checks).toContainEqual({
+      name: 'test:funded',
+      status: 'fail',
+      detail: 'blocked: CFL_REAL_MINT_URL missing',
     });
   });
 
@@ -187,6 +208,11 @@ describe('runDoctor', () => {
     expect(report.ok).toBe(false);
     expect(nodeCheck?.status).toBe('fail');
     expect(nodeCheck?.detail).toMatch(/requires Node 24/);
+    expect(report.checks).toContainEqual({
+      name: 'test:unit',
+      status: 'fail',
+      detail: 'blocked: node requires Node 24.x; found v22.18.0',
+    });
   });
 
   it('fails Docker-dependent readiness when the daemon is unreachable', async () => {

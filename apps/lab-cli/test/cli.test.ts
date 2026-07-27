@@ -5,7 +5,7 @@ import {
   type ScenarioRunResult,
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
-import { developmentIdentity, type AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
+import type { AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
 import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,12 +26,14 @@ const artifact: FailureArtifact = {
 const passed: ScenarioRunResult = { status: 'passed', artifact };
 const matrixCapability: AdapterCapabilities = {
   schemaVersion: 2,
-  implementation: developmentIdentity({
+  implementation: {
     id: 'fake',
     version: '1.0.0',
     language: 'typescript',
     runtime: 'node-24',
-  }),
+    sourceDigest: `sha256:${'ab'.repeat(32)}`,
+    buildDigest: `sha256:${'cd'.repeat(32)}`,
+  },
   roles: {
     sender: {
       transports: ['http'],
@@ -658,6 +660,7 @@ describe('lab CLI', () => {
         CFL_REFERENCE_RECEIVER_TOKEN: 'lab-only-receiver-token',
         CFL_REFERENCE_RECEIVER_CLAIM_KEY: 'ERERERERERERERERERERERERERERERERERERERERERE',
         CFL_HTTP_FAULT_GATEWAY_TOKEN: 'lab-only-fault-token',
+        CFL_REAL_MINT_URL: 'http://127.0.0.1:3338',
       },
       execFile: async (command) => {
         const table: Readonly<Record<string, string>> = {

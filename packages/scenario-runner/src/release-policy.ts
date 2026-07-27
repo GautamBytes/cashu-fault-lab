@@ -1,4 +1,4 @@
-import type { EvidenceTier } from '@cashu-fault-lab/adapter-contract';
+import { isDevelopmentIdentity, type EvidenceTier } from '@cashu-fault-lab/adapter-contract';
 import {
   INVARIANT_REGISTRY,
   type EvidenceConfidence,
@@ -32,6 +32,7 @@ export type ReleaseGateReasonCode =
   | 'REQUIRED_INVARIANT_MISSING'
   | 'REQUIRED_INVARIANT_NOT_PASSED'
   | 'INVARIANT_CONFIDENCE_REJECTED'
+  | 'DEVELOPMENT_IDENTITY_NOT_RELEASE_ELIGIBLE'
   | 'DUPLICATE_PROVENANCE'
   | 'MINIMUM_QUALIFYING_PAIRS'
   | 'MINIMUM_DISTINCT_MINTS';
@@ -199,6 +200,15 @@ function pairReasons(
     reasons.push({ code, message, pair });
   };
 
+  if (
+    isDevelopmentIdentity(sender.implementation) ||
+    isDevelopmentIdentity(receiver.implementation)
+  ) {
+    add(
+      'DEVELOPMENT_IDENTITY_NOT_RELEASE_ELIGIBLE',
+      'Release evidence requires source and build digests from produced artifacts.',
+    );
+  }
   if (
     policy.requireCrossImplementation &&
     sender.implementation.id === receiver.implementation.id

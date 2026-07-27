@@ -302,12 +302,12 @@ describe.skipIf(!mintUrl)('real funded cross-language delivery', () => {
           expect.objectContaining({
             id: 'at-most-one-merchant-credit-per-delivery',
             status: 'passed',
-            confidence: 'observed',
+            confidence: 'adapter_claimed',
           }),
           expect.objectContaining({
             id: 'independent-mint-evidence',
             status: 'passed',
-            confidence: 'observed',
+            confidence: 'adapter_claimed',
           }),
         ]),
       });

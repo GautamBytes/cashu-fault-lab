@@ -22,3 +22,10 @@ export function developmentIdentity(
     buildDigest: digest('build', input),
   };
 }
+
+export function isDevelopmentIdentity(identity: AdapterImplementationIdentity): boolean {
+  const expected = developmentIdentity(identity);
+  return (
+    identity.sourceDigest === expected.sourceDigest && identity.buildDigest === expected.buildDigest
+  );
+}
