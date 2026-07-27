@@ -1,8 +1,9 @@
-import type {
-  FailureArtifact,
-  MatrixCaseResult,
-  ScenarioRunResult,
-  ScenarioSpec,
+import {
+  unobservableInvariantResults,
+  type FailureArtifact,
+  type MatrixCaseResult,
+  type ScenarioRunResult,
+  type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,12 +14,13 @@ import type { DoctorProbes } from '../src/doctor.js';
 import { runCli, type CliIo, type LabRuntime } from '../src/index.js';
 
 const artifact: FailureArtifact = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   seed: 'seed-1',
   scenario: 'request-loss',
   commands: [{ type: 'assert_quiescent' }],
   history: [],
   capabilities: { implementation: 'fake', version: '1.0.0' },
+  invariants: unobservableInvariantResults('Test fixture has no invariant evidence.'),
 };
 const passed: ScenarioRunResult = { status: 'passed', artifact };
 

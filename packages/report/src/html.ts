@@ -26,7 +26,7 @@ export function renderHtml(input: ReportInput): string {
   </style>
 </head>
 <body>
-  <small>Cashu Fault Lab · schema v1 · seed ${html(report.seed)}</small>
+  <small>Cashu Fault Lab · schema v2 · seed ${html(report.seed)}</small>
   <h1>${html(report.scenarioId)}</h1>
   <p class="status ${statusClass}">${html(report.status.toUpperCase())}</p>
   <pre>${html(renderJson(input))}</pre>

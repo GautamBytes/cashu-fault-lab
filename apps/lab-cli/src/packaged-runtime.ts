@@ -20,6 +20,7 @@ import {
   runReferenceExpiryScenario,
   runReferenceConflictScenario,
   runReferenceNut19Scenario,
+  unobservableInvariantResults,
   type FailureArtifact,
   type ExternalFaultController,
   type MatrixCaseResult,
@@ -182,12 +183,15 @@ function failedScenario(scenario: ScenarioSpec, seed: string, message: string): 
     status: 'failed',
     error: { name: 'Error', message },
     artifact: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       seed,
       scenario: scenario.name,
       commands: scenario.commands,
       history: [],
       capabilities: {},
+      invariants: unobservableInvariantResults(
+        'Scenario setup failed before invariant evidence could be collected.',
+      ),
     },
   });
 }

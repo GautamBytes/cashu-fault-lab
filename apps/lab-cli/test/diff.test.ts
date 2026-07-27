@@ -1,4 +1,8 @@
-import type { FailureArtifact, ScenarioRunResult } from '@cashu-fault-lab/scenario-runner';
+import {
+  unobservableInvariantResults,
+  type FailureArtifact,
+  type ScenarioRunResult,
+} from '@cashu-fault-lab/scenario-runner';
 import { describe, expect, it } from 'vitest';
 import { diffScenarios, renderDiffText } from '../src/diff.js';
 
@@ -12,12 +16,13 @@ function result(overrides: {
   readonly error?: { readonly name: string; readonly message: string };
 }): ScenarioRunResult {
   const artifact: FailureArtifact = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     seed: overrides.seed ?? 'seed-1',
     scenario: overrides.scenario ?? 'request-loss',
     commands: (overrides.commands ?? [{ type: 'assert_quiescent' }]) as FailureArtifact['commands'],
     history: (overrides.history ?? []) as FailureArtifact['history'],
     capabilities: overrides.capabilities ?? { implementation: 'fake', version: '1.0.0' },
+    invariants: unobservableInvariantResults('Test fixture has no invariant evidence.'),
   };
   if (overrides.status === 'failed') {
     return {

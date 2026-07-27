@@ -68,7 +68,7 @@ describe('scenario replay', () => {
     const runner = new ScenarioRunner(new ReplayDriver());
     const first = await runner.run(scenario, 'seed-replay');
     await expect(
-      runner.replay({ ...first.artifact, schemaVersion: 2 } as unknown as typeof first.artifact),
+      runner.replay({ ...first.artifact, schemaVersion: 1 } as unknown as typeof first.artifact),
     ).rejects.toThrowError(/schema version/i);
   });
 

@@ -79,8 +79,12 @@ describe('PackagedLabRuntime', () => {
       ),
     ).toHaveLength(1);
     expect(first.artifact.capabilities).toMatchObject({
-      sender: 'reference-ts',
-      receiver: 'reference-ts',
+      schemaVersion: 2,
+      implementation: { id: 'reference-ts' },
+      roles: {
+        sender: { evidence: { tier: 'T0' } },
+        receiver: { evidence: { tier: 'T0' } },
+      },
     });
 
     const replayed = await runtime.replay(first.artifact);

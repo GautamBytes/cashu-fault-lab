@@ -3,6 +3,8 @@ import {
   assertQuiescentLiveness,
   assertSafety,
   emptyOracleModel,
+  evaluateInvariants,
+  type InvariantResult,
   type Observation,
   type OracleModel,
 } from '@cashu-fault-lab/oracle';
@@ -51,12 +53,13 @@ export interface ScenarioDriver {
 }
 
 export interface FailureArtifact {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly seed: string;
   readonly scenario: string;
   readonly commands: readonly ScenarioCommand[];
   readonly history: readonly HistoryEvent[];
   readonly capabilities: Readonly<Record<string, unknown>>;
+  readonly invariants: readonly InvariantResult[];
   readonly componentVersions?: Readonly<Record<string, string>>;
   readonly imageDigests?: Readonly<Record<string, string>>;
 }
@@ -113,10 +116,25 @@ function metadataRecord(value: unknown): Readonly<Record<string, string>> {
 function versionedComponent(value: unknown, prefix?: string): readonly [string, string][] {
   if (!isRecord(value)) return [];
   const implementation = value.implementation;
-  const version = value.version;
-  if (typeof implementation !== 'string' || implementation.length === 0) return [];
-  if (typeof version !== 'string' || version.length === 0) return [];
-  return [[prefix ? `${prefix}/${implementation}` : implementation, version]];
+  if (typeof implementation === 'string') {
+    const version = value.version;
+    if (implementation.length === 0 || typeof version !== 'string' || version.length === 0) {
+      return [];
+    }
+    return [[prefix ? `${prefix}/${implementation}` : implementation, version]];
+  }
+  if (!isRecord(implementation)) return [];
+  const id = implementation.id;
+  const version = implementation.version;
+  if (
+    typeof id !== 'string' ||
+    id.length === 0 ||
+    typeof version !== 'string' ||
+    version.length === 0
+  ) {
+    return [];
+  }
+  return [[prefix ? `${prefix}/${id}` : id, version]];
 }
 
 function componentVersionsFromCapabilities(
@@ -213,14 +231,27 @@ export class ScenarioRunner {
       }
     }
 
+    const snapshot = history.snapshot();
+    const componentVersions = componentVersionsFromCapabilities(capabilities);
     const artifact: FailureArtifact = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       seed,
       scenario: spec.name,
       commands: structuredClone(spec.commands),
-      history: history.snapshot(),
+      history: snapshot,
       capabilities,
-      componentVersions: componentVersionsFromCapabilities(capabilities),
+      invariants: evaluateInvariants({
+        model: oracle,
+        history: snapshot,
+        commands: spec.commands,
+        capabilities,
+        metadata: {
+          scenarioId: spec.name,
+          seed,
+          componentVersions,
+        },
+      }),
+      componentVersions,
       imageDigests: imageDigestsFromCapabilities(capabilities),
     };
     return failure

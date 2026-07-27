@@ -14,6 +14,7 @@ import {
   type ScenarioRunResult,
   type ScenarioSpec,
 } from './runner.js';
+import { referenceCapabilities } from './reference-capabilities.js';
 
 type SecurityMode = 'redirect-leak.json' | 'ssrf.json' | 'cors.json' | 'malformed-input.json';
 
@@ -155,8 +156,7 @@ class SecurityDriver implements ScenarioDriver {
 
   async capabilities(): Promise<Readonly<Record<string, unknown>>> {
     return {
-      sender: 'reference-ts',
-      receiver: 'reference-ts',
+      ...referenceCapabilities(['http']),
       securityProbe: this.mode,
     };
   }
