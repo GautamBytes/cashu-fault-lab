@@ -332,9 +332,81 @@ export class PostgresReceiverStore implements ReceiverStore {
   }
 
   async settle(input: CommitSettlement): Promise<DeliveryReceipt> {
-    await this.persistSettlementOutputs(input);
-    await this.creditSettlement(input.deliveryId, input.now);
-    return this.finalizeSettlement(input.deliveryId);
+    return this.#serializable(async (client) => {
+      const record = await this.#requiredDelivery(client, input.deliveryId, true);
+      if (record.phase === 'settled') {
+        if (record.replacementPlanHash !== input.replacementPlanHash) {
+          throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
+        }
+        return record.receipt;
+      }
+      if (record.phase === 'rejected' || record.phase === 'prepared') {
+        throw new ReceiverDomainError('INVALID_STATE', 'Delivery cannot settle from current phase');
+      }
+      if (
+        record.replacementPlanHash !== undefined &&
+        record.replacementPlanHash !== input.replacementPlanHash
+      ) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
+      }
+      if (input.replacementPlanHash.length === 0 || input.replacementProofs.length === 0) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Recovered outputs are required to settle');
+      }
+      assertSafeInteger(input.now, 'Settlement time');
+
+      if (record.phase === 'mint_sent' || record.phase === 'recovery_blocked') {
+        const encrypted = this.#envelope.encrypt(
+          input.replacementProofs,
+          replacementAuthenticatedData({
+            requestId: record.requestId,
+            deliveryId: record.deliveryId,
+            payloadHash: record.payloadHash,
+            replacementPlanHash: input.replacementPlanHash,
+          }),
+        );
+        await client.query(
+          `UPDATE deliveries
+           SET phase = 'outputs_persisted', replacement_plan_hash = $2,
+               replacement_ciphertext = $3, replacement_nonce = $4, replacement_tag = $5,
+               updated_at = now()
+           WHERE delivery_id = $1`,
+          [
+            record.deliveryId,
+            input.replacementPlanHash,
+            Buffer.from(encrypted.ciphertext),
+            Buffer.from(encrypted.nonce),
+            Buffer.from(encrypted.tag),
+          ],
+        );
+      }
+
+      if (record.phase !== 'credited') {
+        await client.query(
+          `INSERT INTO merchant_credits (delivery_id, credit_id, request_id, amount, unit, created_at)
+           VALUES ($1, $1, $2, $3, $4, $5)
+           ON CONFLICT (delivery_id) DO NOTHING`,
+          [record.deliveryId, record.requestId, record.amount, record.receipt.unit, input.now],
+        );
+      }
+      const credit = await this.#credit(client, record.deliveryId);
+      if (
+        !credit ||
+        credit.requestId !== record.requestId ||
+        credit.amount !== record.amount ||
+        credit.unit !== record.receipt.unit
+      ) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Merchant credit is conflicting');
+      }
+      const receipt = nextReceipt(record.receipt, 'settled', 'settled');
+      await this.#updatePhase(client, record.deliveryId, 'settled', receipt);
+      await client.query(
+        `INSERT INTO receipt_outbox (delivery_id, status_version, body)
+         VALUES ($1, $2, $3::jsonb)
+         ON CONFLICT (delivery_id, status_version) DO NOTHING`,
+        [record.deliveryId, receipt.statusVersion, JSON.stringify(receipt)],
+      );
+      return receipt;
+    });
   }
 
   async persistSettlementOutputs(input: CommitSettlement): Promise<DeliveryReceipt> {

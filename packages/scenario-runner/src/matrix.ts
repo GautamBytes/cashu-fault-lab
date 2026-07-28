@@ -5,7 +5,7 @@ import {
   type AdapterMintIdentity,
   type AdapterRole,
 } from '@cashu-fault-lab/adapter-contract';
-import type { InvariantResult } from '@cashu-fault-lab/oracle';
+import type { InvariantId, InvariantResult } from '@cashu-fault-lab/oracle';
 
 export interface MatrixParticipant {
   readonly id: string;
@@ -21,7 +21,11 @@ export interface MatrixScenarioEvidence {
   readonly id: string;
   readonly seed: string;
   readonly status: 'passed' | 'failed' | 'not_applicable';
+  readonly requiredInvariants: readonly InvariantId[];
   readonly invariants: readonly InvariantResult[];
+  readonly capabilities?: Readonly<Record<string, unknown>>;
+  readonly componentVersions?: Readonly<Record<string, string>>;
+  readonly imageDigests?: Readonly<Record<string, string>>;
   readonly code?: string;
   readonly reason?: string;
 }

@@ -72,12 +72,14 @@ class Faults implements ExternalFaultController {
     readonly forwarded: number;
     readonly controller: 'http-gateway';
     readonly observedTarget: 'http';
+    readonly appliedFaults: number;
   }> {
     return {
       inbound: this.inbound,
       forwarded: this.forwards,
       controller: 'http-gateway',
       observedTarget: 'http',
+      appliedFaults: this.applied.length,
     };
   }
 
@@ -96,6 +98,24 @@ class ZeroTrafficFaults extends Faults {
 
   async configure(target: string, rule: FaultRule): Promise<void> {
     this.applied.push({ target, rule });
+  }
+}
+
+class UnappliedGatewayFaults extends Faults {
+  async evidence(): Promise<{
+    readonly inbound: number;
+    readonly forwarded: number;
+    readonly controller: 'http-gateway';
+    readonly observedTarget: 'http';
+    readonly appliedFaults: 0;
+  }> {
+    return {
+      inbound: 2,
+      forwarded: 2,
+      controller: 'http-gateway',
+      observedTarget: 'http',
+      appliedFaults: 0,
+    };
   }
 }
 
@@ -294,6 +314,24 @@ describe('ExternalAdapterScenarioDriver', () => {
 
     expect(result.status).toBe('failed');
     if (result.status !== 'failed') throw new Error('Expected configured fault to fail');
+    expect(result.error.message).toBe('External configured fault was not exercised');
+  });
+
+  it('fails explicitly when gateway traffic did not apply the configured fault rule', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new UnappliedGatewayFaults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(scenario('drop_response'), 'external-unapplied-fault');
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected unapplied fault to fail');
     expect(result.error.message).toBe('External configured fault was not exercised');
   });
 

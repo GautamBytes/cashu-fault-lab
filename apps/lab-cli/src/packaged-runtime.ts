@@ -354,8 +354,19 @@ function suiteNotApplicable(
     id: entry.id,
     seed,
     status: 'not_applicable',
+    requiredInvariants: entry.requiredInvariants,
     invariants: [],
     reason,
+  };
+}
+
+function suiteProvenance(
+  result: ScenarioRunResult,
+): Pick<MatrixScenarioEvidence, 'capabilities' | 'componentVersions' | 'imageDigests'> {
+  return {
+    capabilities: result.artifact.capabilities,
+    componentVersions: result.artifact.componentVersions ?? {},
+    imageDigests: result.artifact.imageDigests ?? {},
   };
 }
 
@@ -364,17 +375,18 @@ function suiteEvidence(
   seed: string,
   result: ScenarioRunResult,
 ): MatrixScenarioEvidence {
-  const requiredNotPassed = entry.requiredInvariants.find((required) => {
-    return !result.artifact.invariants.some(
-      (invariant) => invariant.id === required && invariant.status === 'passed',
-    );
+  const rejectedRequiredInvariant = entry.requiredInvariants.find((required) => {
+    const invariant = result.artifact.invariants.find((item) => item.id === required);
+    return invariant === undefined || invariant.status !== 'passed';
   });
-  if (result.status === 'passed' && requiredNotPassed === undefined) {
+  if (result.status === 'passed' && rejectedRequiredInvariant === undefined) {
     return {
       id: entry.id,
       seed,
       status: 'passed',
+      requiredInvariants: entry.requiredInvariants,
       invariants: result.artifact.invariants,
+      ...suiteProvenance(result),
     };
   }
   if (result.status === 'failed' && result.error.name === 'AdapterNotApplicableError') {
@@ -388,15 +400,17 @@ function suiteEvidence(
     id: entry.id,
     seed,
     status: 'failed',
+    requiredInvariants: entry.requiredInvariants,
     invariants: result.artifact.invariants,
+    ...suiteProvenance(result),
     code:
-      requiredNotPassed === undefined
+      rejectedRequiredInvariant === undefined
         ? 'SCENARIO_EXECUTION_FAILED'
-        : 'REQUIRED_INVARIANT_NOT_PASSED',
+        : 'REQUIRED_INVARIANT_NOT_ACCEPTED',
     reason:
-      requiredNotPassed === undefined
+      rejectedRequiredInvariant === undefined
         ? 'Release scenario execution failed'
-        : `Required invariant was not passed: ${requiredNotPassed}`,
+        : `Required invariant was not accepted: ${rejectedRequiredInvariant}`,
   };
 }
 
@@ -803,6 +817,7 @@ export class PackagedLabRuntime implements LabRuntime {
               id: entry.id,
               seed: scenarioSeed,
               status: 'failed',
+              requiredInvariants: entry.requiredInvariants,
               invariants: [],
               code: 'SCENARIO_INPUT_INVALID',
               reason: 'Release scenario requires one logical sender and request',

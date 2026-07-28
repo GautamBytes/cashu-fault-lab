@@ -23,6 +23,7 @@ export interface ReleaseSuiteLoaderOptions {
   readonly repositoryRoot: string;
   readonly path: string;
   readonly readText: (path: string) => Promise<string>;
+  readonly realPath: (path: string) => Promise<string>;
 }
 
 function confinedPath(repositoryRoot: string, path: string, subject: string): string {
@@ -41,6 +42,30 @@ function confinedPath(repositoryRoot: string, path: string, subject: string): st
     throw new Error(`${subject} must remain inside the repository`);
   }
   return candidate;
+}
+
+async function canonicalConfinedPath(
+  repositoryRoot: string,
+  path: string,
+  subject: string,
+  realPath: (path: string) => Promise<string>,
+): Promise<string> {
+  const lexicalCandidate = confinedPath(repositoryRoot, path, subject);
+  let canonicalRoot: string;
+  let canonicalCandidate: string;
+  try {
+    [canonicalRoot, canonicalCandidate] = await Promise.all([
+      realPath(resolve(repositoryRoot)),
+      realPath(lexicalCandidate),
+    ]);
+  } catch {
+    throw new Error(`${subject} was not found`);
+  }
+  const fromRoot = relative(canonicalRoot, canonicalCandidate);
+  if (fromRoot.length === 0 || fromRoot === '..' || fromRoot.startsWith(`..${sep}`)) {
+    throw new Error(`${subject} must remain inside the repository`);
+  }
+  return canonicalCandidate;
 }
 
 async function boundedRead(
@@ -82,7 +107,12 @@ function scenarioSpec(value: unknown, path: string): ScenarioSpec {
 export async function loadReleaseSuite(
   options: ReleaseSuiteLoaderOptions,
 ): Promise<LoadedReleaseSuite> {
-  const suitePath = confinedPath(options.repositoryRoot, options.path, 'Release suite path');
+  const suitePath = await canonicalConfinedPath(
+    options.repositoryRoot,
+    options.path,
+    'Release suite path',
+    options.realPath,
+  );
   const suiteText = await boundedRead(
     options.readText,
     suitePath,
@@ -92,7 +122,12 @@ export async function loadReleaseSuite(
   const suite = validateReleaseSuite(parsedJson(suiteText, 'Release suite'));
   const scenarios: LoadedReleaseSuiteScenario[] = [];
   for (const entry of suite.scenarios) {
-    const path = confinedPath(options.repositoryRoot, entry.scenario, 'Release scenario path');
+    const path = await canonicalConfinedPath(
+      options.repositoryRoot,
+      entry.scenario,
+      'Release scenario path',
+      options.realPath,
+    );
     const contents = await boundedRead(
       options.readText,
       path,

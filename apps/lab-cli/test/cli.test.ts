@@ -146,10 +146,11 @@ class FakeRuntime implements LabRuntime {
         invariants: [gateInvariant],
         mints: [{ id: 'test-mint', implementation: 'test-mint' }],
         scenarios:
-          releaseSuite?.scenarios.map(({ id }) => ({
+          releaseSuite?.scenarios.map(({ id, requiredInvariants }) => ({
             id,
             seed: `suite-${id}`,
             status: 'passed' as const,
+            requiredInvariants,
             invariants: [gateInvariant],
           })) ?? [],
       },
@@ -168,6 +169,7 @@ function fixture(files: Readonly<Record<string, string>> = {}) {
       if (value === undefined) throw new Error(`missing ${path}`);
       return value;
     },
+    realPath: async (path) => path,
     writeText: async (path, value) => {
       stored.set(path, value);
     },

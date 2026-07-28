@@ -18,7 +18,7 @@ import {
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import { Command, CommanderError, Option } from 'commander';
-import { chmod, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile, readdir, realpath } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
 import { registerAdapterCommands } from './commands/adapter.js';
@@ -85,6 +85,7 @@ export interface LabRuntime {
 
 export interface CliIo {
   readonly readText: (path: string) => Promise<string>;
+  readonly realPath: (path: string) => Promise<string>;
   readonly writeText: (path: string, value: string) => Promise<void>;
   readonly stdout: (value: string) => void;
   readonly stderr: (value: string) => void;
@@ -102,6 +103,7 @@ export interface CliOutcome {
 
 const defaultIo: CliIo = {
   readText: async (path) => readFile(path, 'utf8'),
+  realPath: realpath,
   writeText: async (path, value) => {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await writeFile(path, value, { encoding: 'utf8', mode: 0o600 });
@@ -490,6 +492,7 @@ export async function runCli(
                 repositoryRoot: process.cwd(),
                 path: releaseSuitePath,
                 readText: io.readText,
+                realPath: io.realPath,
               });
         if (releaseSuite !== undefined && releaseSuite.profile !== options.profile) {
           throw new Error(

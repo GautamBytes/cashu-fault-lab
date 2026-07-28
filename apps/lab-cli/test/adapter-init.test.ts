@@ -123,6 +123,12 @@ describe('adapter project scaffolding', () => {
           expect(await readFile(join(output, 'src/server.ts'), 'utf8')).toContain(
             "server.post('/v1/reset', async () => ({ ok: true }))",
           );
+          expect(await readFile(join(output, 'src/server.ts'), 'utf8')).toContain(
+            'timingSafeEqual',
+          );
+          expect(await readFile(join(output, 'src/server.ts'), 'utf8')).not.toContain(
+            'request.headers.authorization !==',
+          );
         } else if (language === 'rust') {
           expect(model).toContain('pub enum DeliveryReceiptStatus');
           expect(model).toContain('pub status: DeliveryReceiptStatus');
@@ -130,11 +136,21 @@ describe('adapter project scaffolding', () => {
           expect(await readFile(join(output, 'src/main.rs'), 'utf8')).toContain(
             '.route("/v1/reset", post(reset))',
           );
+          expect(await readFile(join(output, 'src/main.rs'), 'utf8')).toContain('.ct_eq(');
+          expect(await readFile(join(output, 'src/main.rs'), 'utf8')).not.toContain(
+            'actual == expected',
+          );
         } else {
           expect(model).toContain('status: Literal["processing", "settled", "rejected"]');
           expect(model).toContain('detail_code: str');
           expect(await readFile(join(output, 'src/my_wallet/main.py'), 'utf8')).toContain(
             'def reset() -> dict[str, bool]:',
+          );
+          expect(await readFile(join(output, 'src/my_wallet/main.py'), 'utf8')).toContain(
+            'compare_digest',
+          );
+          expect(await readFile(join(output, 'src/my_wallet/main.py'), 'utf8')).not.toContain(
+            'credentials.credentials != token',
           );
         }
 

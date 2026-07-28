@@ -287,6 +287,7 @@ export const contract = ${context.capabilitiesJson} as const satisfies AdapterCa
 export const routeCount = 7 as const;
 `,
     'src/server.ts': `import Fastify from 'fastify';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { contract } from './contract.js';
 import type { UnsupportedResponse } from './models.js';
 
@@ -299,6 +300,12 @@ function unsupported(reason: string): UnsupportedResponse {
   return { status: 'N/A', reason };
 }
 
+function bearerAuthorized(actual: string | undefined, token: string): boolean {
+  const expectedDigest = createHash('sha256').update(\`Bearer \${token}\`).digest();
+  const actualDigest = createHash('sha256').update(actual ?? '').digest();
+  return timingSafeEqual(actualDigest, expectedDigest);
+}
+
 export function buildServer(options: ServerOptions = {}) {
   const token = options.token ?? process.env.${context.tokenEnv};
   if (token === undefined || token.length === 0) {
@@ -309,7 +316,7 @@ export function buildServer(options: ServerOptions = {}) {
   server.get('/healthz', async () => ({ ok: true }));
   server.addHook('onRequest', async (request, reply) => {
     if (request.url === '/healthz') return;
-    if (request.headers.authorization !== \`Bearer \${token}\`) {
+    if (!bearerAuthorized(request.headers.authorization, token)) {
       await reply.code(401).send({ code: 'unauthorized' });
     }
   });
@@ -341,9 +348,13 @@ const port = Number(process.env.PORT ?? 4100);
 if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be a valid TCP port');
 }
+const host = process.env.HOST ?? '127.0.0.1';
+if (!['127.0.0.1', '::1', '0.0.0.0'].includes(host)) {
+  throw new Error('HOST must be 127.0.0.1, ::1, or 0.0.0.0');
+}
 
 const server = buildServer();
-await server.listen({ host: '0.0.0.0', port });
+await server.listen({ host, port });
 `,
     'test/contract.test.ts': `import { describe, expect, it } from 'vitest';
 import { buildServer } from '../src/server.js';
@@ -393,7 +404,7 @@ RUN corepack enable && pnpm build
 
 FROM node:24-alpine
 WORKDIR /app
-ENV NODE_ENV=production PORT=4100
+ENV NODE_ENV=production PORT=4100 HOST=0.0.0.0
 COPY package.json ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
@@ -412,6 +423,7 @@ cp .env.example .env
 ${context.tokenEnv}=local-token pnpm test
 ${context.tokenEnv}=local-token pnpm build
 ${context.tokenEnv}=local-token pnpm start
+${context.tokenEnv}=local-token HOST=0.0.0.0 pnpm start # opt in when publishing from a container
 \`\`\`
 
 The scaffold exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and five explicit \`501 N/A\` wallet-operation stubs.
@@ -454,6 +466,8 @@ rust-version = "1.97"
 axum = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
+subtle = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 tower-http = { version = "0.6", features = ["trace"] }
 
@@ -632,13 +646,15 @@ use axum::{
     Json, Router,
 };
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::{
     env,
-    net::{SocketAddr, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     process,
     sync::Arc,
     time::Duration,
 };
+use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
 
 #[derive(Clone)]
@@ -646,12 +662,17 @@ struct AppState {
     token: Arc<String>,
 }
 
+fn bearer_authorized(actual: Option<&str>, token: &str) -> bool {
+    let actual_digest = Sha256::digest(actual.unwrap_or_default().as_bytes());
+    let expected_digest = Sha256::digest(format!("Bearer {token}").as_bytes());
+    bool::from(actual_digest.ct_eq(&expected_digest))
+}
+
 async fn authorize(State(state): State<AppState>, headers: HeaderMap, request: axum::extract::Request, next: Next) -> Response {
-    let expected = format!("Bearer {}", state.token);
     let authorized = headers
         .get("authorization")
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|actual| actual == expected);
+        .is_some_and(|actual| bearer_authorized(Some(actual), &state.token));
     if !authorized {
         return (StatusCode::UNAUTHORIZED, Json(json!({ "code": "unauthorized" }))).into_response();
     }
@@ -695,6 +716,15 @@ fn app_with_token(token: String) -> Router {
         .with_state(state)
 }
 
+fn listen_host() -> IpAddr {
+    match env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()).as_str() {
+        "127.0.0.1" => IpAddr::V4(Ipv4Addr::LOCALHOST),
+        "0.0.0.0" => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        "::1" => IpAddr::V6(Ipv6Addr::LOCALHOST),
+        _ => panic!("HOST must be 127.0.0.1, ::1, or 0.0.0.0"),
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let port = env::var("PORT").ok().and_then(|value| value.parse::<u16>().ok()).unwrap_or(4100);
@@ -706,7 +736,7 @@ async fn main() {
         return;
     }
     let token = env::var("${context.tokenEnv}").expect("${context.tokenEnv} is required");
-    let listener = tokio::net::TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port)))
+    let listener = tokio::net::TcpListener::bind(SocketAddr::new(listen_host(), port))
         .await
         .expect("bind adapter listener");
     axum::serve(listener, app_with_token(token)).await.expect("serve adapter");
@@ -767,7 +797,7 @@ RUN cargo build --release
 
 FROM debian:trixie-slim
 WORKDIR /app
-ENV PORT=4100
+ENV PORT=4100 HOST=0.0.0.0
 COPY --from=build /app/target/release/${context.name} /usr/local/bin/${context.name}
 HEALTHCHECK --interval=5s --timeout=2s --retries=12 CMD ["/usr/local/bin/${context.name}", "--healthcheck"]
 CMD ["/usr/local/bin/${context.name}"]
@@ -781,6 +811,7 @@ Standalone Rust Cashu Fault Lab adapter scaffold.
 \`\`\`bash
 cargo test
 ${context.tokenEnv}=local-token cargo run
+${context.tokenEnv}=local-token HOST=0.0.0.0 cargo run # opt in when publishing from a container
 \`\`\`
 
 The scaffold uses Rust 1.97, edition 2024, Axum, and Tokio. It exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and five explicit \`501 N/A\` wallet-operation stubs.
@@ -955,6 +986,7 @@ CAPABILITIES = AdapterCapabilities.model_validate(
 ${context.capabilitiesPretty})
 `,
     [`src/${context.moduleName}/main.py`]: `import os
+from hmac import compare_digest
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -973,7 +1005,8 @@ def require_auth(
     token = os.getenv("${context.tokenEnv}")
     if not token:
         raise RuntimeError("${context.tokenEnv} is required")
-    if credentials is None or credentials.scheme.lower() != "bearer" or credentials.credentials != token:
+    supplied = "" if credentials is None else credentials.credentials
+    if credentials is None or credentials.scheme.lower() != "bearer" or not compare_digest(supplied, token):
         raise HTTPException(status_code=401, detail={"code": "unauthorized"})
 
 
@@ -1068,7 +1101,8 @@ Standalone Python Cashu Fault Lab adapter scaffold.
 \`\`\`bash
 python -m pip install -e ".[test]"
 ${context.tokenEnv}=local-token pytest
-${context.tokenEnv}=local-token uvicorn ${context.moduleName}.main:app --host 0.0.0.0 --port 4100
+${context.tokenEnv}=local-token uvicorn ${context.moduleName}.main:app --host 127.0.0.1 --port 4100
+${context.tokenEnv}=local-token uvicorn ${context.moduleName}.main:app --host 0.0.0.0 --port 4100 # opt in when publishing from a container
 \`\`\`
 
 Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.

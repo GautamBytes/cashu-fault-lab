@@ -81,9 +81,14 @@ function demoCapability(id: 'cashu-ts' | 'reference-receiver'): AdapterCapabilit
 
 function externalDemoFetch(
   fetchCalls: string[],
-  gatewayEvidence: Readonly<{ inbound: number; forwarded: number }> = {
+  gatewayEvidence: Readonly<{
+    inbound: number;
+    forwarded: number;
+    rules: readonly [Readonly<{ applied: number }>];
+  }> = {
     inbound: 2,
     forwarded: 1,
+    rules: [{ applied: 1 }],
   },
 ): typeof fetch {
   const requestId = 'AAECAwQFBgcICQoLDA0ODw';
@@ -360,7 +365,7 @@ describe('PackagedLabRuntime', () => {
     const runtime = new PackagedLabRuntime({
       services,
       runtimeRoot: directory,
-      fetch: externalDemoFetch([], { inbound: 0, forwarded: 0 }),
+      fetch: externalDemoFetch([], { inbound: 0, forwarded: 0, rules: [{ applied: 0 }] }),
     });
 
     try {
@@ -714,6 +719,23 @@ describe('PackagedLabRuntime', () => {
         'first-delivery',
         'second-delivery',
       ]);
+      expect(passedPair.scenarios[0]).toMatchObject({
+        requiredInvariants: expect.any(Array),
+        capabilities: expect.objectContaining({
+          sender: expect.objectContaining({
+            implementation: expect.objectContaining({ id: 'wallet-sender' }),
+          }),
+          receiver: expect.objectContaining({
+            implementation: expect.objectContaining({ id: 'wallet-receiver' }),
+          }),
+        }),
+        componentVersions: expect.objectContaining({
+          'scenario-runner': expect.any(String),
+          'sender/wallet-sender': '1.0.0',
+          'receiver/wallet-receiver': '1.0.0',
+        }),
+        imageDigests: {},
+      });
     }
     expect(fetchCalls).toContain('4101/v1/send');
     expect(fetchCalls).toContain(`4102/v1/deliveries/${activeDeliveryId}`);

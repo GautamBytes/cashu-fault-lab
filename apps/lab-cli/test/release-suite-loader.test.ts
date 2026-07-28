@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { loadReleaseSuite } from '../src/release-suite-loader.js';
 
 const root = '/repo';
+const identityRealPath = async (path: string): Promise<string> => path;
 const scenario = {
   name: 'release-case',
   commands: [{ type: 'assert_quiescent' }],
@@ -38,6 +41,7 @@ describe('release suite loader', () => {
     const loaded = await loadReleaseSuite({
       repositoryRoot: root,
       path: 'spec/release-suite.json',
+      realPath: identityRealPath,
       readText: reader({
         [resolve(root, 'spec/release-suite.json')]: suite(),
         [resolve(root, entry.scenario)]: JSON.stringify(scenario),
@@ -51,7 +55,12 @@ describe('release suite loader', () => {
     'rejects a non-confined suite path: %s',
     async (path) => {
       await expect(
-        loadReleaseSuite({ repositoryRoot: root, path, readText: reader({}) }),
+        loadReleaseSuite({
+          repositoryRoot: root,
+          path,
+          readText: reader({}),
+          realPath: identityRealPath,
+        }),
       ).rejects.toThrow('repository-relative');
     },
   );
@@ -61,6 +70,7 @@ describe('release suite loader', () => {
       loadReleaseSuite({
         repositoryRoot: root,
         path: 'spec/release-suite.json',
+        realPath: identityRealPath,
         readText: reader({
           [resolve(root, 'spec/release-suite.json')]: ' '.repeat(256 * 1024 + 1),
         }),
@@ -73,6 +83,7 @@ describe('release suite loader', () => {
       loadReleaseSuite({
         repositoryRoot: root,
         path: 'spec/release-suite.json',
+        realPath: identityRealPath,
         readText: reader({ [resolve(root, 'spec/release-suite.json')]: '{' }),
       }),
     ).rejects.toThrow('not valid JSON');
@@ -80,6 +91,7 @@ describe('release suite loader', () => {
       loadReleaseSuite({
         repositoryRoot: root,
         path: 'spec/release-suite.json',
+        realPath: identityRealPath,
         readText: reader({
           [resolve(root, 'spec/release-suite.json')]: suite({ schemaVersion: 2 }),
         }),
@@ -93,6 +105,7 @@ describe('release suite loader', () => {
       loadReleaseSuite({
         repositoryRoot: root,
         path: 'spec/release-suite.json',
+        realPath: identityRealPath,
         readText: reader({ [manifestPath]: suite() }),
       }),
     ).rejects.toThrow('Release suite scenario release-case was not found');
@@ -100,6 +113,7 @@ describe('release suite loader', () => {
       loadReleaseSuite({
         repositoryRoot: root,
         path: 'spec/release-suite.json',
+        realPath: identityRealPath,
         readText: reader({
           [manifestPath]: suite(),
           [resolve(root, entry.scenario)]: JSON.stringify({ name: 'bad', commands: [{}] }),
@@ -114,6 +128,7 @@ describe('release suite loader', () => {
         loadReleaseSuite({
           repositoryRoot: root,
           path: 'spec/release-suite.json',
+          realPath: identityRealPath,
           readText: reader({
             [resolve(root, 'spec/release-suite.json')]: suite({
               scenarios: [{ ...entry, scenario: path }],
@@ -121,6 +136,32 @@ describe('release suite loader', () => {
           }),
         }),
       ).rejects.toThrow('scenario path is invalid');
+    }
+  });
+
+  it('rejects a repository-relative scenario symlink that escapes the repository', async () => {
+    const directory = await mkdtemp(resolve(tmpdir(), 'cashu-release-suite-'));
+    const repositoryRoot = resolve(directory, 'repository');
+    const outsideScenario = resolve(directory, 'outside.json');
+    const suitePath = resolve(repositoryRoot, 'spec/release-suite.json');
+    const scenarioPath = resolve(repositoryRoot, entry.scenario);
+    try {
+      await mkdir(resolve(repositoryRoot, 'spec'), { recursive: true });
+      await mkdir(resolve(repositoryRoot, 'scenarios'), { recursive: true });
+      await writeFile(suitePath, suite());
+      await writeFile(outsideScenario, JSON.stringify(scenario));
+      await symlink(outsideScenario, scenarioPath);
+
+      await expect(
+        loadReleaseSuite({
+          repositoryRoot,
+          path: 'spec/release-suite.json',
+          readText: async (path) => readFile(path, 'utf8'),
+          realPath: realpath,
+        }),
+      ).rejects.toThrow('remain inside the repository');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   });
 });

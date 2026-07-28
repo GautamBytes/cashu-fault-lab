@@ -26,6 +26,7 @@ export interface ExternalFaultEvidence {
   readonly forwarded: number;
   readonly controller: 'direct' | 'http-gateway';
   readonly observedTarget?: string;
+  readonly appliedFaults?: number;
 }
 
 export interface ExternalFaultController {
@@ -387,10 +388,17 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       throw new Error('External fault evidence collection failed');
     }
     const controllerAttempts = Math.max(faultEvidence.inbound, faultEvidence.forwarded);
+    if (
+      faultEvidence.appliedFaults !== undefined &&
+      (!Number.isSafeInteger(faultEvidence.appliedFaults) || faultEvidence.appliedFaults < 0)
+    ) {
+      throw new Error('External fault evidence collection failed');
+    }
     const configuredFaultWasObserved =
       faultEvidence.controller === 'http-gateway' &&
       faultEvidence.observedTarget !== undefined &&
-      this.#configuredTransportFaults.has(faultEvidence.observedTarget);
+      this.#configuredTransportFaults.has(faultEvidence.observedTarget) &&
+      (faultEvidence.appliedFaults ?? 0) > 0;
     if (
       this.#configuredTransportFaults.size > 0 &&
       (controllerAttempts === 0 || !configuredFaultWasObserved)

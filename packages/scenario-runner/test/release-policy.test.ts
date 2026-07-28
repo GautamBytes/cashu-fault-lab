@@ -135,6 +135,7 @@ function passingCase(
         id,
         seed: `seed-${id}`,
         status: 'passed',
+        requiredInvariants: required,
         invariants: required.map((invariantId) => invariant(invariantId)),
       })),
   };
@@ -244,6 +245,30 @@ describe('release policy', () => {
     );
   });
 
+  it('rejects adapter-claimed evidence inside required release scenarios', () => {
+    const result = evaluateReleasePolicy(policy, [
+      passingCase({
+        scenarios: [
+          {
+            id: 'retry-response-lost',
+            seed: 'adapter-claimed-scenario',
+            status: 'passed',
+            requiredInvariants: [required[0]],
+            invariants: [invariant(required[0], 'adapter_claimed')],
+          },
+        ],
+      }),
+    ]);
+
+    expect(result.reasons).toContainEqual(
+      expect.objectContaining({
+        code: 'INVARIANT_CONFIDENCE_REJECTED',
+        pair: 'sender-ts->receiver-rs',
+        scenario: 'retry-response-lost',
+      }),
+    );
+  });
+
   it('rejects each missing or non-passing required scenario with pair context', () => {
     const missing = evaluateReleasePolicy(policy, [passingCase({ scenarios: [] })]).reasons.find(
       (reason) => reason.code === 'REQUIRED_SCENARIO_MISSING',
@@ -255,6 +280,7 @@ describe('release policy', () => {
             id: 'retry-response-lost',
             seed: 'failed-seed',
             status: 'failed',
+            requiredInvariants: required,
             invariants: [],
             code: 'SCENARIO_EXECUTION_FAILED',
             reason: 'Scenario failed safely.',

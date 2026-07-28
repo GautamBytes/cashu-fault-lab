@@ -80,6 +80,7 @@ describe('CompatibilityMatrix', () => {
         id: 'retry-response-lost',
         seed: 'pair-seed',
         status: 'passed' as const,
+        requiredInvariants: ['retry-convergence' as const],
         invariants: [
           {
             id: 'retry-convergence' as const,
@@ -107,6 +108,7 @@ describe('CompatibilityMatrix', () => {
         id: 'retry-response-lost',
         seed: 'pair-seed',
         status: 'passed',
+        requiredInvariants: ['retry-convergence'],
         invariants: [
           {
             id: 'retry-convergence',

@@ -13,7 +13,11 @@ describe('HttpExternalFaultController', () => {
         ...(init?.body === undefined ? {} : { body: JSON.parse(String(init.body)) }),
       });
       if (url.endsWith('/evidence')) {
-        return Response.json({ inbound: 2, forwarded: 2 });
+        return Response.json({
+          inbound: 2,
+          forwarded: 2,
+          rules: [{ id: 'http-rule-1', applied: 1 }],
+        });
       }
       return Response.json({ ok: true });
     };
@@ -30,6 +34,7 @@ describe('HttpExternalFaultController', () => {
       forwarded: 2,
       controller: 'http-gateway',
       observedTarget: 'http',
+      appliedFaults: 1,
     });
     await controller.clear('http');
 

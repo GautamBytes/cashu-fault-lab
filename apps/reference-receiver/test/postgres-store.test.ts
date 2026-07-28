@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  acceptDelivery,
   CryptoEnvelope,
   PostgresReceiverStore,
   type ExactSwapPlan,
@@ -154,6 +155,49 @@ describe('PostgresReceiverStore', () => {
       (await fixture.pool.query('SELECT count(*)::int AS count FROM receipt_outbox')).rows[0],
     ).toMatchObject({ count: 1 });
     expect(await store.credits()).toHaveLength(1);
+  });
+
+  it('rolls back outputs and credit when atomic settlement cannot persist its receipt', async () => {
+    await fixture.pool.query(`
+      CREATE FUNCTION reject_receipt_outbox() RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'receipt outbox unavailable';
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await fixture.pool.query(`
+      CREATE TRIGGER reject_receipt_outbox
+      BEFORE INSERT ON receipt_outbox
+      FOR EACH ROW EXECUTE FUNCTION reject_receipt_outbox()
+    `);
+    try {
+      await expect(
+        acceptDelivery(
+          {
+            payload: payload(requestId, deliveryId, now),
+            payloadHash: 'a'.repeat(64),
+          },
+          {
+            store,
+            mint: new FakeMint(),
+            verifier: new FakeProofVerifier(),
+            now: () => now,
+          },
+        ),
+      ).resolves.toMatchObject({
+        status: 'processing',
+        detailCode: 'recovery_blocked',
+      });
+
+      expect(await store.credits()).toHaveLength(0);
+      const recovered = await store.current(deliveryId);
+      expect(recovered).toMatchObject({ phase: 'recovery_blocked' });
+      expect(recovered?.replacementPlanHash).toBeUndefined();
+      expect(recovered?.replacementProofs).toBeUndefined();
+    } finally {
+      await fixture.pool.query('DROP TRIGGER reject_receipt_outbox ON receipt_outbox');
+      await fixture.pool.query('DROP FUNCTION reject_receipt_outbox()');
+    }
   });
 
   it('authenticates encrypted plans against immutable delivery identity', async () => {

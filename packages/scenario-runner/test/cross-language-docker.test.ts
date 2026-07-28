@@ -69,6 +69,7 @@ class PaymentFaultProxy implements ExternalFaultController {
   #rule: FaultRule | undefined;
   #inbound = 0;
   #forwarded = 0;
+  #appliedFaults = 0;
   readonly #statuses: number[] = [];
   readonly #errorBodies: string[] = [];
 
@@ -96,6 +97,7 @@ class PaymentFaultProxy implements ExternalFaultController {
     this.#rule = undefined;
     this.#inbound = 0;
     this.#forwarded = 0;
+    this.#appliedFaults = 0;
     this.#statuses.splice(0);
     this.#errorBodies.splice(0);
   }
@@ -115,6 +117,7 @@ class PaymentFaultProxy implements ExternalFaultController {
       forwarded: this.#forwarded,
       controller: 'http-gateway',
       observedTarget: 'http',
+      appliedFaults: this.#appliedFaults,
     };
   }
 
@@ -158,17 +161,20 @@ class PaymentFaultProxy implements ExternalFaultController {
       this.#inbound += 1;
       const occurrence = this.#rule?.occurrence ?? 1;
       if (this.#rule?.kind === 'drop_request' && this.#inbound === occurrence) {
+        this.#appliedFaults += 1;
         response.destroy();
         return;
       }
       const first = await this.#forward(body);
       if (this.#rule?.kind === 'duplicate' && this.#inbound === occurrence) {
+        this.#appliedFaults += 1;
         for (let index = 0; index < (this.#rule.duplicateCount ?? 1); index += 1) {
           const duplicate = await this.#forward(body);
           if (duplicate.status !== first.status) throw new Error('Duplicate response changed');
         }
       }
       if (this.#rule?.kind === 'drop_response' && this.#inbound === occurrence) {
+        this.#appliedFaults += 1;
         response.destroy();
         return;
       }

@@ -12,6 +12,7 @@ describe('funded wallet workflow targets', () => {
     expect(contents).toContain('template-ts');
     expect(contents).toContain('template-rust');
     expect(contents).toContain('template-python');
+    expect(contents.match(/HOST=127\.0\.0\.1/gu) ?? []).toHaveLength(2);
   });
 
   it('runs the external funded wallet matrix as a fail-closed CI lane', async () => {

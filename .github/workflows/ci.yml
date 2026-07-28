@@ -114,7 +114,7 @@ jobs:
         env:
           TEMPLATE_CONFORMANCE_TOKEN: generated-template-conformance
         run: |
-          nohup env PORT=4511 TEMPLATE_TS_TOKEN="${TEMPLATE_CONFORMANCE_TOKEN}" \
+          nohup env PORT=4511 HOST=127.0.0.1 TEMPLATE_TS_TOKEN="${TEMPLATE_CONFORMANCE_TOKEN}" \
             node /tmp/cashu-fault-lab-templates/template-ts/dist/bin.js \
             >/tmp/cashu-fault-lab-templates/template-ts/server.log 2>&1 &
           echo "$!" > /tmp/cashu-fault-lab-templates/template-ts/server.pid
@@ -125,7 +125,7 @@ jobs:
         env:
           TEMPLATE_CONFORMANCE_TOKEN: generated-template-conformance
         run: |
-          nohup env PORT=4512 TEMPLATE_RUST_TOKEN="${TEMPLATE_CONFORMANCE_TOKEN}" \
+          nohup env PORT=4512 HOST=127.0.0.1 TEMPLATE_RUST_TOKEN="${TEMPLATE_CONFORMANCE_TOKEN}" \
             /tmp/cashu-fault-lab-templates/template-rust/target/debug/template-rust \
             >/tmp/cashu-fault-lab-templates/template-rust/server.log 2>&1 &
           echo "$!" > /tmp/cashu-fault-lab-templates/template-rust/server.pid

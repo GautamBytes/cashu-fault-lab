@@ -338,6 +338,7 @@ const matrixResults: readonly MatrixCaseResult[] = [
         status: 'failed',
         code: 'REQUIRED_INVARIANT_NOT_PASSED',
         reason: 'Required invariant was not passed: retry-convergence',
+        requiredInvariants: ['retry-convergence'],
         invariants: [
           {
             id: 'retry-convergence',

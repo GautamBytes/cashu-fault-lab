@@ -267,6 +267,14 @@ function pairReasons(
     add('MINT_IDENTITY_REQUIRED', 'A configured mint identity is required.');
   }
 
+  const addScenarioInvariantReason = (
+    code: ReleaseGateReasonCode,
+    scenario: string,
+    message: string,
+  ): void => {
+    reasons.push({ code, message, pair, scenario });
+  };
+
   for (const id of policy.requiredScenarios) {
     const matches = selected.scenarios.filter((scenario) => scenario.id === id);
     if (matches.length === 0) {
@@ -289,6 +297,36 @@ function pairReasons(
         pair,
         scenario: id,
       });
+      continue;
+    }
+    const scenarioInvariants = new Map(
+      result.invariants.map((invariant) => [invariant.id, invariant]),
+    );
+    for (const invariantId of result.requiredInvariants) {
+      const invariant = scenarioInvariants.get(invariantId);
+      if (invariant === undefined) {
+        addScenarioInvariantReason(
+          'REQUIRED_INVARIANT_MISSING',
+          id,
+          `Required scenario ${id} is missing invariant ${invariantId} for ${pair}.`,
+        );
+        continue;
+      }
+      if (invariant.status !== 'passed') {
+        addScenarioInvariantReason(
+          'REQUIRED_INVARIANT_NOT_PASSED',
+          id,
+          `Required scenario ${id} invariant ${invariantId} has status ${invariant.status} for ${pair}.`,
+        );
+        continue;
+      }
+      if (!policy.acceptedConfidence.includes(invariant.confidence)) {
+        addScenarioInvariantReason(
+          'INVARIANT_CONFIDENCE_REJECTED',
+          id,
+          `Required scenario ${id} invariant ${invariantId} has rejected confidence ${invariant.confidence} for ${pair}.`,
+        );
+      }
     }
   }
 

@@ -200,9 +200,50 @@ export class MemoryReceiverStore implements ReceiverStore {
   }
 
   async settle(input: CommitSettlement): Promise<DeliveryReceipt> {
-    await this.persistSettlementOutputs(input);
-    await this.creditSettlement(input.deliveryId, input.now);
-    return this.finalizeSettlement(input.deliveryId);
+    return this.#transaction((draft) => {
+      const record = this.#requireDelivery(draft, input.deliveryId);
+      if (record.phase === 'settled') {
+        if (record.replacementPlanHash !== input.replacementPlanHash) {
+          throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
+        }
+        return structuredClone(record.receipt);
+      }
+      if (record.phase === 'rejected' || record.phase === 'prepared') {
+        throw new ReceiverDomainError('INVALID_STATE', 'Delivery cannot settle from current phase');
+      }
+      if (
+        record.replacementPlanHash !== undefined &&
+        record.replacementPlanHash !== input.replacementPlanHash
+      ) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
+      }
+      if (input.replacementPlanHash.length === 0 || input.replacementProofs.length === 0) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Recovered outputs are required to settle');
+      }
+      assertSafeInteger(input.now, 'Settlement time');
+      const credit: MerchantCredit = {
+        creditId: record.deliveryId,
+        requestId: record.requestId,
+        deliveryId: record.deliveryId,
+        amount: record.amount,
+        unit: record.receipt.unit,
+        createdAt: input.now,
+      };
+      const previousCredit = draft.credits.get(record.deliveryId);
+      if (previousCredit && JSON.stringify(previousCredit) !== JSON.stringify(credit)) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Merchant credit is conflicting');
+      }
+      const receipt = nextReceipt(record.receipt, 'settled', 'settled');
+      draft.credits.set(record.deliveryId, previousCredit ?? credit);
+      draft.deliveries.set(record.deliveryId, {
+        ...record,
+        phase: 'settled',
+        replacementPlanHash: input.replacementPlanHash,
+        replacementProofs: [...input.replacementProofs],
+        receipt,
+      });
+      return structuredClone(receipt);
+    });
   }
 
   async persistSettlementOutputs(input: CommitSettlement): Promise<DeliveryReceipt> {

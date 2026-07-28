@@ -124,11 +124,29 @@ function evidence(value: unknown): ExternalFaultEvidence {
   ) {
     throw new Error('External fault evidence is invalid');
   }
+  if (!Array.isArray(record.rules)) {
+    throw new Error('External fault evidence is invalid');
+  }
+  let appliedFaults = 0;
+  for (const rule of record.rules) {
+    if (typeof rule !== 'object' || rule === null || Array.isArray(rule)) {
+      throw new Error('External fault evidence is invalid');
+    }
+    const applied = (rule as Readonly<Record<string, unknown>>).applied;
+    if (typeof applied !== 'number' || !Number.isSafeInteger(applied) || applied < 0) {
+      throw new Error('External fault evidence is invalid');
+    }
+    appliedFaults += applied;
+    if (!Number.isSafeInteger(appliedFaults)) {
+      throw new Error('External fault evidence is invalid');
+    }
+  }
   return {
     inbound: record.inbound,
     forwarded: record.forwarded,
     controller: 'http-gateway',
     observedTarget: 'http',
+    appliedFaults,
   };
 }
 

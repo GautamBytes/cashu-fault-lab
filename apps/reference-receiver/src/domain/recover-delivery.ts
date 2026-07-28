@@ -118,6 +118,9 @@ async function settleWithCheckpoints(
   input: Parameters<AcceptDeliveryDependencies['store']['settle']>[0],
   deps: AcceptDeliveryDependencies,
 ): Promise<DeliveryReceipt> {
+  if (deps.crashCheckpoint === undefined) {
+    return deps.store.settle(input);
+  }
   const checkpoint = receiverCrashCheckpoint(deps);
   await checkpoint.hit('receiver_after_mint_response_before_output_persistence', input.deliveryId);
   await deps.store.persistSettlementOutputs(input);

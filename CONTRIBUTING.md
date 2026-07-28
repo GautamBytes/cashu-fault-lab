@@ -30,7 +30,8 @@ pnpm build
 
 1. Create a `.json` file under `scenarios/<category>/`. See existing files for the schema.
 2. Include `name` and `description` fields.
-3. Command types: `configure_fault`, `send`, `restart`, `advance_time`, `clear_faults`, `assert_quiescent`.
+3. Command types: `configure_fault`, `arm_crash`, `send`, `start_send`, `restart`,
+   `advance_time`, `clear_faults`, `assert_quiescent`.
 4. Add a handler in `apps/lab-cli/src/packaged-runtime.ts` if using a new scenario name.
 
 ## Adding an adapter
