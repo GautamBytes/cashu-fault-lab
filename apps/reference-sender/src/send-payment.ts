@@ -12,7 +12,13 @@ import {
 import type { PaymentTransport, TransportTarget } from './ports/transport.js';
 import type { SenderWallet } from './ports/wallet.js';
 import { createSeededRandom, retryDelay } from './retry.js';
-import type { SenderDeliveryRecord, SenderState, SenderStateOperations } from './state.js';
+import type {
+  SenderAttemptCode,
+  SenderAttemptDiagnostic,
+  SenderDeliveryRecord,
+  SenderState,
+  SenderStateOperations,
+} from './state.js';
 
 export interface SenderPaymentRequest {
   readonly id: ProtocolId;
@@ -73,6 +79,25 @@ function assertReceiptIdentity(record: SenderDeliveryRecord, receipt: DeliveryRe
   }
 }
 
+function appendDiagnostic(
+  record: SenderDeliveryRecord,
+  code: SenderAttemptCode,
+  stage: SenderAttemptDiagnostic['stage'],
+  retryable: boolean,
+): SenderDeliveryRecord {
+  const diagnostic: SenderAttemptDiagnostic = {
+    attempt: record.attempts,
+    transport: record.target.type,
+    stage,
+    code,
+    retryable,
+  };
+  return {
+    ...record,
+    diagnostics: [...(record.diagnostics ?? []), diagnostic].slice(-20),
+  };
+}
+
 async function markRecoveryAfterNonterminalFailure(
   deliveryId: ProtocolId,
   state: SenderStateOperations,
@@ -125,15 +150,44 @@ async function runAttempts(
         record.target,
         new AbortController().signal,
       );
-    } catch {}
+    } catch {
+      record = appendDiagnostic(record, 'TRANSPORT_FAILURE', 'transport', true);
+    }
 
     if (result?.kind === 'receipt') {
       let receipt: DeliveryReceipt | undefined;
+      let observed: DeliveryReceipt | undefined;
       try {
-        const observed = parseDeliveryReceipt(result.receipt);
-        assertReceiptIdentity(record, observed);
-        receipt = mergeObservedReceipt(record.receipt, observed);
-      } catch {}
+        observed = parseDeliveryReceipt(result.receipt);
+      } catch {
+        record = appendDiagnostic(record, 'INVALID_RECEIPT', 'receipt_validation', true);
+      }
+      if (observed !== undefined) {
+        try {
+          assertReceiptIdentity(record, observed);
+        } catch {
+          record = appendDiagnostic(
+            record,
+            'RECEIPT_IDENTITY_CONFLICT',
+            'receipt_validation',
+            false,
+          );
+          shouldRetry = false;
+        }
+      }
+      if (observed !== undefined && shouldRetry) {
+        try {
+          receipt = mergeObservedReceipt(record.receipt, observed);
+        } catch {
+          record = appendDiagnostic(
+            record,
+            'RECEIPT_TRANSITION_CONFLICT',
+            'receipt_validation',
+            false,
+          );
+          shouldRetry = false;
+        }
+      }
       if (receipt) {
         record = { ...record, receipt };
         if (receipt.status === 'settled') {
@@ -151,7 +205,13 @@ async function runAttempts(
         if (receipt.detailCode === 'recovery_blocked') shouldRetry = false;
       }
     }
-    if (result?.kind === 'permanent_failure') shouldRetry = false;
+    if (result?.kind === 'no_response') {
+      record = appendDiagnostic(record, 'TRANSPORT_FAILURE', 'transport', true);
+    }
+    if (result?.kind === 'permanent_failure') {
+      record = appendDiagnostic(record, 'PERMANENT_FAILURE', 'transport', false);
+      shouldRetry = false;
+    }
     await deps.state.save(record);
 
     if (!shouldRetry || localAttempt === maxAttempts - 1) break;

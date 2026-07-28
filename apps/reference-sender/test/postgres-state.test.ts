@@ -98,7 +98,22 @@ describe('PostgresSenderState', () => {
     if (pool === undefined) throw new Error('PostgreSQL pool did not start');
     const first = new PostgresSenderState({ pool, encryptionKey: stateKey });
     await first.create(record());
-    await first.save(record({ attempts: 2, status: 'settled', receipt: receipt() }));
+    await first.save(
+      record({
+        attempts: 2,
+        status: 'settled',
+        receipt: receipt(),
+        diagnostics: [
+          {
+            attempt: 1,
+            transport: 'post',
+            stage: 'transport',
+            code: 'TRANSPORT_FAILURE',
+            retryable: true,
+          },
+        ],
+      }),
+    );
 
     const raw = await pool.query<{ record_ciphertext: Buffer }>(
       'SELECT record_ciphertext FROM sender_deliveries WHERE delivery_id = $1',
@@ -112,6 +127,15 @@ describe('PostgresSenderState', () => {
     const stored = await restarted.get(deliveryId);
 
     expect(stored).toMatchObject({ deliveryId, status: 'settled', attempts: 2 });
+    expect(stored?.diagnostics).toEqual([
+      {
+        attempt: 1,
+        transport: 'post',
+        stage: 'transport',
+        code: 'TRANSPORT_FAILURE',
+        retryable: true,
+      },
+    ]);
     expect(stored?.receipt).toEqual(receipt());
     expect(stored?.payloadBytes).toEqual(Uint8Array.from([0, 1, 2, 253, 254, 255]));
   });
@@ -164,5 +188,28 @@ describe('PostgresSenderState', () => {
         state.withDeliveryLock(deliveryId, async () => undefined),
       ),
     ).rejects.toThrowError(/nested/i);
+  });
+
+  it('rejects unknown diagnostic fields before persisting durable state', async () => {
+    if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+    const state = new PostgresSenderState({ pool, encryptionKey: stateKey });
+    const invalidRecord = {
+      ...record(),
+      diagnostics: [
+        {
+          attempt: 1,
+          transport: 'post',
+          stage: 'transport',
+          code: 'TRANSPORT_FAILURE',
+          retryable: true,
+          message: 'Bearer durable-secret',
+        },
+      ],
+    } as unknown as SenderDeliveryRecord;
+
+    await expect(state.create(invalidRecord)).rejects.toThrowError(
+      /attempt diagnostics are invalid/i,
+    );
+    await expect(state.get(deliveryId)).resolves.toBeUndefined();
   });
 });

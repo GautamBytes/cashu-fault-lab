@@ -1,7 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
-import type { SenderDeliveryRecord, SenderState, SenderStateOperations } from './state.js';
+import {
+  assertSenderAttemptDiagnostics,
+  type SenderDeliveryRecord,
+  type SenderState,
+  type SenderStateOperations,
+} from './state.js';
 
 interface SenderDeliveryRow extends QueryResultRow {
   readonly delivery_id: string;
@@ -82,6 +87,7 @@ function authenticatedData(tenant: string, deliveryId: string): Buffer {
 }
 
 function serializeRecord(record: SenderDeliveryRecord): Buffer {
+  assertSenderAttemptDiagnostics(record.diagnostics);
   const serialized: SerializedSenderDeliveryRecord = {
     ...record,
     payloadBytes: Buffer.from(record.payloadBytes).toString('base64url'),
@@ -94,6 +100,7 @@ function deserializeRecord(value: Buffer): SenderDeliveryRecord {
   if (typeof parsed.payloadBytes !== 'string') {
     throw new Error('PostgreSQL sender record payload bytes are invalid');
   }
+  assertSenderAttemptDiagnostics(parsed.diagnostics);
   return {
     ...(parsed as Omit<SerializedSenderDeliveryRecord, 'payloadBytes'>),
     payloadBytes: Uint8Array.from(Buffer.from(parsed.payloadBytes, 'base64url')),
