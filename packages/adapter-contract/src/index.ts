@@ -1,5 +1,6 @@
 export {
   adapterCapabilitiesSchema,
+  crashControlSchema,
   deliveryPayloadSchema,
   deliveryReceiptSchema,
   deliveryRequestSchema,
@@ -33,6 +34,8 @@ export { currentAdapterContract, validateAdapterCompatibility } from './contract
 export * as generatedAdapterContract from './generated/typescript/index.js';
 export type {
   AdapterCapabilities,
+  AdapterTestControlClient,
+  AdapterTestControls,
   AdapterCompatibilityResult,
   AdapterCompatibilityWarning,
   AdapterContractMetadata,
@@ -47,6 +50,8 @@ export type {
   AdapterRoleEvidence,
   AdapterTransport,
   CreateRequestInput,
+  CrashArmInput,
+  CrashArmStatus,
   DeliveryReceiptView,
   DurabilityLevel,
   EvidenceSource,

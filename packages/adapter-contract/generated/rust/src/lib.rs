@@ -1,11 +1,11 @@
 //! Generated Cashu Fault Lab adapter contract models.
 //! Intended OpenAPI Generator target: rust
 //! openapi-generator-cli: 7.15.0
-//! specDigest: sha256:9b03b31a2b850d15c1116aa9ae123351373d9ac278070a05314d367399fe4466
+//! specDigest: sha256:3835493ccf51f3f2d5d6db4a237b189340b085eb13729c25e4369d4d773183bc
 
 pub const OPENAPI_GENERATOR: &str = "openapi-generator-cli";
 pub const OPENAPI_GENERATOR_VERSION: &str = "7.15.0";
-pub const SPEC_DIGEST: &str = "sha256:9b03b31a2b850d15c1116aa9ae123351373d9ac278070a05314d367399fe4466";
+pub const SPEC_DIGEST: &str = "sha256:3835493ccf51f3f2d5d6db4a237b189340b085eb13729c25e4369d4d773183bc";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdapterContractMetadata {

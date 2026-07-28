@@ -2,9 +2,12 @@ import { parseProtocolId } from '@cashu-fault-lab/delivery-core';
 import type {
   AdapterCapabilities,
   AdapterClient,
+  AdapterTestControlClient,
   AdapterRequestOperation,
   AdapterResponseOperation,
   CreateRequestInput,
+  CrashArmInput,
+  CrashArmStatus,
   DeliveryReceiptView,
   LedgerCreditView,
   PaymentRequestView,
@@ -130,7 +133,7 @@ async function boundedJson(response: Response, limit: number): Promise<unknown> 
   }
 }
 
-export class HttpAdapterClient implements AdapterClient {
+export class HttpAdapterClient implements AdapterClient, AdapterTestControlClient {
   readonly #baseUrl: string;
   readonly #token: string;
   readonly #timeoutMs: number;
@@ -253,5 +256,16 @@ export class HttpAdapterClient implements AdapterClient {
 
   proofs(): Promise<readonly ProofEvidenceView[]> {
     return this.#request('proofs', 'GET', '/v1/proofs');
+  }
+
+  async armCrash(input: CrashArmInput): Promise<void> {
+    await this.#request('armCrash', 'POST', '/v1/test/crashes', {
+      operation: 'armCrash',
+      value: input,
+    });
+  }
+
+  crashStatus(): Promise<readonly CrashArmStatus[]> {
+    return this.#request('crashStatus', 'GET', '/v1/test/crashes');
   }
 }

@@ -1,4 +1,4 @@
-import type { DeliveryReceiptWire } from '@cashu-fault-lab/delivery-core';
+import type { CrashBoundary, DeliveryReceiptWire } from '@cashu-fault-lab/delivery-core';
 
 export type EvidenceTier = 'T0' | 'T1' | 'T2' | 'T3';
 export type AdapterTransport = 'http' | 'nostr';
@@ -52,6 +52,28 @@ export interface AdapterCapabilities {
   readonly nuts: readonly number[];
   readonly encodings: readonly AdapterEncoding[];
   readonly mints: readonly AdapterMintIdentity[];
+  readonly testControls?: AdapterTestControls;
+}
+
+export interface AdapterTestControls {
+  readonly crashBoundaries: readonly CrashBoundary[];
+}
+
+export interface CrashArmInput {
+  readonly runId: string;
+  readonly component: AdapterRole;
+  readonly boundary: CrashBoundary;
+  readonly occurrence: number;
+}
+
+export interface CrashArmStatus extends CrashArmInput {
+  readonly hits: number;
+  readonly consumed: boolean;
+}
+
+export interface AdapterTestControlClient {
+  armCrash(input: CrashArmInput): Promise<void>;
+  crashStatus(): Promise<readonly CrashArmStatus[]>;
 }
 
 export interface ResetInput {
@@ -117,9 +139,17 @@ export interface AdapterClient {
   proofs(): Promise<readonly ProofEvidenceView[]>;
 }
 
-export type AdapterRequestOperation = 'reset' | 'createRequest' | 'send';
+export type AdapterRequestOperation = 'reset' | 'createRequest' | 'send' | 'armCrash';
 export type AdapterResponseOperation =
-  'capabilities' | 'reset' | 'createRequest' | 'send' | 'delivery' | 'ledger' | 'proofs';
+  | 'capabilities'
+  | 'reset'
+  | 'createRequest'
+  | 'send'
+  | 'delivery'
+  | 'ledger'
+  | 'proofs'
+  | 'armCrash'
+  | 'crashStatus';
 
 export type SchemaErrorCode =
   | 'UNKNOWN_OPERATION'

@@ -48,6 +48,8 @@ await writeExpected(
   'packages/adapter-contract/src/generated/typescript/models.ts',
   `${generatedHeader(generatorVersion, specDigest, 'typescript-fetch')}import type {
   AdapterCapabilities as MaintainedAdapterCapabilities,
+  CrashArmInput as MaintainedCrashArmInput,
+  CrashArmStatus as MaintainedCrashArmStatus,
   CreateRequestInput as MaintainedCreateRequestInput,
   DeliveryReceiptView as MaintainedDeliveryReceiptView,
   LedgerCreditView as MaintainedLedgerCreditView,
@@ -58,6 +60,8 @@ await writeExpected(
 } from '../../types.js';
 
 export type AdapterCapabilities = MaintainedAdapterCapabilities;
+export type CrashArmInput = MaintainedCrashArmInput;
+export type CrashArmStatus = MaintainedCrashArmStatus;
 export type ResetInput = MaintainedResetInput;
 export type CreateRequestInput = MaintainedCreateRequestInput;
 export type SendPaymentInput = MaintainedSendPaymentInput;
@@ -79,6 +83,8 @@ await writeExpected(
   'packages/adapter-contract/src/generated/typescript/client.ts',
   `${generatedHeader(generatorVersion, specDigest, 'typescript-fetch')}import type {
   AdapterCapabilities,
+  CrashArmInput,
+  CrashArmStatus,
   CreateRequestInput,
   DeliveryReceiptView,
   LedgerCreditView,
@@ -96,6 +102,8 @@ export interface AdapterContractApi {
   getDeliveryReceipt(deliveryId: string): Promise<DeliveryReceiptView>;
   getLedger(): Promise<readonly LedgerCreditView[]>;
   getProofs(): Promise<readonly ProofEvidenceView[]>;
+  armCrash(input: CrashArmInput): Promise<{ readonly ok: true }>;
+  getCrashStatus(): Promise<readonly CrashArmStatus[]>;
 }
 `,
 );
@@ -104,6 +112,8 @@ await writeExpected(
   'packages/adapter-contract/src/generated/typescript/index.ts',
   `${generatedHeader(generatorVersion, specDigest, 'typescript-fetch')}export type {
   AdapterCapabilities,
+  CrashArmInput,
+  CrashArmStatus,
   ResetInput,
   CreateRequestInput,
   SendPaymentInput,

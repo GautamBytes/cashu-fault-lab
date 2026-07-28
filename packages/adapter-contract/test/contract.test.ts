@@ -5,6 +5,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 import {
   adapterCapabilitiesSchema,
+  crashControlSchema,
   deliveryPayloadSchema,
   deliveryReceiptSchema,
   deliveryRequestSchema,
@@ -56,6 +57,7 @@ describe('normative delivery-v1 vectors', () => {
     expect(scenarioResultSchema).toEqual(fixture('schemas/scenario-result.schema.json'));
     expect(releasePolicySchema).toEqual(fixture('schemas/release-policy.schema.json'));
     expect(releaseSuiteSchema).toEqual(fixture('schemas/release-suite.schema.json'));
+    expect(crashControlSchema).toEqual(fixture('schemas/crash-control.schema.json'));
   });
 
   it('validates the checked-in release policy and suite against their published schemas', () => {
@@ -124,6 +126,14 @@ describe('adapter HTTP contract', () => {
         request: 'creqAexample',
         deliveryId: 'EBESExQVFhcYGRobHB0eHw',
         memo: null,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateAdapterRequest('armCrash', {
+        runId: 'run-001',
+        component: 'sender',
+        boundary: 'sender_before_proof_reservation',
+        occurrence: 1,
       }),
     ).toEqual({ ok: true });
   });
@@ -199,6 +209,19 @@ describe('adapter HTTP contract', () => {
         },
       ]),
     ).toEqual({ ok: true });
+    expect(validateAdapterResponse('armCrash', { ok: true })).toEqual({ ok: true });
+    expect(
+      validateAdapterResponse('crashStatus', [
+        {
+          runId: 'run-001',
+          component: 'receiver',
+          boundary: 'receiver_before_mint_request',
+          occurrence: 2,
+          hits: 1,
+          consumed: false,
+        },
+      ]),
+    ).toEqual({ ok: true });
   });
 
   it('rejects unknown fields and unsupported operations', () => {
@@ -210,6 +233,15 @@ describe('adapter HTTP contract', () => {
       ok: false,
       errorCode: 'UNKNOWN_OPERATION',
     });
+    expect(
+      validateAdapterRequest('armCrash', {
+        runId: 'run-001',
+        component: 'sender',
+        boundary: 'receiver_before_mint_request',
+        occurrence: 0,
+        extra: true,
+      }),
+    ).toMatchObject({ ok: false, errorCode: 'SCHEMA_ADDITIONAL_PROPERTY' });
   });
 
   it('rejects capability schema v1 instead of silently upgrading its evidence', () => {
