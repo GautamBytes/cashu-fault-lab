@@ -1,0 +1,10 @@
+.git
+.worktrees
+.pnpm-store
+.cashu-fault-lab
+artifacts
+test-results
+playwright-report
+**/node_modules
+**/.turbo
+**/dist

@@ -26,6 +26,19 @@ pnpm build
 pnpm test:consumer
 ```
 
+## Website
+
+```bash
+pnpm website:dev
+pnpm website:test
+pnpm website:build
+pnpm website:test:e2e
+```
+
+The site reads `README.md`, `docs/`, `spec/`, `scenarios/`, and the reviewed demo artifact during
+its build. Preview URLs are deployment outputs returned to the user rather than committed as
+canonical project URLs.
+
 ## Run the deterministic demo
 
 ```bash

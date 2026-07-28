@@ -84,15 +84,15 @@ The documentation portal uses a left navigation, central article, and right-hand
 
 Initial routes:
 
-| Route | Canonical source |
-| --- | --- |
-| `/docs/getting-started` | `README.md` |
-| `/docs/cli` | `docs/cli-reference.md` |
-| `/docs/adapters` | `docs/adapter-guide.md` |
-| `/docs/delivery-profile` | `spec/delivery-v1.md` |
-| `/docs/invariants` | `spec/invariants.md` |
-| `/docs/threat-model` | `spec/threat-model.md` |
-| `/docs/release-notes` | `docs/releases/v0.1.0.md` |
+| Route                     | Canonical source                    |
+| ------------------------- | ----------------------------------- |
+| `/docs/getting-started`   | `README.md`                         |
+| `/docs/cli`               | `docs/cli-reference.md`             |
+| `/docs/adapters`          | `docs/adapter-guide.md`             |
+| `/docs/delivery-profile`  | `spec/delivery-v1.md`               |
+| `/docs/invariants`        | `spec/invariants.md`                |
+| `/docs/threat-model`      | `spec/threat-model.md`              |
+| `/docs/release-notes`     | `docs/releases/v0.1.0.md`           |
 | `/docs/release-checklist` | `docs/releases/v0.1.0-checklist.md` |
 
 Each article shows:

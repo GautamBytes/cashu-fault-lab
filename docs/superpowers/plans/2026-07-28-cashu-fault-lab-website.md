@@ -185,25 +185,22 @@ Create a strict `tsconfig.json`, `next-env.d.ts`, `next.config.mjs`, and `vitest
 Write `test/shell.test.tsx` first:
 
 ```tsx
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { SiteHeader } from "../components/site-header";
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { SiteHeader } from '../components/site-header';
 
-describe("SiteHeader", () => {
-  it("exposes the primary developer navigation", () => {
+describe('SiteHeader', () => {
+  it('exposes the primary developer navigation', () => {
     render(<SiteHeader />);
-    expect(screen.getByRole("link", { name: "Cashu Fault Lab" })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute(
-      "href",
-      "/docs/getting-started",
+    expect(screen.getByRole('link', { name: 'Cashu Fault Lab' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Docs' })).toHaveAttribute(
+      'href',
+      '/docs/getting-started',
     );
-    expect(screen.getByRole("link", { name: "Scenarios" })).toHaveAttribute(
-      "href",
-      "/scenarios",
-    );
-    expect(screen.getByRole("link", { name: "Release status" })).toHaveAttribute(
-      "href",
-      "/release-status",
+    expect(screen.getByRole('link', { name: 'Scenarios' })).toHaveAttribute('href', '/scenarios');
+    expect(screen.getByRole('link', { name: 'Release status' })).toHaveAttribute(
+      'href',
+      '/release-status',
     );
   });
 });
@@ -320,7 +317,7 @@ export interface DocumentDefinition {
   sourcePath: string;
   title: string;
   description: string;
-  group: "Start" | "Operate" | "Integrate" | "Understand" | "Release";
+  group: 'Start' | 'Operate' | 'Integrate' | 'Understand' | 'Release';
   order: number;
 }
 
@@ -335,8 +332,8 @@ export interface DocumentPage extends DocumentDefinition {
   headings: DocumentHeading[];
   viewUrl: string;
   editUrl: string;
-  previous?: Pick<DocumentDefinition, "slug" | "title">;
-  next?: Pick<DocumentDefinition, "slug" | "title">;
+  previous?: Pick<DocumentDefinition, 'slug' | 'title'>;
+  next?: Pick<DocumentDefinition, 'slug' | 'title'>;
 }
 
 export interface SearchRecord {
@@ -350,30 +347,26 @@ export interface SearchRecord {
 
 Register the eight approved routes and source files from the design specification. Write tests that assert:
 
-```ts
-it("uses unique routes and existing canonical sources", async () => {
-  expect(new Set(CONTENT_REGISTRY.map((item) => item.slug)).size).toBe(
-    CONTENT_REGISTRY.length,
-  );
+````ts
+it('uses unique routes and existing canonical sources', async () => {
+  expect(new Set(CONTENT_REGISTRY.map((item) => item.slug)).size).toBe(CONTENT_REGISTRY.length);
   await expect(validateContentRegistry()).resolves.toEqual([]);
 });
 
-it("deduplicates GitHub-style heading slugs outside code fences", () => {
-  expect(
-    extractHeadings("## Retry\n```md\n## ignored\n```\n## Retry\n### NUT-19"),
-  ).toEqual([
-    { depth: 2, id: "retry", text: "Retry" },
-    { depth: 2, id: "retry-1", text: "Retry" },
-    { depth: 3, id: "nut-19", text: "NUT-19" },
+it('deduplicates GitHub-style heading slugs outside code fences', () => {
+  expect(extractHeadings('## Retry\n```md\n## ignored\n```\n## Retry\n### NUT-19')).toEqual([
+    { depth: 2, id: 'retry', text: 'Retry' },
+    { depth: 2, id: 'retry-1', text: 'Retry' },
+    { depth: 3, id: 'nut-19', text: 'NUT-19' },
   ]);
 });
 
-it("rejects paths outside the repository", () => {
-  expect(() => resolveRepositoryPath("../secret.env")).toThrow(
-    "Repository content path escapes the project root",
+it('rejects paths outside the repository', () => {
+  expect(() => resolveRepositoryPath('../secret.env')).toThrow(
+    'Repository content path escapes the project root',
   );
 });
-```
+````
 
 - [ ] **Step 2: Run the content tests and observe failure**
 
@@ -451,17 +444,17 @@ git commit -m "feat: generate website content from repository docs"
 The search test must verify the keyboard and empty state:
 
 ```tsx
-it("opens with the keyboard shortcut and filters canonical records", async () => {
+it('opens with the keyboard shortcut and filters canonical records', async () => {
   const user = userEvent.setup();
   render(
     <PortalShell
       records={[
         {
-          id: "retry",
-          title: "Retry convergence",
-          description: "Invariant",
-          href: "/docs/invariants#retry-convergence",
-          text: "response loss exact payload",
+          id: 'retry',
+          title: 'Retry convergence',
+          description: 'Invariant',
+          href: '/docs/invariants#retry-convergence',
+          text: 'response loss exact payload',
         },
       ]}
     >
@@ -469,28 +462,28 @@ it("opens with the keyboard shortcut and filters canonical records", async () =>
     </PortalShell>,
   );
 
-  await user.keyboard("{Meta>}k{/Meta}");
-  expect(screen.getByRole("dialog", { name: "Search documentation" })).toBeVisible();
-  await user.type(screen.getByRole("searchbox"), "response loss");
-  expect(screen.getByRole("link", { name: /Retry convergence/ })).toHaveAttribute(
-    "href",
-    "/docs/invariants#retry-convergence",
+  await user.keyboard('{Meta>}k{/Meta}');
+  expect(screen.getByRole('dialog', { name: 'Search documentation' })).toBeVisible();
+  await user.type(screen.getByRole('searchbox'), 'response loss');
+  expect(screen.getByRole('link', { name: /Retry convergence/ })).toHaveAttribute(
+    'href',
+    '/docs/invariants#retry-convergence',
   );
 });
 
-it("explains how to recover from an empty search", async () => {
+it('explains how to recover from an empty search', async () => {
   const user = userEvent.setup();
   render(
     <PortalShell records={[]}>
       <div>Page content</div>
     </PortalShell>,
   );
-  await user.click(screen.getByRole("button", { name: "Search documentation" }));
-  await user.type(screen.getByRole("searchbox"), "unknown");
-  expect(screen.getByText("No matching documentation.")).toBeVisible();
-  expect(screen.getByRole("link", { name: "Browse scenarios" })).toHaveAttribute(
-    "href",
-    "/scenarios",
+  await user.click(screen.getByRole('button', { name: 'Search documentation' }));
+  await user.type(screen.getByRole('searchbox'), 'unknown');
+  expect(screen.getByText('No matching documentation.')).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Browse scenarios' })).toHaveAttribute(
+    'href',
+    '/scenarios',
   );
 });
 ```
@@ -529,7 +522,7 @@ Expected: failure because `SearchDialog` does not exist.
     [
       rehypePrettyCode,
       {
-        theme: "css-variables",
+        theme: 'css-variables',
         keepBackground: false,
       },
     ],
@@ -579,7 +572,7 @@ On mobile, place a compact “On this page” block before the article body.
 `CodeBlock` is a client component using a `<pre ref>` and:
 
 ```ts
-const text = preRef.current?.innerText ?? "";
+const text = preRef.current?.innerText ?? '';
 await navigator.clipboard.writeText(text);
 setCopied(true);
 window.setTimeout(() => setCopied(false), 1600);
@@ -641,20 +634,20 @@ cp /var/folders/22/w1y7jxm926g_k50fq9wt1j5m0000gn/T/codex-clipboard-5f1bdb64-dd8
 Write:
 
 ```ts
-it("summarizes the reviewed demo artifact without exposing commands", async () => {
+it('summarizes the reviewed demo artifact without exposing commands', async () => {
   const summary = await getDemoSummary();
   expect(summary).toMatchObject({
-    scenarioId: "http-response-lost",
-    seed: "cashu-fault-lab-v0.1.0-demo",
-    status: "passed",
+    scenarioId: 'http-response-lost',
+    seed: 'cashu-fault-lab-v0.1.0-demo',
+    status: 'passed',
     commandCount: 3,
     timelineCount: 13,
     invariantCount: 18,
   });
-  expect(JSON.stringify(summary)).not.toContain("proofSecret");
+  expect(JSON.stringify(summary)).not.toContain('proofSecret');
 });
 
-it("counts every invariant state", async () => {
+it('counts every invariant state', async () => {
   const summary = await getDemoSummary();
   expect(
     summary.invariantCounts.passed +
@@ -781,7 +774,7 @@ export interface ScenarioGroup {
 }
 
 export interface ReleaseStatus {
-  label: "Experimental developer preview";
+  label: 'Experimental developer preview';
   profile: string;
   policySchemaVersion: number;
   releaseSuiteScenarioCount: number;
@@ -796,21 +789,21 @@ export interface ReleaseStatus {
 Tests must assert:
 
 ```ts
-it("discovers and groups every checked-in scenario", async () => {
+it('discovers and groups every checked-in scenario', async () => {
   const groups = await getScenarioGroups();
   const all = groups.flatMap((group) => group.scenarios);
   expect(all).toHaveLength(32);
-  expect(all.find((item) => item.slug === "retry/response-lost")).toMatchObject({
-    name: "http-response-lost",
-    family: "retry",
+  expect(all.find((item) => item.slug === 'retry/response-lost')).toMatchObject({
+    name: 'http-response-lost',
+    family: 'retry',
     commandCount: 3,
   });
 });
 
-it("reports the strict gate without turning requirements into passes", async () => {
+it('reports the strict gate without turning requirements into passes', async () => {
   await expect(getReleaseStatus()).resolves.toMatchObject({
-    label: "Experimental developer preview",
-    profile: "delivery-v1",
+    label: 'Experimental developer preview',
+    profile: 'delivery-v1',
     releaseSuiteScenarioCount: 13,
     minimumQualifyingPairs: 2,
     minimumDistinctMints: 2,
@@ -913,22 +906,22 @@ Configure Playwright:
 
 ```ts
 export default defineConfig({
-  testDir: "./e2e",
-  outputDir: "test-results/website",
+  testDir: './e2e',
+  outputDir: 'test-results/website',
   use: {
-    baseURL: "http://127.0.0.1:4317",
-    trace: "retain-on-failure",
+    baseURL: 'http://127.0.0.1:4317',
+    trace: 'retain-on-failure',
   },
   webServer: {
     command:
-      "PATH=/Users/gautammanch/.nvm/versions/node/v24.14.1/bin:$PATH corepack pnpm build && PATH=/Users/gautammanch/.nvm/versions/node/v24.14.1/bin:$PATH corepack pnpm start --port 4317",
+      'PATH=/Users/gautammanch/.nvm/versions/node/v24.14.1/bin:$PATH corepack pnpm build && PATH=/Users/gautammanch/.nvm/versions/node/v24.14.1/bin:$PATH corepack pnpm start --port 4317',
     port: 4317,
     reuseExistingServer: false,
     timeout: 180_000,
   },
   projects: [
-    { name: "desktop-chromium", use: { viewport: { width: 1440, height: 900 } } },
-    { name: "mobile-chromium", use: { viewport: { width: 390, height: 844 } } },
+    { name: 'desktop-chromium', use: { viewport: { width: 1440, height: 900 } } },
+    { name: 'mobile-chromium', use: { viewport: { width: 390, height: 844 } } },
   ],
 });
 ```

@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { DocsShell } from "../../../components/docs/docs-shell";
-import { getAllDocuments, getDocument } from "../../../lib/markdown";
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import { DocsShell } from '../../../components/docs/docs-shell';
+import { getAllDocuments, getDocument } from '../../../lib/markdown';
 
 export const dynamicParams = false;
 

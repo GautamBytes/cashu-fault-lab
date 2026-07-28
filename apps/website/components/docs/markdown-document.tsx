@@ -1,15 +1,15 @@
-import type { ComponentPropsWithoutRef } from "react";
-import { MarkdownAsync as ReactMarkdown } from "react-markdown";
-import rehypePrettyCode from "rehype-pretty-code";
-import rehypeSlug from "rehype-slug";
-import remarkGfm from "remark-gfm";
-import { getSingletonHighlighter } from "shiki";
-import { createCssVariablesTheme } from "shiki/core";
-import type { BundledHighlighterOptions } from "shiki/types";
-import { CONTENT_REGISTRY } from "../../lib/content-registry";
-import { sourceUrl } from "../../lib/repository";
-import { CodeBlock } from "./code-block";
-import styles from "./docs.module.css";
+import type { ComponentPropsWithoutRef } from 'react';
+import { MarkdownAsync as ReactMarkdown } from 'react-markdown';
+import rehypePrettyCode from 'rehype-pretty-code';
+import rehypeSlug from 'rehype-slug';
+import remarkGfm from 'remark-gfm';
+import { getSingletonHighlighter } from 'shiki';
+import { createCssVariablesTheme } from 'shiki/core';
+import type { BundledHighlighterOptions } from 'shiki/types';
+import { CONTENT_REGISTRY } from '../../lib/content-registry';
+import { sourceUrl } from '../../lib/repository';
+import { CodeBlock } from './code-block';
+import styles from './docs.module.css';
 
 const cssVariablesTheme = createCssVariablesTheme();
 
@@ -31,14 +31,14 @@ function decodedRepositoryPath(pathname: string): string {
 export function resolveMarkdownHref(href: string, sourcePath: string): string {
   if (
     href.length === 0 ||
-    href.startsWith("#") ||
-    href.startsWith("/") ||
+    href.startsWith('#') ||
+    href.startsWith('/') ||
     /^[a-z][a-z\d+.-]*:/i.test(href)
   ) {
     return href;
   }
 
-  const source = new URL(encodeURI(sourcePath), "https://repository.invalid/");
+  const source = new URL(encodeURI(sourcePath), 'https://repository.invalid/');
   const resolved = new URL(href, source);
   const repositoryPath = decodedRepositoryPath(resolved.pathname.slice(1));
   const document = CONTENT_REGISTRY.find((item) => item.sourcePath === repositoryPath);
@@ -48,16 +48,16 @@ export function resolveMarkdownHref(href: string, sourcePath: string): string {
     return `/docs/${document.slug}${suffix}`;
   }
 
-  return `${sourceUrl(repositoryPath, "view")}${suffix}`;
+  return `${sourceUrl(repositoryPath, 'view')}${suffix}`;
 }
 
-interface SafeMarkdownLinkProps extends ComponentPropsWithoutRef<"a"> {
+interface SafeMarkdownLinkProps extends ComponentPropsWithoutRef<'a'> {
   node?: unknown;
   sourcePath: string;
 }
 
 export function SafeMarkdownLink({
-  href = "",
+  href = '',
   node: _node,
   sourcePath,
   ...props
@@ -69,7 +69,7 @@ export function SafeMarkdownLink({
     <a
       {...props}
       href={resolvedHref}
-      {...(external ? { rel: "noreferrer noopener", target: "_blank" } : {})}
+      {...(external ? { rel: 'noreferrer noopener', target: '_blank' } : {})}
     />
   );
 }
@@ -90,7 +90,7 @@ export function MarkdownDocument({
           [
             rehypePrettyCode,
             {
-              theme: "css-variables",
+              theme: 'css-variables',
               keepBackground: false,
               getHighlighter: getCssVariablesHighlighter,
             },

@@ -143,10 +143,7 @@ test('mobile menu reaches scenarios and exposes 44px controls', async ({ page },
   await expectNoPageOverflow(page);
 
   await page.goto('/docs/getting-started');
-  await expectMinimumTouchTargets(
-    page,
-    'button, header a, aside a, nav a, article a',
-  );
+  await expectMinimumTouchTargets(page, 'button, header a, aside a, nav a, article a');
 });
 
 test('reduced motion is exposed as a timeline data signal', async ({ page }, testInfo) => {

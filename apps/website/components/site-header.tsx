@@ -1,20 +1,20 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import styles from "./site-header.module.css";
+import { useState } from 'react';
+import styles from './site-header.module.css';
 
 export interface SiteHeaderProps {
   onOpenSearch?: () => void;
 }
 
 const navigation = [
-  { href: "/", label: "Home" },
-  { href: "/docs/getting-started", label: "Docs" },
-  { href: "/cli", label: "CLI" },
-  { href: "/scenarios", label: "Scenarios" },
-  { href: "/adapters", label: "Adapters" },
-  { href: "/architecture", label: "Architecture" },
-  { href: "/release-status", label: "Release status" },
+  { href: '/', label: 'Home' },
+  { href: '/docs/getting-started', label: 'Docs' },
+  { href: '/cli', label: 'CLI' },
+  { href: '/scenarios', label: 'Scenarios' },
+  { href: '/adapters', label: 'Adapters' },
+  { href: '/architecture', label: 'Architecture' },
+  { href: '/release-status', label: 'Release status' },
 ];
 
 export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
@@ -38,7 +38,7 @@ export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
         </button>
         <nav
           aria-label="Primary"
-          className={`${styles.navigation} ${isMenuOpen ? styles.navigationOpen : ""}`}
+          className={`${styles.navigation} ${isMenuOpen ? styles.navigationOpen : ''}`}
           id="primary-navigation"
         >
           <div className={styles.links}>

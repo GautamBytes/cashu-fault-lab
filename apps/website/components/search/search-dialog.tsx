@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { SearchRecord } from "../../lib/content-types";
-import styles from "./search.module.css";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SearchRecord } from '../../lib/content-types';
+import styles from './search.module.css';
 
 export interface SearchDialogProps {
   open: boolean;
@@ -11,13 +11,13 @@ export interface SearchDialogProps {
 }
 
 const focusableSelector = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
-].join(",");
+].join(',');
 
 function searchRecords(records: SearchRecord[], query: string): SearchRecord[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -45,7 +45,7 @@ function searchRecords(records: SearchRecord[], query: string): SearchRecord[] {
 
 export function SearchDialog({ open, onOpenChange, records }: SearchDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const results = useMemo(() => searchRecords(records, query), [query, records]);
@@ -60,7 +60,7 @@ export function SearchDialog({ open, onOpenChange, records }: SearchDialogProps)
 
     previousFocusRef.current?.focus();
     previousFocusRef.current = null;
-    setQuery("");
+    setQuery('');
   }, [open]);
 
   if (!open) return null;
@@ -77,13 +77,13 @@ export function SearchDialog({ open, onOpenChange, records }: SearchDialogProps)
         aria-modal="true"
         className={styles.dialog}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
+          if (event.key === 'Escape') {
             event.preventDefault();
             onOpenChange(false);
             return;
           }
 
-          if (event.key === "Tab") {
+          if (event.key === 'Tab') {
             const focusableElements = Array.from(
               dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
             );

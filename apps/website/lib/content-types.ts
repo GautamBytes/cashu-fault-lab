@@ -3,7 +3,7 @@ export interface DocumentDefinition {
   sourcePath: string;
   title: string;
   description: string;
-  group: "Start" | "Operate" | "Integrate" | "Understand" | "Release";
+  group: 'Start' | 'Operate' | 'Integrate' | 'Understand' | 'Release';
   order: number;
 }
 
@@ -18,8 +18,8 @@ export interface DocumentPage extends DocumentDefinition {
   headings: DocumentHeading[];
   viewUrl: string;
   editUrl: string;
-  previous?: Pick<DocumentDefinition, "slug" | "title">;
-  next?: Pick<DocumentDefinition, "slug" | "title">;
+  previous?: Pick<DocumentDefinition, 'slug' | 'title'>;
+  next?: Pick<DocumentDefinition, 'slug' | 'title'>;
 }
 
 export interface SearchRecord {

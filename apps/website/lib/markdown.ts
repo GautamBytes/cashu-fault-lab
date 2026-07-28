@@ -1,29 +1,34 @@
-import { readFile } from "node:fs/promises";
-import GithubSlugger from "github-slugger";
-import { CONTENT_REGISTRY } from "./content-registry";
-import type { DocumentDefinition, DocumentHeading, DocumentPage, SearchRecord } from "./content-types";
-import { resolveRepositoryPath, sourceUrl } from "./repository";
+import { readFile } from 'node:fs/promises';
+import GithubSlugger from 'github-slugger';
+import { CONTENT_REGISTRY } from './content-registry';
+import type {
+  DocumentDefinition,
+  DocumentHeading,
+  DocumentPage,
+  SearchRecord,
+} from './content-types';
+import { resolveRepositoryPath, sourceUrl } from './repository';
 
 function headingText(value: string): string {
   return value
-    .replace(/\s+#+\s*$/, "")
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
-    .replace(/`+([^`]+)`+/g, "$1")
-    .replace(/[\\*_~]/g, "")
-    .replace(/\s+/g, " ")
+    .replace(/\s+#+\s*$/, '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, '$1')
+    .replace(/`+([^`]+)`+/g, '$1')
+    .replace(/[\\*_~]/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 export function extractHeadings(markdown: string): DocumentHeading[] {
   const slugger = new GithubSlugger();
   const headings: DocumentHeading[] = [];
-  let fence: { marker: "`" | "~"; length: number } | undefined;
+  let fence: { marker: '`' | '~'; length: number } | undefined;
 
   for (const line of markdown.split(/\r?\n/)) {
     const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
     if (fenceMatch) {
-      const marker = fenceMatch[1][0] as "`" | "~";
+      const marker = fenceMatch[1][0] as '`' | '~';
       if (!fence) {
         fence = { marker, length: fenceMatch[1].length };
         continue;
@@ -57,12 +62,12 @@ export function extractHeadings(markdown: string): DocumentHeading[] {
 
 function searchableText(markdown: string): string {
   return markdown
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/`+([^`]+)`+/g, "$1")
-    .replace(/[>#*_~]/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/`+([^`]+)`+/g, '$1')
+    .replace(/[>#*_~]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -75,13 +80,13 @@ async function loadDocument(
   previous?: DocumentDefinition,
   next?: DocumentDefinition,
 ): Promise<DocumentPage> {
-  const markdown = await readFile(resolveRepositoryPath(definition.sourcePath), "utf8");
+  const markdown = await readFile(resolveRepositoryPath(definition.sourcePath), 'utf8');
   return {
     ...definition,
     markdown,
     headings: extractHeadings(markdown),
-    viewUrl: sourceUrl(definition.sourcePath, "view"),
-    editUrl: sourceUrl(definition.sourcePath, "edit"),
+    viewUrl: sourceUrl(definition.sourcePath, 'view'),
+    editUrl: sourceUrl(definition.sourcePath, 'edit'),
     previous: previous && { slug: previous.slug, title: previous.title },
     next: next && { slug: next.slug, title: next.title },
   };

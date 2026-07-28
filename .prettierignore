@@ -7,3 +7,4 @@ docs/examples/v0.1.0-demo.json
 docs/examples/v0.1.0-demo.html
 graphify-out/
 pnpm-lock.yaml
+apps/website/next-env.d.ts

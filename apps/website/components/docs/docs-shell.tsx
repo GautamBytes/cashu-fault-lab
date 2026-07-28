@@ -1,8 +1,8 @@
-import type { DocumentHeading, DocumentPage } from "../../lib/content-types";
-import { MarkdownDocument } from "./markdown-document";
-import styles from "./docs.module.css";
+import type { DocumentHeading, DocumentPage } from '../../lib/content-types';
+import { MarkdownDocument } from './markdown-document';
+import styles from './docs.module.css';
 
-const groups: DocumentPage["group"][] = ["Start", "Operate", "Integrate", "Understand", "Release"];
+const groups: DocumentPage['group'][] = ['Start', 'Operate', 'Integrate', 'Understand', 'Release'];
 
 function TableOfContents({
   className,
@@ -51,7 +51,7 @@ export function DocsShell({
                   {groupDocuments.map((item) => (
                     <li key={item.slug}>
                       <a
-                        aria-current={item.slug === document.slug ? "page" : undefined}
+                        aria-current={item.slug === document.slug ? 'page' : undefined}
                         href={`/docs/${item.slug}`}
                       >
                         {item.title}

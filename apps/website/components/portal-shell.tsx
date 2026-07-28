@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { type ReactNode, useEffect, useState } from "react";
-import type { SearchRecord } from "../lib/content-types";
-import { SearchDialog } from "./search/search-dialog";
-import { SiteHeader } from "./site-header";
+import { type ReactNode, useEffect, useState } from 'react';
+import type { SearchRecord } from '../lib/content-types';
+import { SearchDialog } from './search/search-dialog';
+import { SiteHeader } from './site-header';
 
 export interface PortalShellProps {
   children: ReactNode;
@@ -23,7 +23,7 @@ export function PortalShell({ children, records }: PortalShellProps) {
   useEffect(() => {
     function openWithKeyboard(event: KeyboardEvent) {
       if (
-        event.key.toLocaleLowerCase() === "k" &&
+        event.key.toLocaleLowerCase() === 'k' &&
         (event.metaKey || event.ctrlKey) &&
         !isEditingTarget(event.target)
       ) {
@@ -36,11 +36,11 @@ export function PortalShell({ children, records }: PortalShellProps) {
       setOpen(true);
     }
 
-    window.addEventListener("keydown", openWithKeyboard);
-    window.addEventListener("cashu-fault-lab:open-search", openWithAction);
+    window.addEventListener('keydown', openWithKeyboard);
+    window.addEventListener('cashu-fault-lab:open-search', openWithAction);
     return () => {
-      window.removeEventListener("keydown", openWithKeyboard);
-      window.removeEventListener("cashu-fault-lab:open-search", openWithAction);
+      window.removeEventListener('keydown', openWithKeyboard);
+      window.removeEventListener('cashu-fault-lab:open-search', openWithAction);
     };
   }, []);
 
