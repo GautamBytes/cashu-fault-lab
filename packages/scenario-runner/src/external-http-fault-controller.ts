@@ -124,7 +124,12 @@ function evidence(value: unknown): ExternalFaultEvidence {
   ) {
     throw new Error('External fault evidence is invalid');
   }
-  return { inbound: record.inbound, forwarded: record.forwarded };
+  return {
+    inbound: record.inbound,
+    forwarded: record.forwarded,
+    controller: 'http-gateway',
+    observedTarget: 'http',
+  };
 }
 
 export class HttpExternalFaultController implements ExternalFaultController {

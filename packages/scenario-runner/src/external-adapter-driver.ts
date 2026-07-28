@@ -22,6 +22,8 @@ import { seededProtocolId } from './seeded-fixture.js';
 export interface ExternalFaultEvidence {
   readonly inbound: number;
   readonly forwarded: number;
+  readonly controller: 'direct' | 'http-gateway';
+  readonly observedTarget?: string;
 }
 
 export interface ExternalFaultController {
@@ -60,7 +62,7 @@ export class DirectExternalFaultController implements ExternalFaultController {
   async clear(): Promise<void> {}
 
   async evidence(): Promise<ExternalFaultEvidence> {
-    return { inbound: 1, forwarded: 1 };
+    return { inbound: 0, forwarded: 0, controller: 'direct' };
   }
 }
 
@@ -167,6 +169,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   #senderCapabilities: AdapterCapabilities | undefined;
   #receiverCapabilities: AdapterCapabilities | undefined;
   readonly #redeemedDeliveries = new Set<string>();
+  readonly #configuredTransportFaults = new Set<string>();
 
   constructor(options: ExternalAdapterScenarioDriverOptions) {
     this.#sender = options.sender;
@@ -205,6 +208,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#senderCapabilities = undefined;
     this.#receiverCapabilities = undefined;
     this.#redeemedDeliveries.clear();
+    this.#configuredTransportFaults.clear();
     this.#senderCapabilities = await adapterCall('sender capability discovery', () =>
       this.#sender.capabilities(),
     );
@@ -265,6 +269,9 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   async configureFault(target: string, rule: FaultRule): Promise<void> {
     try {
       await this.#faults.configure(target, rule);
+      if (target === 'http' || target === 'nostr') {
+        this.#configuredTransportFaults.add(target);
+      }
     } catch {
       throw new Error('External fault configuration failed');
     }
@@ -345,8 +352,19 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     } catch {
       throw new Error('External fault evidence collection failed');
     }
+    const controllerAttempts = Math.max(faultEvidence.inbound, faultEvidence.forwarded);
+    const configuredFaultWasObserved =
+      faultEvidence.controller === 'http-gateway' &&
+      faultEvidence.observedTarget !== undefined &&
+      this.#configuredTransportFaults.has(faultEvidence.observedTarget);
+    if (
+      this.#configuredTransportFaults.size > 0 &&
+      (controllerAttempts === 0 || !configuredFaultWasObserved)
+    ) {
+      throw new Error('External configured fault was not exercised');
+    }
     const transportAttempts = positiveSafeInteger(
-      Math.max(faultEvidence.inbound, faultEvidence.forwarded),
+      Math.max(sendAttempts, controllerAttempts),
       'transport attempts',
     );
     const deliveryObservation = (transport: AdapterTransport) =>
@@ -419,6 +437,10 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
         deliveryId: observed.deliveryId,
         controlAttempts: sendAttempts,
         transportAttempts,
+        faultController: faultEvidence.controller,
+        ...(faultEvidence.observedTarget === undefined
+          ? {}
+          : { faultObservedTarget: faultEvidence.observedTarget }),
         creditCount: credit.creditCount,
         proofSetHash: proof.proofSetHash,
       },
@@ -436,6 +458,11 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   async clearFaults(target?: string): Promise<void> {
     try {
       await this.#faults.clear(target);
+      if (target === undefined) {
+        this.#configuredTransportFaults.clear();
+      } else {
+        this.#configuredTransportFaults.delete(target);
+      }
     } catch {
       throw new Error('External fault cleanup failed');
     }

@@ -196,6 +196,7 @@ git commit -m "test: verify generated adapters through lab client"
 - Modify: `packages/scenario-runner/src/external-http-fault-controller.ts`
 - Modify: `packages/scenario-runner/test/external-adapter-driver.test.ts`
 - Modify: `packages/scenario-runner/test/external-http-fault-controller.test.ts`
+- Modify: `packages/scenario-runner/test/cross-language-docker.test.ts`
 - Modify: `apps/lab-cli/test/packaged-runtime.test.ts`
 
 **Interfaces:**

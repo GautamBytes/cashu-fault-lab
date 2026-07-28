@@ -78,7 +78,13 @@ function demoCapability(id: 'cashu-ts' | 'reference-receiver'): AdapterCapabilit
   };
 }
 
-function externalDemoFetch(fetchCalls: string[]): typeof fetch {
+function externalDemoFetch(
+  fetchCalls: string[],
+  gatewayEvidence: Readonly<{ inbound: number; forwarded: number }> = {
+    inbound: 2,
+    forwarded: 1,
+  },
+): typeof fetch {
   const requestId = 'AAECAwQFBgcICQoLDA0ODw';
   let activeDeliveryId = 'EBESExQVFhcYGRobHB0eHw';
   const receipt = () =>
@@ -99,7 +105,7 @@ function externalDemoFetch(fetchCalls: string[]): typeof fetch {
     fetchCalls.push(`${url.port}${url.pathname}`);
     if (url.port === '4300') {
       if (url.pathname === '/__faults/v1/evidence') {
-        return new Response(JSON.stringify({ inbound: 2, forwarded: 1 }), {
+        return new Response(JSON.stringify(gatewayEvidence), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -337,6 +343,32 @@ describe('PackagedLabRuntime', () => {
       const report = await readFile(result.reportPath, 'utf8');
       expect(evidence).not.toContain(leakedSecret);
       expect(report).not.toContain(leakedSecret);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails explicitly when the configured demo gateway is bypassed', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-runtime-demo-bypassed-gateway-'));
+    const services = {
+      isUp: async () => false,
+      up: async () => {},
+      down: async () => {},
+      restart: async () => {},
+    };
+    const runtime = new PackagedLabRuntime({
+      services,
+      runtimeRoot: directory,
+      fetch: externalDemoFetch([], { inbound: 0, forwarded: 0 }),
+    });
+
+    try {
+      const result = await runtime.demo({ seed: 'demo-bypassed-gateway' });
+
+      expect(result.status).toBe('failed');
+      expect(result.result.status).toBe('failed');
+      if (result.result.status !== 'failed') throw new Error('Expected bypassed gateway to fail');
+      expect(result.result.error.message).toBe('External configured fault was not exercised');
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

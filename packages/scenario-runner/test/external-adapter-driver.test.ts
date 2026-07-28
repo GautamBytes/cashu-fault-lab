@@ -67,13 +67,35 @@ class Faults implements ExternalFaultController {
 
   async clear(): Promise<void> {}
 
-  async evidence(): Promise<{ readonly inbound: number; readonly forwarded: number }> {
-    return { inbound: this.inbound, forwarded: this.forwards };
+  async evidence(): Promise<{
+    readonly inbound: number;
+    readonly forwarded: number;
+    readonly controller: 'http-gateway';
+    readonly observedTarget: 'http';
+  }> {
+    return {
+      inbound: this.inbound,
+      forwarded: this.forwards,
+      controller: 'http-gateway',
+      observedTarget: 'http',
+    };
   }
 
   async restart(component: string): Promise<void> {
     this.restarts.push(component);
     this.onRestart?.(component);
+  }
+}
+
+class ZeroTrafficFaults extends Faults {
+  async reset(): Promise<void> {
+    await super.reset();
+    this.inbound = 0;
+    this.forwards = 0;
+  }
+
+  async configure(target: string, rule: FaultRule): Promise<void> {
+    this.applied.push({ target, rule });
   }
 }
 
@@ -227,6 +249,54 @@ function scenario(kind: 'drop_response' | 'duplicate', duplicateCount?: number):
 }
 
 describe('ExternalAdapterScenarioDriver', () => {
+  it('uses runner-observed attempts when an unused gateway reports zero traffic', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new ZeroTrafficFaults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(
+      {
+        name: 'external-no-fault',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-no-fault',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'delivery_attempted',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('fails explicitly when a configured gateway fault receives no traffic', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new ZeroTrafficFaults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(scenario('drop_response'), 'external-unexercised-fault');
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected configured fault to fail');
+    expect(result.error.message).toBe('External configured fault was not exercised');
+  });
+
   it('reuses one logical delivery after a lost response and produces one credit', async () => {
     const receiver = new Receiver();
     const sender = new Sender(receiver);

@@ -110,7 +110,12 @@ class PaymentFaultProxy implements ExternalFaultController {
   }
 
   async evidence(): Promise<ExternalFaultEvidence> {
-    return { inbound: this.#inbound, forwarded: this.#forwarded };
+    return {
+      inbound: this.#inbound,
+      forwarded: this.#forwarded,
+      controller: 'http-gateway',
+      observedTarget: 'http',
+    };
   }
 
   diagnostics(): Readonly<Record<string, unknown>> {

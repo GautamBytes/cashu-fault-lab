@@ -25,7 +25,12 @@ describe('HttpExternalFaultController', () => {
 
     await controller.reset();
     await controller.configure('http', { kind: 'drop_response', occurrence: 2 });
-    await expect(controller.evidence()).resolves.toEqual({ inbound: 2, forwarded: 2 });
+    await expect(controller.evidence()).resolves.toEqual({
+      inbound: 2,
+      forwarded: 2,
+      controller: 'http-gateway',
+      observedTarget: 'http',
+    });
     await controller.clear('http');
 
     expect(calls).toEqual([
