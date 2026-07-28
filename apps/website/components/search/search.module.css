@@ -1,0 +1,126 @@
+.overlay {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--purple-950) 72%, transparent);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: min(12vh, 6rem) 1rem 1rem;
+  position: fixed;
+  z-index: 10;
+}
+
+.dialog {
+  background: var(--sand-100);
+  border: 1px solid var(--sand-500);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1.5rem 4rem color-mix(in srgb, var(--purple-950) 45%, transparent);
+  max-height: min(42rem, calc(100vh - 7rem));
+  max-width: 42rem;
+  overflow: auto;
+  padding: 1rem;
+  width: 100%;
+}
+
+.dialogHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.dialogHeader label {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 1rem;
+}
+
+.dialogHeader button {
+  background: var(--sand-300);
+  border: 1px solid var(--sand-500);
+  border-radius: var(--radius-sm);
+  color: var(--purple-950);
+  cursor: pointer;
+  font: inherit;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.dialog input {
+  background: var(--sand-100);
+  border: 2px solid var(--purple-700);
+  border-radius: var(--radius-sm);
+  color: var(--purple-950);
+  font: inherit;
+  min-height: 3rem;
+  padding: 0.65rem 0.8rem;
+  width: 100%;
+}
+
+.dialog input::placeholder {
+  color: var(--purple-700);
+}
+
+.results {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.results li + li {
+  border-top: 1px solid var(--sand-500);
+}
+
+.results a {
+  color: var(--purple-950);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.8rem;
+  text-decoration: none;
+}
+
+.results a:hover,
+.results a:focus-visible {
+  background: var(--sand-300);
+  outline: 2px solid var(--purple-500);
+  outline-offset: -2px;
+}
+
+.results span {
+  color: var(--purple-700);
+  font-size: 0.85rem;
+}
+
+.emptyState {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.emptyState img {
+  image-rendering: pixelated;
+}
+
+.emptyState p {
+  font-weight: 700;
+  margin: 0.75rem 0 0.4rem;
+}
+
+.emptyState a {
+  color: var(--purple-700);
+  font-weight: 700;
+  text-underline-offset: 0.2rem;
+}
+
+@media (max-width: 560px) {
+  .overlay {
+    padding: 0;
+  }
+
+  .dialog {
+    border-radius: 0;
+    max-height: 100vh;
+    min-height: 100vh;
+  }
+}

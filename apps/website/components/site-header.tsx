@@ -47,12 +47,18 @@ export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
                 {item.label}
               </a>
             ))}
-            <a href="https://github.com/cashubtc/cashu" rel="noreferrer" target="_blank">
+            <a href="https://github.com/cashubtc/cashu" rel="noreferrer noopener" target="_blank">
               GitHub
             </a>
           </div>
-          <button aria-label="Open search" className={styles.searchButton} onClick={onOpenSearch} type="button">
-            Search
+          <button
+            aria-haspopup="dialog"
+            aria-label="Search documentation"
+            className={styles.searchButton}
+            onClick={onOpenSearch}
+            type="button"
+          >
+            Search <span aria-hidden="true">⌘K</span>
           </button>
         </nav>
       </div>
