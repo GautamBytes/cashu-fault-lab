@@ -192,9 +192,41 @@ describe('HttpFaultGateway', () => {
       })
     ).json()) as GatewayEvidence;
     expect(evidence.rules).toEqual([
-      expect.objectContaining({ id: 'http-rule-1', remaining: 1, applied: 0 }),
+      expect.objectContaining({
+        id: 'http-rule-1',
+        phase: 'before_forward',
+        action: 'drop',
+        remaining: 1,
+        applied: 0,
+      }),
     ]);
     expect(JSON.stringify(evidence)).not.toContain('deliveryIdHash');
     expect(JSON.stringify(evidence)).not.toContain('aaaa');
+  });
+
+  it('reports safe exact method and path matches without delivery hashes', () => {
+    gateway!.control.setRule({
+      phase: 'after_downstream_response',
+      action: 'drop',
+      count: 1,
+      match: {
+        method: 'POST',
+        path: '/pay',
+        deliveryIdHash: 'a'.repeat(64),
+      },
+    });
+
+    expect(gateway!.control.snapshot().rules).toEqual([
+      {
+        id: 'http-rule-1',
+        phase: 'after_downstream_response',
+        action: 'drop',
+        method: 'POST',
+        path: '/pay',
+        remaining: 1,
+        applied: 0,
+      },
+    ]);
+    expect(JSON.stringify(gateway!.control.snapshot())).not.toContain('aaaa');
   });
 });

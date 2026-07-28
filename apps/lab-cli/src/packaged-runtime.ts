@@ -436,8 +436,12 @@ class RestartableExternalFaultController implements ExternalFaultController {
     await this.#base.reset();
   }
 
-  async configure(target: string, rule: Parameters<ExternalFaultController['configure']>[1]) {
-    await this.#base.configure(target, rule);
+  configure(
+    target: string,
+    rule: Parameters<ExternalFaultController['configure']>[1],
+    route?: Parameters<ExternalFaultController['configure']>[2],
+  ): ReturnType<ExternalFaultController['configure']> {
+    return this.#base.configure(target, rule, route);
   }
 
   async clear(target?: string): Promise<void> {
@@ -824,9 +828,11 @@ export class PackagedLabRuntime implements LabRuntime {
             });
             continue;
           }
+          const evidence = registry.evidence(receiver.id);
           const driver = new ExternalAdapterScenarioDriver({
             sender: senderClient,
             receiver: receiverClient,
+            ...(evidence === undefined ? {} : { evidence }),
             faults: new RestartableExternalFaultController(
               this.#faultController(),
               this.#services,

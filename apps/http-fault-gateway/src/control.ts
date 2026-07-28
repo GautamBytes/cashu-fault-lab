@@ -32,6 +32,8 @@ export interface GatewayEvidence {
     readonly id: string;
     readonly phase: FaultPhase;
     readonly action: FaultRule['action'];
+    readonly method?: string;
+    readonly path?: string;
     readonly remaining: number;
     readonly applied: number;
   }[];
@@ -116,6 +118,10 @@ export class GatewayControl {
         id: rule.id,
         phase: rule.phase,
         action: rule.action,
+        ...(rule.match?.method === undefined
+          ? {}
+          : { method: rule.match.method.toUpperCase() }),
+        ...(rule.match?.path === undefined ? {} : { path: rule.match.path }),
         remaining,
         applied,
       })),

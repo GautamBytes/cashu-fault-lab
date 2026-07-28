@@ -111,15 +111,34 @@ function externalDemoFetch(
     fetchCalls.push(`${url.port}${url.pathname}`);
     if (url.port === '4300') {
       if (url.pathname === '/__faults/v1/evidence') {
-        return new Response(JSON.stringify(gatewayEvidence), {
-          status: 200,
+        return new Response(
+          JSON.stringify({
+            ...gatewayEvidence,
+            rules: gatewayEvidence.rules.map((rule, index) => ({
+              id: `http-rule-${index + 1}`,
+              phase: 'after_downstream_response',
+              action: 'drop',
+              method: 'POST',
+              path: '/pay',
+              ...rule,
+            })),
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }
+      if (url.pathname === '/__faults/v1/rules' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'http-rule-1' }), {
+          status: 201,
           headers: { 'content-type': 'application/json' },
         });
       }
       return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
     }
     const body = (() => {
       if (url.pathname === '/v1/capabilities') {
