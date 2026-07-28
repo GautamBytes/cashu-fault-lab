@@ -51,4 +51,15 @@ describe('dark shell contract', () => {
       /\.contentPage\s*\{[^}]*(?:margin:\s*-|overflow:\s*hidden)/s,
     );
   });
+
+  it('keeps mobile TOC hover and focus text readable on Sand', () => {
+    const interactionRules = [
+      ...docsCss.matchAll(
+        /^\.mobileToc a:hover,\s*\n\.mobileToc a:focus-visible\s*\{([\s\S]*?)^\}/gm,
+      ),
+    ];
+    const winningRule = interactionRules.at(-1)?.[1];
+
+    expect(winningRule).toContain('color: var(--purple-950);');
+  });
 });

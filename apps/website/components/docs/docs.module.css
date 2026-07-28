@@ -156,6 +156,11 @@
   color: var(--purple-700);
 }
 
+.mobileToc a:hover,
+.mobileToc a:focus-visible {
+  color: var(--purple-950);
+}
+
 .markdown {
   --shiki-foreground: var(--sand-100);
   --shiki-background: var(--purple-950);
