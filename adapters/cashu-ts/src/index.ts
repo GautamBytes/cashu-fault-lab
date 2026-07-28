@@ -8,6 +8,7 @@ export {
   MemoryCashuTsDeliveryStore,
   type CashuTsDeliveryStore,
   type CashuTsStoredDelivery,
+  type CashuTsStoredReservation,
   type CashuTsTransportPort,
   type CashuTsTransportTarget,
   type CashuTsWalletPort,
@@ -50,6 +51,20 @@ export {
   type CreatePostgresReceiverStoreOptions,
   type ResettablePostgresReceiverStoreOptions,
 } from './postgres-receiver-store.js';
+export {
+  PostgresCrashCheckpoint,
+  SigkillProcessTerminator,
+  type CrashControl,
+  type PostgresCrashCheckpointOptions,
+  type ProcessTerminator,
+} from './postgres-crash-checkpoint.js';
+export {
+  PostgresCrashArmStore,
+  migratePostgresCrashArmStore,
+  type CrashArm,
+  type CrashArmStore,
+  type PostgresCrashArmStoreOptions,
+} from './postgres-crash-arm-store.js';
 export {
   PostgresCashuTsSenderStore,
   createPostgresCashuTsSenderStore,

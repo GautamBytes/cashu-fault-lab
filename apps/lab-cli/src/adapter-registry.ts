@@ -1,6 +1,7 @@
 import {
   HttpAdapterClient,
   type AdapterClient,
+  type AdapterTestControlClient,
   type HttpAdapterClientOptions,
 } from '@cashu-fault-lab/adapter-contract';
 import type { MatrixParticipant } from '@cashu-fault-lab/scenario-runner';
@@ -16,12 +17,12 @@ export interface ExternalAdapterRegistryDependencies {
 
 export class ExternalAdapterRegistry {
   readonly #orderedIds: readonly string[];
-  readonly #clients: ReadonlyMap<string, AdapterClient>;
+  readonly #clients: ReadonlyMap<string, AdapterClient & AdapterTestControlClient>;
   readonly #participants: readonly MatrixParticipant[];
 
   private constructor(
     registrations: readonly ResolvedAdapterRegistration[],
-    clients: ReadonlyMap<string, AdapterClient>,
+    clients: ReadonlyMap<string, AdapterClient & AdapterTestControlClient>,
     participants: readonly MatrixParticipant[],
   ) {
     this.#orderedIds = registrations.map((registration) => registration.id);
@@ -35,7 +36,7 @@ export class ExternalAdapterRegistry {
     dependencies: ExternalAdapterRegistryDependencies = {},
   ): Promise<ExternalAdapterRegistry> {
     const registrations = resolveAdapterManifest(manifest, env);
-    const clients = new Map<string, AdapterClient>();
+    const clients = new Map<string, AdapterClient & AdapterTestControlClient>();
     const participants: MatrixParticipant[] = [];
     for (const registration of registrations) {
       const options: HttpAdapterClientOptions = {
@@ -60,7 +61,7 @@ export class ExternalAdapterRegistry {
     return [...this.#orderedIds];
   }
 
-  client(id: string): AdapterClient | undefined {
+  client(id: string): (AdapterClient & AdapterTestControlClient) | undefined {
     return this.#clients.get(id);
   }
 

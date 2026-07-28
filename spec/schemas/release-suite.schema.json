@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schema/release-suite-v1.json",
+  "title": "Cashu Fault Lab Release Suite",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "profile", "scenarios"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "profile": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "scenario",
+          "transports",
+          "senderDurability",
+          "receiverDurability",
+          "requiredInvariants"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "scenario": {
+            "type": "string",
+            "pattern": "^scenarios/(?:[a-z0-9_-]+/)*[a-z0-9_-]+\\.json$"
+          },
+          "transports": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["http", "nostr"] }
+          },
+          "senderDurability": {
+            "enum": ["process", "persistent", "restart_safe"]
+          },
+          "receiverDurability": {
+            "enum": ["process", "persistent", "restart_safe"]
+          },
+          "requiredInvariants": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "at-most-once-redemption-start",
+                "at-most-one-merchant-credit-per-request",
+                "at-most-one-merchant-credit-per-delivery",
+                "proof-set-exclusivity",
+                "delivery-identity-immutability",
+                "exact-net-amount",
+                "no-premature-settlement",
+                "no-false-rejection-after-possible-consumption",
+                "monotonic-receipts",
+                "stable-duplicate-response",
+                "eventual-terminal-or-recovery-state",
+                "crash-recovery",
+                "retry-convergence",
+                "transport-convergence",
+                "independent-mint-evidence",
+                "independent-ledger-evidence",
+                "reproducibility",
+                "no-unsupported-pass"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

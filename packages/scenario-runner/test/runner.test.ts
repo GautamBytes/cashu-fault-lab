@@ -6,6 +6,7 @@ import {
   type ScenarioDriver,
   type ScenarioSpec,
 } from '../src/index.js';
+import type { CrashArmInput } from '@cashu-fault-lab/adapter-contract';
 
 class FakeDriver implements ScenarioDriver {
   readonly calls: string[] = [];
@@ -23,6 +24,12 @@ class FakeDriver implements ScenarioDriver {
 
   async configureFault(target: string, rule: FaultRule): Promise<void> {
     this.calls.push(`fault:${target}:${rule.kind}`);
+  }
+
+  async armCrash(input: CrashArmInput): Promise<void> {
+    this.calls.push(
+      `crash:${input.runId}:${input.component}:${input.boundary}:${input.occurrence}`,
+    );
   }
 
   async send(sender: string, requestId: string): Promise<DriverSendResult> {
@@ -129,7 +136,38 @@ const scenario: ScenarioSpec = {
   ],
 };
 
+const crashScenario: ScenarioSpec = {
+  name: 'sender-crash',
+  commands: [
+    {
+      type: 'arm_crash',
+      component: 'sender',
+      boundary: 'sender_before_proof_reservation',
+    },
+    { type: 'send', sender: 'alice', requestId: 'request-1' },
+    { type: 'assert_quiescent' },
+  ],
+};
+
 describe('ScenarioRunner', () => {
+  it('arms a component crash with the scenario seed and default occurrence', async () => {
+    const driver = new FakeDriver();
+    const result = await new ScenarioRunner(driver).run(crashScenario, 'crash-seed');
+
+    expect(result.status).toBe('passed');
+    expect(driver.calls).toContain('crash:crash-seed:sender:sender_before_proof_reservation:1');
+  });
+
+  it('returns explicit N/A failure when a driver has no crash controls', async () => {
+    const driver = new FakeDriver();
+    driver.armCrash = undefined as never;
+    const result = await new ScenarioRunner(driver).run(crashScenario, 'crash-seed');
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { name: 'AdapterNotApplicableError' },
+    });
+  });
   it('runs commands, feeds the oracle, and emits paired deterministic history', async () => {
     const driver = new FakeDriver();
     const runner = new ScenarioRunner(driver);

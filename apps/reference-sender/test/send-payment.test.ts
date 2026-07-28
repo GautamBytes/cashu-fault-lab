@@ -246,6 +246,15 @@ describe('sendPayment', () => {
 
     expect(outcome).toMatchObject({ status: 'recovery_required' });
     expect(setup.transport.payloads).toHaveLength(1);
+    expect((await setup.state.get(deliveryId))?.diagnostics).toEqual([
+      {
+        attempt: 1,
+        transport: 'post',
+        stage: 'transport',
+        code: 'PERMANENT_FAILURE',
+        retryable: false,
+      },
+    ]);
     expect(setup.wallet.reservation(deliveryId)).toBe('recovery-required');
   });
 
@@ -419,13 +428,99 @@ describe('sendPayment', () => {
     const setup = deps();
     setup.transport.results.push({
       kind: 'receipt',
-      receipt: { ...receipt('settled', 1, 'settled'), payload_hash: 'f'.repeat(64) },
+      receipt: { ...receipt('settled', 1, 'settled'), payload_hash: 'not-a-hash' },
     });
     expect(
       await sendPayment(request(), setup, { seed: 'invalid-receipt', maxAttempts: 1 }),
     ).toMatchObject({ status: 'recovery_required' });
     expect((await setup.state.get(deliveryId))?.attempts).toBe(1);
+    expect((await setup.state.get(deliveryId))?.diagnostics).toEqual([
+      {
+        attempt: 1,
+        transport: 'post',
+        stage: 'receipt_validation',
+        code: 'INVALID_RECEIPT',
+        retryable: true,
+      },
+    ]);
     expect(setup.wallet.reservation(deliveryId)).toBe('recovery-required');
+  });
+
+  it('retains a bounded enum-only transport diagnostic without the thrown secret', async () => {
+    const setup = deps();
+    const secret = 'Bearer cashuA-do-not-persist-this-token';
+    setup.transport.results.push(new Error(`request failed with ${secret}`));
+
+    await sendPayment(request(), setup, { seed: 'safe-transport-diagnostic', maxAttempts: 1 });
+
+    const stored = await setup.state.get(deliveryId);
+    expect(stored?.diagnostics).toEqual([
+      {
+        attempt: 1,
+        transport: 'post',
+        stage: 'transport',
+        code: 'TRANSPORT_FAILURE',
+        retryable: true,
+      },
+    ]);
+    expect(JSON.stringify(stored)).not.toContain(secret);
+    expect(JSON.stringify(stored)).not.toContain('do-not-persist');
+  });
+
+  it('distinguishes receipt identity conflicts from malformed receipts', async () => {
+    const setup = deps();
+    setup.transport.results.push({
+      kind: 'receipt',
+      receipt: { ...receipt('settled', 1, 'settled'), request_id: deliveryId },
+    });
+
+    await sendPayment(request(), setup, { seed: 'receipt-identity-conflict', maxAttempts: 3 });
+
+    expect(setup.transport.payloads).toHaveLength(1);
+    expect((await setup.state.get(deliveryId))?.diagnostics).toEqual([
+      {
+        attempt: 1,
+        transport: 'post',
+        stage: 'receipt_validation',
+        code: 'RECEIPT_IDENTITY_CONFLICT',
+        retryable: false,
+      },
+    ]);
+  });
+
+  it('stops on a conflicting receipt transition with a distinct safe code', async () => {
+    const setup = deps();
+    setup.transport.results.push(
+      { kind: 'receipt', receipt: receipt('processing', 1, 'accepted') },
+      { kind: 'receipt', receipt: receipt('processing', 1, 'redeeming') },
+    );
+
+    await sendPayment(request(), setup, { seed: 'receipt-transition-conflict', maxAttempts: 3 });
+
+    expect(setup.transport.payloads).toHaveLength(2);
+    expect((await setup.state.get(deliveryId))?.diagnostics).toEqual([
+      {
+        attempt: 2,
+        transport: 'post',
+        stage: 'receipt_validation',
+        code: 'RECEIPT_TRANSITION_CONFLICT',
+        retryable: false,
+      },
+    ]);
+  });
+
+  it('retains only the latest twenty attempt diagnostics', async () => {
+    const setup = deps();
+    setup.transport.results.push(
+      ...Array.from({ length: 25 }, () => new Error('transport failed')),
+    );
+
+    await sendPayment(request(), setup, { seed: 'bounded-diagnostics', maxAttempts: 25 });
+
+    const diagnostics = (await setup.state.get(deliveryId))?.diagnostics;
+    expect(diagnostics).toHaveLength(20);
+    expect(diagnostics?.at(0)?.attempt).toBe(6);
+    expect(diagnostics?.at(-1)?.attempt).toBe(25);
   });
 
   it('rejects expired requests before reserving proofs', async () => {

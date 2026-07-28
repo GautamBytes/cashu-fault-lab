@@ -56,7 +56,21 @@ export function renderMatrixHtml(input: MatrixReportInput): string {
       const cls = STATUS_CLASS[result.status] ?? 'na';
       const label = STATUS_LABEL[result.status] ?? result.status;
       const detail = result.status === 'passed' ? '' : ` <small>${html(result.reason)}</small>`;
-      return `      <tr><td>${html(result.sender)}</td><td>→</td><td>${html(result.receiver)}</td><td class="${cls}">${html(label)}</td><td>${detail}</td></tr>`;
+      const pair = `      <tr><td>${html(result.sender)}</td><td>→</td><td>${html(result.receiver)}</td><td>pair</td><td class="${cls}">${html(label)}</td><td>${detail}</td></tr>`;
+      if (result.status !== 'passed') return pair;
+      const scenarios = result.scenarios
+        .map((scenario) => {
+          const scenarioClass = STATUS_CLASS[scenario.status] ?? 'na';
+          const scenarioLabel = STATUS_LABEL[scenario.status] ?? scenario.status;
+          const blockers = scenario.invariants
+            .filter(({ status }) => status !== 'passed')
+            .map(({ id, status }) => `${id}: ${status}`)
+            .join(', ');
+          const reason = [scenario.reason, blockers].filter(Boolean).join('; ');
+          return `      <tr><td></td><td></td><td>${html(scenario.id)}</td><td>scenario</td><td class="${scenarioClass}">${html(scenarioLabel)}</td><td><small>${html(reason)}</small></td></tr>`;
+        })
+        .join('\n');
+      return scenarios.length === 0 ? pair : `${pair}\n${scenarios}`;
     })
     .join('\n');
   const releaseGate =
@@ -91,7 +105,7 @@ export function renderMatrixHtml(input: MatrixReportInput): string {
   </p>
   ${releaseGate}
   <table>
-    <thead><tr><th>Sender</th><th></th><th>Receiver</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Sender</th><th></th><th>Receiver / scenario</th><th>Kind</th><th>Status</th><th>Blocker</th></tr></thead>
     <tbody>
 ${rows}
     </tbody>

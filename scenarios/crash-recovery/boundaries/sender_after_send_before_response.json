@@ -1,0 +1,13 @@
+{
+  "name": "sender-after-send-before-response",
+  "description": "Terminates after delivery dispatch and verifies retry converges on the same identity.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "sender",
+      "boundary": "sender_after_send_before_response"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

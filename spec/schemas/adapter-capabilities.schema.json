@@ -45,6 +45,19 @@
       "type": "array",
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/mint" }
+    },
+    "testControls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["crashBoundaries"],
+      "properties": {
+        "crashBoundaries": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/crashBoundary" }
+        }
+      }
     }
   },
   "$defs": {
@@ -120,6 +133,20 @@
         },
         "version": { "type": "string", "minLength": 1, "maxLength": 128 }
       }
+    },
+    "crashBoundary": {
+      "enum": [
+        "sender_before_proof_reservation",
+        "sender_after_reservation_before_payload_persistence",
+        "sender_after_payload_persistence_before_network_send",
+        "sender_after_send_before_response",
+        "receiver_before_mint_request",
+        "receiver_after_mint_request_before_response",
+        "receiver_after_mint_response_before_output_persistence",
+        "receiver_after_output_persistence_before_merchant_credit",
+        "receiver_after_credit_before_receipt_persistence",
+        "receiver_after_receipt_persistence_before_response_or_outbox"
+      ]
     }
   }
 }

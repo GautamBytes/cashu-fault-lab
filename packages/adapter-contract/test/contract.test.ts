@@ -1,12 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseDeliveryPayload, parseDeliveryReceipt } from '@cashu-fault-lab/delivery-core';
+import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 import {
   adapterCapabilitiesSchema,
+  crashControlSchema,
   deliveryPayloadSchema,
   deliveryReceiptSchema,
   deliveryRequestSchema,
+  releasePolicySchema,
+  releaseSuiteSchema,
   scenarioResultSchema,
   currentAdapterContract,
   validateAdapterRequest,
@@ -15,6 +19,7 @@ import {
   validateDeliveryPayload,
   validateDeliveryReceipt,
   validateDeliveryRequest,
+  validateScenarioSpec,
 } from '../src/index.js';
 
 interface ValidVector {
@@ -51,6 +56,31 @@ describe('normative delivery-v1 vectors', () => {
     expect(deliveryReceiptSchema).toEqual(fixture('schemas/delivery-receipt.schema.json'));
     expect(adapterCapabilitiesSchema).toEqual(fixture('schemas/adapter-capabilities.schema.json'));
     expect(scenarioResultSchema).toEqual(fixture('schemas/scenario-result.schema.json'));
+    expect(releasePolicySchema).toEqual(fixture('schemas/release-policy.schema.json'));
+    expect(releaseSuiteSchema).toEqual(fixture('schemas/release-suite.schema.json'));
+    expect(crashControlSchema).toEqual(fixture('schemas/crash-control.schema.json'));
+  });
+
+  it('validates the checked-in release policy and suite against their published schemas', () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+
+    expect(ajv.validate(releasePolicySchema, fixture('release-policy.json'))).toBe(true);
+    expect(ajv.validate(releaseSuiteSchema, fixture('release-suite.json'))).toBe(true);
+    expect(
+      ajv.validate(releaseSuiteSchema, {
+        ...fixture<Record<string, unknown>>('release-suite.json'),
+        scenarios: [
+          {
+            id: 'unsafe',
+            scenario: 'scenarios//unsafe.json',
+            transports: ['http'],
+            senderDurability: 'persistent',
+            receiverDurability: 'restart_safe',
+            requiredInvariants: ['reproducibility'],
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it.each(validVectors)('accepts $name', ({ now, request, payload, receipt }) => {
@@ -97,6 +127,22 @@ describe('adapter HTTP contract', () => {
         request: 'creqAexample',
         deliveryId: 'EBESExQVFhcYGRobHB0eHw',
         memo: null,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateAdapterRequest('armCrash', {
+        runId: 'run-001',
+        component: 'sender',
+        boundary: 'sender_before_proof_reservation',
+        occurrence: 1,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateAdapterRequest('armCrash', {
+        runId: 'cashu-fault-lab-v0.1.0-demo',
+        component: 'sender',
+        boundary: 'sender_before_proof_reservation',
+        occurrence: 1,
       }),
     ).toEqual({ ok: true });
   });
@@ -172,6 +218,19 @@ describe('adapter HTTP contract', () => {
         },
       ]),
     ).toEqual({ ok: true });
+    expect(validateAdapterResponse('armCrash', { ok: true })).toEqual({ ok: true });
+    expect(
+      validateAdapterResponse('crashStatus', [
+        {
+          runId: 'run-001',
+          component: 'receiver',
+          boundary: 'receiver_before_mint_request',
+          occurrence: 2,
+          hits: 1,
+          consumed: false,
+        },
+      ]),
+    ).toEqual({ ok: true });
   });
 
   it('rejects unknown fields and unsupported operations', () => {
@@ -183,6 +242,15 @@ describe('adapter HTTP contract', () => {
       ok: false,
       errorCode: 'UNKNOWN_OPERATION',
     });
+    expect(
+      validateAdapterRequest('armCrash', {
+        runId: 'run-001',
+        component: 'sender',
+        boundary: 'receiver_before_mint_request',
+        occurrence: 0,
+        extra: true,
+      }),
+    ).toMatchObject({ ok: false, errorCode: 'SCHEMA_ADDITIONAL_PROPERTY' });
   });
 
   it('rejects capability schema v1 instead of silently upgrading its evidence', () => {
@@ -198,6 +266,33 @@ describe('adapter HTTP contract', () => {
       ok: false,
       errorCode: 'SCHEMA_ADDITIONAL_PROPERTY',
     });
+  });
+
+  it('validates component-specific crash scenario commands', () => {
+    expect(
+      validateScenarioSpec({
+        name: 'sender-crash',
+        commands: [
+          {
+            type: 'arm_crash',
+            component: 'sender',
+            boundary: 'sender_before_proof_reservation',
+          },
+        ],
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateScenarioSpec({
+        name: 'invalid-crash',
+        commands: [
+          {
+            type: 'arm_crash',
+            component: 'receiver',
+            boundary: 'sender_before_proof_reservation',
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: false });
   });
 
   it('rejects placeholder implementation digests', () => {

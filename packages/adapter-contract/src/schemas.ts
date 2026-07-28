@@ -14,3 +14,6 @@ export const deliveryReceiptSchema = loadSchema('delivery-receipt.schema.json');
 export const adapterCapabilitiesSchema = loadSchema('adapter-capabilities.schema.json');
 export const scenarioResultSchema = loadSchema('scenario-result.schema.json');
 export const scenarioSpecSchema = loadSchema('scenario-spec.schema.json');
+export const releasePolicySchema = loadSchema('release-policy.schema.json');
+export const releaseSuiteSchema = loadSchema('release-suite.schema.json');
+export const crashControlSchema = loadSchema('crash-control.schema.json');

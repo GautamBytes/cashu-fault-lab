@@ -19,6 +19,9 @@ export interface ReceiverStore {
   ): Promise<{ readonly acquired: false } | { readonly acquired: true; readonly value: T }>;
   prepare(input: PrepareDelivery): Promise<PrepareResult>;
   markMintSent(deliveryId: string): Promise<DeliveryReceipt>;
+  persistSettlementOutputs(input: CommitSettlement): Promise<DeliveryReceipt>;
+  creditSettlement(deliveryId: string, now: number): Promise<DeliveryReceipt>;
+  finalizeSettlement(deliveryId: string): Promise<DeliveryReceipt>;
   settle(input: CommitSettlement): Promise<DeliveryReceipt>;
   blockRecovery(deliveryId: string): Promise<DeliveryReceipt>;
   reject(deliveryId: string, detailCode: string, releaseClaims: boolean): Promise<DeliveryReceipt>;

@@ -11,6 +11,7 @@ import {
   validateReleasePolicy,
   type InvariantResult,
   type MatrixCaseResult,
+  type MatrixScenarioEvidence,
   type ReleasePolicy,
 } from '../src/index.js';
 
@@ -20,7 +21,7 @@ const required = [
 ] as const;
 
 const policy: ReleasePolicy = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   profile: 'delivery-v1',
   minimumQualifyingPairs: 2,
   requireCrossImplementation: true,
@@ -29,6 +30,7 @@ const policy: ReleasePolicy = {
   minimumDistinctMints: 2,
   minimumEvidence: { sender: 'T1', receiver: 'T3' },
   requiredInvariants: required,
+  requiredScenarios: ['retry-response-lost'],
   acceptedConfidence: ['observed', 'derived'],
 };
 
@@ -96,6 +98,7 @@ function passingCase(
     receiverTier?: 'T0' | 'T1' | 'T2' | 'T3';
     mint?: AdapterMintIdentity;
     invariants?: readonly InvariantResult[];
+    scenarios?: readonly MatrixScenarioEvidence[];
     senderBuildAlias?: string;
     receiverBuildAlias?: string;
   } = {},
@@ -126,6 +129,15 @@ function passingCase(
     ),
     mints: [mint],
     invariants: options.invariants ?? required.map((id) => invariant(id)),
+    scenarios:
+      options.scenarios ??
+      policy.requiredScenarios.map((id) => ({
+        id,
+        seed: `seed-${id}`,
+        status: 'passed',
+        requiredInvariants: required,
+        invariants: required.map((invariantId) => invariant(invariantId)),
+      })),
   };
 }
 
@@ -145,6 +157,18 @@ describe('release policy', () => {
         requiredInvariants: ['not-a-real-invariant'],
       }),
     ).toThrow(/requiredInvariants/u);
+    expect(() =>
+      validateReleasePolicy({
+        ...repositoryPolicy,
+        requiredScenarios: ['retry-response-lost', 'retry-response-lost'],
+      }),
+    ).toThrow(/requiredScenarios/u);
+    expect(() =>
+      validateReleasePolicy({
+        ...repositoryPolicy,
+        requiredScenarios: ['Unsafe Scenario'],
+      }),
+    ).toThrow(/requiredScenarios/u);
   });
 
   it('accepts two independent cross-language pairs backed by two mints', () => {
@@ -219,6 +243,57 @@ describe('release policy', () => {
     ).toEqual(
       expect.arrayContaining(['REQUIRED_INVARIANT_MISSING', 'INVARIANT_CONFIDENCE_REJECTED']),
     );
+  });
+
+  it('rejects adapter-claimed evidence inside required release scenarios', () => {
+    const result = evaluateReleasePolicy(policy, [
+      passingCase({
+        scenarios: [
+          {
+            id: 'retry-response-lost',
+            seed: 'adapter-claimed-scenario',
+            status: 'passed',
+            requiredInvariants: [required[0]],
+            invariants: [invariant(required[0], 'adapter_claimed')],
+          },
+        ],
+      }),
+    ]);
+
+    expect(result.reasons).toContainEqual(
+      expect.objectContaining({
+        code: 'INVARIANT_CONFIDENCE_REJECTED',
+        pair: 'sender-ts->receiver-rs',
+        scenario: 'retry-response-lost',
+      }),
+    );
+  });
+
+  it('rejects each missing or non-passing required scenario with pair context', () => {
+    const missing = evaluateReleasePolicy(policy, [passingCase({ scenarios: [] })]).reasons.find(
+      (reason) => reason.code === 'REQUIRED_SCENARIO_MISSING',
+    );
+    const failed = evaluateReleasePolicy(policy, [
+      passingCase({
+        scenarios: [
+          {
+            id: 'retry-response-lost',
+            seed: 'failed-seed',
+            status: 'failed',
+            requiredInvariants: required,
+            invariants: [],
+            code: 'SCENARIO_EXECUTION_FAILED',
+            reason: 'Scenario failed safely.',
+          },
+        ],
+      }),
+    ]).reasons.find((reason) => reason.code === 'REQUIRED_SCENARIO_NOT_PASSED');
+
+    expect(missing).toMatchObject({ pair: 'sender-ts->receiver-rs' });
+    expect(missing?.message).toContain('retry-response-lost');
+    expect(failed).toMatchObject({ pair: 'sender-ts->receiver-rs' });
+    expect(failed?.message).toContain('retry-response-lost');
+    expect(failed?.message).toContain('failed');
   });
 
   it('deduplicates aliases of one build and still enforces pair and mint minima', () => {

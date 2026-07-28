@@ -343,11 +343,94 @@ export class PostgresReceiverStore implements ReceiverStore {
       if (record.phase === 'rejected' || record.phase === 'prepared') {
         throw new ReceiverDomainError('INVALID_STATE', 'Delivery cannot settle from current phase');
       }
+      if (
+        record.replacementPlanHash !== undefined &&
+        record.replacementPlanHash !== input.replacementPlanHash
+      ) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
+      }
       if (input.replacementPlanHash.length === 0 || input.replacementProofs.length === 0) {
         throw new ReceiverDomainError('INVALID_STATE', 'Recovered outputs are required to settle');
       }
       assertSafeInteger(input.now, 'Settlement time');
+
+      if (record.phase === 'mint_sent' || record.phase === 'recovery_blocked') {
+        const encrypted = this.#envelope.encrypt(
+          input.replacementProofs,
+          replacementAuthenticatedData({
+            requestId: record.requestId,
+            deliveryId: record.deliveryId,
+            payloadHash: record.payloadHash,
+            replacementPlanHash: input.replacementPlanHash,
+          }),
+        );
+        await client.query(
+          `UPDATE deliveries
+           SET phase = 'outputs_persisted', replacement_plan_hash = $2,
+               replacement_ciphertext = $3, replacement_nonce = $4, replacement_tag = $5,
+               updated_at = now()
+           WHERE delivery_id = $1`,
+          [
+            record.deliveryId,
+            input.replacementPlanHash,
+            Buffer.from(encrypted.ciphertext),
+            Buffer.from(encrypted.nonce),
+            Buffer.from(encrypted.tag),
+          ],
+        );
+      }
+
+      if (record.phase !== 'credited') {
+        await client.query(
+          `INSERT INTO merchant_credits (delivery_id, credit_id, request_id, amount, unit, created_at)
+           VALUES ($1, $1, $2, $3, $4, $5)
+           ON CONFLICT (delivery_id) DO NOTHING`,
+          [record.deliveryId, record.requestId, record.amount, record.receipt.unit, input.now],
+        );
+      }
+      const credit = await this.#credit(client, record.deliveryId);
+      if (
+        !credit ||
+        credit.requestId !== record.requestId ||
+        credit.amount !== record.amount ||
+        credit.unit !== record.receipt.unit
+      ) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Merchant credit is conflicting');
+      }
       const receipt = nextReceipt(record.receipt, 'settled', 'settled');
+      await this.#updatePhase(client, record.deliveryId, 'settled', receipt);
+      await client.query(
+        `INSERT INTO receipt_outbox (delivery_id, status_version, body)
+         VALUES ($1, $2, $3::jsonb)
+         ON CONFLICT (delivery_id, status_version) DO NOTHING`,
+        [record.deliveryId, receipt.statusVersion, JSON.stringify(receipt)],
+      );
+      return receipt;
+    });
+  }
+
+  async persistSettlementOutputs(input: CommitSettlement): Promise<DeliveryReceipt> {
+    return this.#serializable(async (client) => {
+      const record = await this.#requiredDelivery(client, input.deliveryId, true);
+      if (record.phase === 'settled') {
+        if (record.replacementPlanHash !== input.replacementPlanHash) {
+          throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
+        }
+        return record.receipt;
+      }
+      if (record.phase === 'outputs_persisted' || record.phase === 'credited') {
+        if (record.replacementPlanHash !== input.replacementPlanHash) {
+          throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
+        }
+        return record.receipt;
+      }
+      if (record.phase === 'rejected' || record.phase === 'prepared') {
+        throw new ReceiverDomainError('INVALID_STATE', 'Delivery cannot settle from current phase');
+      }
+      if (input.replacementPlanHash.length === 0 || input.replacementProofs.length === 0) {
+        throw new ReceiverDomainError('INVALID_STATE', 'Recovered outputs are required to settle');
+      }
+      assertSafeInteger(input.now, 'Settlement time');
       const encrypted = this.#envelope.encrypt(
         input.replacementProofs,
         replacementAuthenticatedData({
@@ -358,10 +441,36 @@ export class PostgresReceiverStore implements ReceiverStore {
         }),
       );
       await client.query(
+        `UPDATE deliveries
+         SET phase = 'outputs_persisted', replacement_plan_hash = $2,
+             replacement_ciphertext = $3, replacement_nonce = $4, replacement_tag = $5,
+             updated_at = now()
+         WHERE delivery_id = $1`,
+        [
+          record.deliveryId,
+          input.replacementPlanHash,
+          Buffer.from(encrypted.ciphertext),
+          Buffer.from(encrypted.nonce),
+          Buffer.from(encrypted.tag),
+        ],
+      );
+      return record.receipt;
+    });
+  }
+
+  async creditSettlement(deliveryId: string, now: number): Promise<DeliveryReceipt> {
+    return this.#serializable(async (client) => {
+      const record = await this.#requiredDelivery(client, deliveryId, true);
+      if (record.phase === 'settled' || record.phase === 'credited') return record.receipt;
+      if (record.phase !== 'outputs_persisted') {
+        throw new ReceiverDomainError('INVALID_STATE', 'Settlement outputs are not persistent');
+      }
+      assertSafeInteger(now, 'Settlement time');
+      await client.query(
         `INSERT INTO merchant_credits (delivery_id, credit_id, request_id, amount, unit, created_at)
          VALUES ($1, $1, $2, $3, $4, $5)
          ON CONFLICT (delivery_id) DO NOTHING`,
-        [record.deliveryId, record.requestId, record.amount, record.receipt.unit, input.now],
+        [record.deliveryId, record.requestId, record.amount, record.receipt.unit, now],
       );
       const credit = await this.#credit(client, record.deliveryId);
       if (
@@ -372,21 +481,20 @@ export class PostgresReceiverStore implements ReceiverStore {
       ) {
         throw new ReceiverDomainError('INVALID_STATE', 'Merchant credit is conflicting');
       }
-      await client.query(
-        `UPDATE deliveries
-         SET phase = 'settled', receipt = $2::jsonb, replacement_plan_hash = $3,
-             replacement_ciphertext = $4, replacement_nonce = $5, replacement_tag = $6,
-             updated_at = now()
-         WHERE delivery_id = $1`,
-        [
-          record.deliveryId,
-          JSON.stringify(receipt),
-          input.replacementPlanHash,
-          Buffer.from(encrypted.ciphertext),
-          Buffer.from(encrypted.nonce),
-          Buffer.from(encrypted.tag),
-        ],
-      );
+      await this.#updatePhase(client, deliveryId, 'credited', record.receipt);
+      return record.receipt;
+    });
+  }
+
+  async finalizeSettlement(deliveryId: string): Promise<DeliveryReceipt> {
+    return this.#serializable(async (client) => {
+      const record = await this.#requiredDelivery(client, deliveryId, true);
+      if (record.phase === 'settled') return record.receipt;
+      if (record.phase !== 'credited') {
+        throw new ReceiverDomainError('INVALID_STATE', 'Merchant credit is not persistent');
+      }
+      const receipt = nextReceipt(record.receipt, 'settled', 'settled');
+      await this.#updatePhase(client, deliveryId, 'settled', receipt);
       await client.query(
         `INSERT INTO receipt_outbox (delivery_id, status_version, body)
          VALUES ($1, $2, $3::jsonb)
@@ -401,7 +509,11 @@ export class PostgresReceiverStore implements ReceiverStore {
     return this.#serializable(async (client) => {
       const record = await this.#requiredDelivery(client, deliveryId, true);
       if (record.phase === 'settled' || record.phase === 'recovery_blocked') return record.receipt;
-      if (record.phase === 'rejected') {
+      if (
+        record.phase === 'rejected' ||
+        record.phase === 'outputs_persisted' ||
+        record.phase === 'credited'
+      ) {
         throw new ReceiverDomainError('INVALID_STATE', 'Rejected delivery cannot block recovery');
       }
       const receipt = nextReceipt(record.receipt, 'processing', 'recovery_blocked');
@@ -418,7 +530,12 @@ export class PostgresReceiverStore implements ReceiverStore {
     return this.#serializable(async (client) => {
       const record = await this.#requiredDelivery(client, deliveryId, true);
       if (record.phase === 'rejected') return record.receipt;
-      if (record.phase === 'settled' || record.phase === 'recovery_blocked') {
+      if (
+        record.phase === 'settled' ||
+        record.phase === 'recovery_blocked' ||
+        record.phase === 'outputs_persisted' ||
+        record.phase === 'credited'
+      ) {
         throw new ReceiverDomainError('INVALID_STATE', 'Possibly consumed delivery cannot reject');
       }
       const receipt = nextReceipt(record.receipt, 'rejected', detailCode);
@@ -464,7 +581,7 @@ export class PostgresReceiverStore implements ReceiverStore {
       `WITH candidates AS (
          SELECT delivery_id
          FROM deliveries
-         WHERE phase IN ('prepared', 'mint_sent', 'recovery_blocked')
+         WHERE phase IN ('prepared', 'mint_sent', 'recovery_blocked', 'outputs_persisted', 'credited')
            AND updated_at <= now() - ($2 * interval '1 second')
          ORDER BY updated_at, delivery_id
          FOR UPDATE SKIP LOCKED

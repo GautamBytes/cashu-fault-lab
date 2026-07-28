@@ -4,6 +4,9 @@ import {
   type AdapterCapabilities,
   type AdapterRoleCapability,
   type AdapterTransport,
+  type AdapterTestControlClient,
+  type CrashArmInput,
+  type CrashArmStatus,
 } from '@cashu-fault-lab/adapter-contract';
 import { renderHtml, renderJson } from '@cashu-fault-lab/report';
 import {
@@ -13,6 +16,7 @@ import {
   HttpExternalFaultController,
   ScenarioRunner,
   minimizeFailingCommands,
+  seededProtocolId,
   runExternalDeliveryPair,
   runReferenceDeliveryProbe,
   runReferenceHttpScenario,
@@ -26,7 +30,9 @@ import {
   type FailureArtifact,
   type ExternalFaultController,
   type MatrixCaseResult,
+  type MatrixExecutionResult,
   type MatrixParticipant,
+  type MatrixScenarioEvidence,
   type ScenarioError,
   type ScenarioRunResult,
   type ScenarioSpec,
@@ -45,6 +51,7 @@ import type {
 } from './index.js';
 import { ExternalAdapterRegistry } from './adapter-registry.js';
 import type { AdapterManifest } from './adapter-manifest.js';
+import type { LoadedReleaseSuite, LoadedReleaseSuiteScenario } from './release-suite-loader.js';
 import { ensureReferenceRuntimeEnv } from './runtime-env.js';
 
 const execFileAsync = promisify(execFile);
@@ -320,19 +327,109 @@ function externalScenarioTransports(scenarioName: string): readonly AdapterTrans
   return ['http'];
 }
 
+const DURABILITY_RANK = {
+  process: 0,
+  persistent: 1,
+  restart_safe: 2,
+} as const;
+
+function logicalAliases(
+  scenario: ScenarioSpec,
+): { readonly senderAlias: string; readonly requestAlias: string } | undefined {
+  const sends = scenario.commands.filter(
+    (command) => command.type === 'send' || command.type === 'start_send',
+  );
+  const senderAliases = [...new Set(sends.map((command) => command.sender))];
+  const requestAliases = [...new Set(sends.map((command) => command.requestId))];
+  if (senderAliases.length !== 1 || requestAliases.length !== 1) return undefined;
+  return { senderAlias: senderAliases[0]!, requestAlias: requestAliases[0]! };
+}
+
+function suiteNotApplicable(
+  entry: LoadedReleaseSuiteScenario,
+  seed: string,
+  reason: string,
+): MatrixScenarioEvidence {
+  return {
+    id: entry.id,
+    seed,
+    status: 'not_applicable',
+    requiredInvariants: entry.requiredInvariants,
+    invariants: [],
+    reason,
+  };
+}
+
+function suiteProvenance(
+  result: ScenarioRunResult,
+): Pick<MatrixScenarioEvidence, 'capabilities' | 'componentVersions' | 'imageDigests'> {
+  return {
+    capabilities: result.artifact.capabilities,
+    componentVersions: result.artifact.componentVersions ?? {},
+    imageDigests: result.artifact.imageDigests ?? {},
+  };
+}
+
+function suiteEvidence(
+  entry: LoadedReleaseSuiteScenario,
+  seed: string,
+  result: ScenarioRunResult,
+): MatrixScenarioEvidence {
+  const rejectedRequiredInvariant = entry.requiredInvariants.find((required) => {
+    const invariant = result.artifact.invariants.find((item) => item.id === required);
+    return invariant === undefined || invariant.status !== 'passed';
+  });
+  if (result.status === 'passed' && rejectedRequiredInvariant === undefined) {
+    return {
+      id: entry.id,
+      seed,
+      status: 'passed',
+      requiredInvariants: entry.requiredInvariants,
+      invariants: result.artifact.invariants,
+      ...suiteProvenance(result),
+    };
+  }
+  if (result.status === 'failed' && result.error.name === 'AdapterNotApplicableError') {
+    return suiteNotApplicable(
+      entry,
+      seed,
+      'Selected adapters do not implement this release scenario',
+    );
+  }
+  return {
+    id: entry.id,
+    seed,
+    status: 'failed',
+    requiredInvariants: entry.requiredInvariants,
+    invariants: result.artifact.invariants,
+    ...suiteProvenance(result),
+    code:
+      rejectedRequiredInvariant === undefined
+        ? 'SCENARIO_EXECUTION_FAILED'
+        : 'REQUIRED_INVARIANT_NOT_ACCEPTED',
+    reason:
+      rejectedRequiredInvariant === undefined
+        ? 'Release scenario execution failed'
+        : `Required invariant was not accepted: ${rejectedRequiredInvariant}`,
+  };
+}
+
 class RestartableExternalFaultController implements ExternalFaultController {
   readonly #base: ExternalFaultController;
   readonly #services: LabServiceController;
   readonly #components: Readonly<Record<string, string>>;
+  readonly #controls: Readonly<Record<'sender' | 'receiver', AdapterTestControlClient>>;
 
   constructor(
     base: ExternalFaultController,
     services: LabServiceController,
     components: Readonly<Record<string, string>>,
+    controls: Readonly<Record<'sender' | 'receiver', AdapterTestControlClient>>,
   ) {
     this.#base = base;
     this.#services = services;
     this.#components = components;
+    this.#controls = controls;
   }
 
   async reset(): Promise<void> {
@@ -364,6 +461,26 @@ class RestartableExternalFaultController implements ExternalFaultController {
       throw new Error('External service restart is not configured');
     }
     await this.#services.restart(service);
+  }
+
+  armCrash(input: CrashArmInput): Promise<void> {
+    return this.#controls[input.component].armCrash(input);
+  }
+
+  crashStatus(): Promise<readonly CrashArmStatus[]> {
+    return Promise.allSettled([
+      this.#controls.sender.crashStatus(),
+      this.#controls.receiver.crashStatus(),
+    ]).then((results) => {
+      const unique = new Map<string, CrashArmStatus>();
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        for (const item of result.value) {
+          unique.set(`${item.runId}:${item.component}:${item.boundary}:${item.occurrence}`, item);
+        }
+      }
+      return [...unique.values()];
+    });
   }
 }
 
@@ -431,7 +548,7 @@ export class PackagedLabRuntime implements LabRuntime {
   }
 
   async demo(options: LabDemoOptions = {}): Promise<LabDemoResult> {
-    const seed = options.seed ?? 'cashu-fault-lab-demo';
+    const seed = options.seed ?? 'cashu-fault-lab-v0.1.0-demo';
     const runtimeEnv = await this.#referenceEnv();
     const alreadyRunning = this.#services.isUp
       ? await this.#services.isUp('lab', { envFile: runtimeEnv.path })
@@ -527,10 +644,8 @@ export class PackagedLabRuntime implements LabRuntime {
           `External adapter pair is not registered: ${selection.sender} -> ${selection.receiver}`,
         );
       }
-      const sends = scenario.commands.filter((command) => command.type === 'send');
-      const senderAliases = [...new Set(sends.map((command) => command.sender))];
-      const requestAliases = [...new Set(sends.map((command) => command.requestId))];
-      if (senderAliases.length !== 1 || requestAliases.length !== 1) {
+      const aliases = logicalAliases(scenario);
+      if (aliases === undefined) {
         return failedScenario(
           scenario,
           seed,
@@ -540,15 +655,20 @@ export class PackagedLabRuntime implements LabRuntime {
       const driver = new ExternalAdapterScenarioDriver({
         sender,
         receiver,
-        faults: new RestartableExternalFaultController(this.#faultController(), this.#services, {
-          sender: selection.sender,
-          receiver: selection.receiver,
-        }),
+        faults: new RestartableExternalFaultController(
+          this.#faultController(),
+          this.#services,
+          {
+            sender: selection.sender,
+            receiver: selection.receiver,
+          },
+          { sender, receiver },
+        ),
         amount: 8,
         unit: 'sat',
         transports: externalScenarioTransports(scenario.name),
-        senderAlias: senderAliases[0]!,
-        requestAlias: requestAliases[0]!,
+        senderAlias: aliases.senderAlias,
+        requestAlias: aliases.requestAlias,
       });
       return withPackagedMetadata(await new ScenarioRunner(driver).run(scenario, seed));
     }
@@ -633,6 +753,7 @@ export class PackagedLabRuntime implements LabRuntime {
     profileName: string,
     seed: string,
     adapterManifest?: AdapterManifest,
+    releaseSuite?: LoadedReleaseSuite,
   ): Promise<readonly MatrixCaseResult[]> {
     if (adapterManifest !== undefined) {
       const registry = await ExternalAdapterRegistry.load(adapterManifest, this.#env, {
@@ -648,7 +769,7 @@ export class PackagedLabRuntime implements LabRuntime {
             reason: 'Matrix participant is missing from the external adapter registry',
           };
         }
-        return runExternalDeliveryPair({
+        const smoke = await runExternalDeliveryPair({
           profile: selected,
           seed,
           sender: senderClient,
@@ -656,6 +777,74 @@ export class PackagedLabRuntime implements LabRuntime {
           amount: 8,
           unit: 'sat',
         });
+        if (!smoke.ok || releaseSuite === undefined) return smoke;
+        const scenarios: MatrixScenarioEvidence[] = [];
+        for (const entry of releaseSuite.scenarios) {
+          const scenarioSeed = String(
+            seededProtocolId(seed, `release-suite:${sender.id}:${receiver.id}:${entry.id}`),
+          );
+          const senderRole = sender.capabilities.roles.sender;
+          const receiverRole = receiver.capabilities.roles.receiver;
+          if (
+            senderRole === undefined ||
+            DURABILITY_RANK[senderRole.durability] < DURABILITY_RANK[entry.senderDurability]
+          ) {
+            scenarios.push(
+              suiteNotApplicable(
+                entry,
+                scenarioSeed,
+                `Sender durability does not meet ${entry.senderDurability}`,
+              ),
+            );
+            continue;
+          }
+          if (
+            receiverRole === undefined ||
+            DURABILITY_RANK[receiverRole.durability] < DURABILITY_RANK[entry.receiverDurability]
+          ) {
+            scenarios.push(
+              suiteNotApplicable(
+                entry,
+                scenarioSeed,
+                `Receiver durability does not meet ${entry.receiverDurability}`,
+              ),
+            );
+            continue;
+          }
+          const aliases = logicalAliases(entry.spec);
+          if (aliases === undefined) {
+            scenarios.push({
+              id: entry.id,
+              seed: scenarioSeed,
+              status: 'failed',
+              requiredInvariants: entry.requiredInvariants,
+              invariants: [],
+              code: 'SCENARIO_INPUT_INVALID',
+              reason: 'Release scenario requires one logical sender and request',
+            });
+            continue;
+          }
+          const driver = new ExternalAdapterScenarioDriver({
+            sender: senderClient,
+            receiver: receiverClient,
+            faults: new RestartableExternalFaultController(
+              this.#faultController(),
+              this.#services,
+              { sender: sender.id, receiver: receiver.id },
+              { sender: senderClient, receiver: receiverClient },
+            ),
+            amount: 8,
+            unit: 'sat',
+            transports: entry.transports,
+            senderAlias: aliases.senderAlias,
+            requestAlias: aliases.requestAlias,
+          });
+          const result = withPackagedMetadata(
+            await new ScenarioRunner(driver).run(entry.spec, scenarioSeed),
+          );
+          scenarios.push(suiteEvidence(entry, scenarioSeed, result));
+        }
+        return { ...smoke, scenarios } satisfies MatrixExecutionResult;
       });
       const externalParticipants = registry.participants();
       return externalMatrix.run(profileName, externalParticipants, externalParticipants);
@@ -686,6 +875,25 @@ export class PackagedLabRuntime implements LabRuntime {
       }
       return { ok: false, code: 'UNKNOWN_PROFILE', reason: 'Matrix profile is not implemented' };
     });
-    return matrix.run(profileName, participants, participants);
+    const results = await matrix.run(profileName, participants, participants);
+    if (releaseSuite === undefined) return results;
+    return results.map((result) => {
+      if (result.status !== 'passed') return result;
+      return {
+        ...result,
+        scenarios: releaseSuite.scenarios.map((entry) =>
+          suiteNotApplicable(
+            entry,
+            String(
+              seededProtocolId(
+                seed,
+                `release-suite:${result.sender}:${result.receiver}:${entry.id}`,
+              ),
+            ),
+            'Release suites require configured external adapters',
+          ),
+        ),
+      };
+    });
   }
 }

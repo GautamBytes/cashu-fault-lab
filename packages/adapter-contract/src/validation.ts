@@ -1,6 +1,7 @@
 import { Ajv2020, type ErrorObject, type ValidateFunction } from 'ajv/dist/2020.js';
 import {
   adapterCapabilitiesSchema,
+  crashControlSchema,
   deliveryPayloadSchema,
   deliveryReceiptSchema,
   deliveryRequestSchema,
@@ -161,10 +162,27 @@ const proofResponseSchema = {
   },
 } as const;
 
+const crashControlProperties = crashControlSchema.properties as Readonly<Record<string, unknown>>;
+const crashStatusResponseSchema = {
+  type: 'array',
+  maxItems: 1_000,
+  items: {
+    ...crashControlSchema,
+    $id: undefined,
+    required: ['runId', 'component', 'boundary', 'occurrence', 'hits', 'consumed'],
+    properties: {
+      ...crashControlProperties,
+      hits: { type: 'integer', minimum: 0, maximum: SAFE_INTEGER },
+      consumed: { type: 'boolean' },
+    },
+  },
+} as const;
+
 const requestValidators: Readonly<Record<AdapterRequestOperation, ValidateFunction>> = {
   reset: ajv.compile(resetSchema),
   createRequest: ajv.compile(createRequestInputSchema),
   send: ajv.compile(sendInputSchema),
+  armCrash: ajv.compile(crashControlSchema),
 };
 
 const responseValidators: Readonly<Record<AdapterResponseOperation, ValidateFunction>> = {
@@ -175,6 +193,8 @@ const responseValidators: Readonly<Record<AdapterResponseOperation, ValidateFunc
   delivery: validators.deliveryReceipt,
   ledger: ajv.compile(ledgerResponseSchema),
   proofs: ajv.compile(proofResponseSchema),
+  armCrash: ajv.compile(resetResponseSchema),
+  crashStatus: ajv.compile(crashStatusResponseSchema),
 };
 
 const ERROR_PRIORITY = [

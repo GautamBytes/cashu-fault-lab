@@ -123,6 +123,13 @@ function commandView(
         duplicateCount: command.rule.duplicateCount,
         statusCode: command.rule.statusCode,
       };
+    case 'arm_crash':
+      return {
+        type: command.type,
+        component: command.component,
+        boundary: command.boundary,
+        occurrence: command.occurrence,
+      };
     case 'send':
       return { type: command.type, sender: command.sender, requestId: command.requestId };
     case 'start_send':
@@ -162,10 +169,48 @@ const OBSERVATION_FIELDS: Readonly<Record<string, readonly string[]>> = {
     'amount',
     'unit',
   ],
+  sender_attempt_diagnostic: ['attempt', 'transport', 'stage', 'code', 'retryable'],
 };
+
+const SENDER_ATTEMPT_STAGES = new Set(['transport', 'receipt_validation']);
+const SENDER_ATTEMPT_CODES = new Set([
+  'TRANSPORT_FAILURE',
+  'PERMANENT_FAILURE',
+  'INVALID_RECEIPT',
+  'RECEIPT_IDENTITY_CONFLICT',
+  'RECEIPT_TRANSITION_CONFLICT',
+]);
+
+function senderAttemptDiagnosticView(
+  value: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, string | number | boolean>> {
+  if (
+    typeof value.attempt !== 'number' ||
+    !Number.isSafeInteger(value.attempt) ||
+    value.attempt < 1 ||
+    (value.transport !== 'post' && value.transport !== 'nostr') ||
+    typeof value.stage !== 'string' ||
+    !SENDER_ATTEMPT_STAGES.has(value.stage) ||
+    typeof value.code !== 'string' ||
+    !SENDER_ATTEMPT_CODES.has(value.code) ||
+    typeof value.retryable !== 'boolean'
+  ) {
+    return {};
+  }
+  return {
+    attempt: value.attempt,
+    transport: value.transport,
+    stage: value.stage,
+    code: value.code,
+    retryable: value.retryable,
+  };
+}
 
 function observationView(event: HistoryEvent): Readonly<Record<string, string | number | boolean>> {
   if (!isRecord(event.data)) return {};
+  if (event.event === 'sender_attempt_diagnostic') {
+    return senderAttemptDiagnosticView(event.data);
+  }
   const allowed = OBSERVATION_FIELDS[event.event];
   if (!allowed) return {};
   const result: Record<string, string | number | boolean> = {};

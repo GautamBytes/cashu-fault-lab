@@ -1,0 +1,13 @@
+{
+  "name": "sender-after-reservation-before-payload-persistence",
+  "description": "Terminates after durable proof reservation and verifies the exact reservation is reused.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "sender",
+      "boundary": "sender_after_reservation_before_payload_persistence"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

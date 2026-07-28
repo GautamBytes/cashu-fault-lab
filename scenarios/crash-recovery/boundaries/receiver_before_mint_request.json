@@ -1,0 +1,13 @@
+{
+  "name": "receiver-before-mint-request",
+  "description": "Terminates the receiver before mint dispatch and resumes from the prepared delivery.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "receiver",
+      "boundary": "receiver_before_mint_request"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

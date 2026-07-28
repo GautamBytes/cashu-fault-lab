@@ -4,7 +4,7 @@ TypeScript types, JSON Schema validation, and an HTTP client for the Cashu Fault
 
 ## Purpose
 
-Defines the language-neutral 7-route HTTP contract that every wallet adapter must serve. Adapters in any language can implement these routes and be discovered dynamically by the lab. The JSON Schemas in `spec/schemas/` are normative; the TypeScript types are a convenience.
+Defines the language-neutral HTTP contract that every wallet adapter must serve. Adapters in any language can implement these routes and be discovered dynamically by the lab. The JSON Schemas in `spec/schemas/` are normative; the TypeScript types are a convenience.
 
 ## Key exports
 
@@ -15,7 +15,7 @@ Defines the language-neutral 7-route HTTP contract that every wallet adapter mus
 - **Validation** — `validateAdapterRequest`, `validateAdapterResponse` (AJV-based)
 - **Schemas** — Loaded from `spec/schemas/` at import time
 
-Adapter capabilities may declare optional `durability` as `process-local` or `persistent`. Persistent senders are expected to recover sender delivery state across process replacement for the same deterministic run.
+Adapter roles declare durability as `process` or `restart_safe`. Restart-safe senders must recover delivery identity, proof reservation, exact payload bytes, attempts, and receipts across process replacement for the same deterministic run.
 
 ## Routes defined
 
@@ -28,6 +28,10 @@ Adapter capabilities may declare optional `durability` as `process-local` or `pe
 | `GET`  | `/v1/deliveries/:id` | Read delivery receipt           |
 | `GET`  | `/v1/ledger`         | Merchant credit evidence        |
 | `GET`  | `/v1/proofs`         | Proof-state evidence            |
+| `POST` | `/v1/test/crashes`   | Arm an authenticated test crash |
+| `GET`  | `/v1/test/crashes`   | Read bounded crash-arm evidence |
+
+Crash routes are optional, bearer-gated test controls. Adapters without them return `N/A`; production deployments should not enable them.
 
 ## Tests
 

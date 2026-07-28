@@ -8,10 +8,11 @@ import {
 import type { AdapterCapabilities } from '@cashu-fault-lab/adapter-contract';
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
 import type { DoctorProbes } from '../src/doctor.js';
+import type { LoadedReleaseSuite } from '../src/release-suite-loader.js';
 import {
   runCli,
   type CliIo,
@@ -130,6 +131,7 @@ class FakeRuntime implements LabRuntime {
     _profile?: string,
     _seed?: string,
     adapterManifest?: AdapterManifest,
+    releaseSuite?: LoadedReleaseSuite,
   ): Promise<readonly MatrixCaseResult[]> {
     this.matrices += 1;
     this.adapterManifest = adapterManifest;
@@ -143,6 +145,14 @@ class FakeRuntime implements LabRuntime {
         receiverCapabilities: matrixCapability,
         invariants: [gateInvariant],
         mints: [{ id: 'test-mint', implementation: 'test-mint' }],
+        scenarios:
+          releaseSuite?.scenarios.map(({ id, requiredInvariants }) => ({
+            id,
+            seed: `suite-${id}`,
+            status: 'passed' as const,
+            requiredInvariants,
+            invariants: [gateInvariant],
+          })) ?? [],
       },
     ];
   }
@@ -154,10 +164,12 @@ function fixture(files: Readonly<Record<string, string>> = {}) {
   let stderr = '';
   const io: CliIo = {
     readText: async (path) => {
-      const value = stored.get(path);
+      const value =
+        stored.get(path) ?? stored.get(relative(process.cwd(), path).split('\\').join('/'));
       if (value === undefined) throw new Error(`missing ${path}`);
       return value;
     },
+    realPath: async (path) => path,
     writeText: async (path, value) => {
       stored.set(path, value);
     },
@@ -172,6 +184,26 @@ function fixture(files: Readonly<Record<string, string>> = {}) {
 }
 
 describe('lab CLI', () => {
+  const releaseSuiteFiles = {
+    'spec/release-suite.json': JSON.stringify({
+      schemaVersion: 1,
+      profile: 'delivery-v1',
+      scenarios: [
+        {
+          id: 'test-scenario',
+          scenario: 'scenarios/test-scenario.json',
+          transports: ['http'],
+          senderDurability: 'process',
+          receiverDurability: 'process',
+          requiredInvariants: ['independent-ledger-evidence'],
+        },
+      ],
+    }),
+    'scenarios/test-scenario.json': JSON.stringify({
+      name: 'test-scenario',
+      commands: [{ type: 'assert_quiescent' }],
+    }),
+  };
   it('scaffolds an adapter project through adapter init', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'cashu-cli-adapter-init-'));
     const output = join(directory, 'my-wallet');
@@ -607,7 +639,7 @@ describe('lab CLI', () => {
 
   it('evaluates a release policy and prints every rejection reason', async () => {
     const selectedPolicy = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       profile: 'delivery-v1',
       minimumQualifyingPairs: 2,
       requireCrossImplementation: true,
@@ -616,9 +648,13 @@ describe('lab CLI', () => {
       minimumDistinctMints: 2,
       minimumEvidence: { sender: 'T1', receiver: 'T3' },
       requiredInvariants: ['independent-ledger-evidence'],
+      requiredScenarios: ['test-scenario'],
       acceptedConfidence: ['observed', 'derived'],
     };
-    const setup = fixture({ 'policy.json': JSON.stringify(selectedPolicy) });
+    const setup = fixture({
+      'policy.json': JSON.stringify(selectedPolicy),
+      ...releaseSuiteFiles,
+    });
     const runtime = new FakeRuntime();
     const baseMatrix = runtime.matrix.bind(runtime);
     runtime.matrix = async (...args) =>
@@ -643,7 +679,7 @@ describe('lab CLI', () => {
 
   it('exits zero for a satisfied release policy', async () => {
     const selectedPolicy = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       profile: 'delivery-v1',
       minimumQualifyingPairs: 1,
       requireCrossImplementation: false,
@@ -652,9 +688,13 @@ describe('lab CLI', () => {
       minimumDistinctMints: 0,
       minimumEvidence: { sender: 'T0', receiver: 'T0' },
       requiredInvariants: ['independent-ledger-evidence'],
+      requiredScenarios: ['test-scenario'],
       acceptedConfidence: ['observed'],
     };
-    const setup = fixture({ 'policy.json': JSON.stringify(selectedPolicy) });
+    const setup = fixture({
+      'policy.json': JSON.stringify(selectedPolicy),
+      ...releaseSuiteFiles,
+    });
 
     const outcome = await runCli(
       ['node', 'cashu-fault-lab', 'matrix', '--release-policy', 'policy.json'],

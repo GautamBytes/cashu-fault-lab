@@ -590,7 +590,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
   }
 
   const crashId: InvariantId = 'crash-recovery';
-  if (!commands.some((command) => command.type === 'restart')) {
+  if (!commands.some((command) => command.type === 'restart' || command.type === 'arm_crash')) {
     results.push(notApplicable(crashId, 'The scenario does not restart a component.'));
   } else if (receipts.length === 0 || credits.length === 0) {
     results.push(
@@ -601,7 +601,10 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
   } else {
     results.push(
       passed(crashId, 'derived', [
-        evidence('timeline', 'Scenario command history contains an observed component restart.'),
+        evidence(
+          'timeline',
+          'Scenario command history contains an observed or armed component restart.',
+        ),
         receiptReference(model),
         ledgerReference(model),
       ]),

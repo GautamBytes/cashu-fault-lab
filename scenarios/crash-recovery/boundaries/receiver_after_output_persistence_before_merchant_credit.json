@@ -1,0 +1,13 @@
+{
+  "name": "receiver-after-output-persistence-before-merchant-credit",
+  "description": "Terminates after durable output persistence and credits the merchant exactly once.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "receiver",
+      "boundary": "receiver_after_output_persistence_before_merchant_credit"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

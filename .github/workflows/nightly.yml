@@ -88,6 +88,57 @@ jobs:
           CFL_NOSTR_RELAY_E2E: '1'
         run: pnpm --filter @cashu-fault-lab/adapter-cashu-ts exec vitest run test/nostr-relay-e2e.test.ts
 
+  funded-crash-boundaries:
+    name: Funded cashu-ts crash boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build lab CLI
+        run: pnpm exec turbo run build --filter=@cashu-fault-lab/lab-cli
+      - name: Start funded wallet stack
+        env:
+          CFL_CASHU_TS_TOKEN: nightly-cashu-ts-token
+          CFL_CDK_TOKEN: nightly-cdk-token
+          CFL_REFERENCE_RECEIVER_TOKEN: nightly-receiver-token
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: nightly-fault-token
+          CFL_REFERENCE_RECEIVER_CLAIM_KEY: ERERERERERERERERERERERERERERERERERERERERERE
+        run: docker compose -f infra/compose/wallet-adapters.compose.yml up --build -d --wait
+      - name: Exercise all funded crash boundaries
+        env:
+          CFL_CASHU_TS_TOKEN: nightly-cashu-ts-token
+          CFL_CDK_TOKEN: nightly-cdk-token
+          CFL_REFERENCE_RECEIVER_TOKEN: nightly-receiver-token
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: nightly-fault-token
+        run: |
+          for scenario in scenarios/crash-recovery/boundaries/*.json; do
+            id="$(basename "${scenario}" .json)"
+            node apps/lab-cli/dist/bin.js run "${scenario}" \
+              --seed "nightly-${id//_/-}" \
+              --sender cashu-ts \
+              --receiver cashu-ts \
+              --adapters spec/examples/adapters.local.json
+          done
+      - name: Stop funded wallet stack
+        if: always()
+        env:
+          CFL_CASHU_TS_TOKEN: nightly-cashu-ts-token
+          CFL_CDK_TOKEN: nightly-cdk-token
+          CFL_REFERENCE_RECEIVER_TOKEN: nightly-receiver-token
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: nightly-fault-token
+          CFL_REFERENCE_RECEIVER_CLAIM_KEY: ERERERERERERERERERERERERERERERERERERERERERE
+        run: docker compose -f infra/compose/wallet-adapters.compose.yml down -v
+
   real-mint:
     name: Real mint — ${{ matrix.mint.name }}
     runs-on: ubuntu-latest

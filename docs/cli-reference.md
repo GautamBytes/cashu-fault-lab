@@ -81,7 +81,7 @@ Run the response-loss recovery demo against the reference stack
 Options:
 
 - `--keep`: Leave a stack started by this command running.
-- `--seed <seed>`: Deterministic demo seed. Default: `cashu-fault-lab-demo`.
+- `--seed <seed>`: Deterministic demo seed. Default: `cashu-fault-lab-v0.1.0-demo`.
 - `--artifact <path>`: Write JSON evidence to this path.
 - `--report <path>`: Write HTML report to this path.
 
@@ -98,7 +98,7 @@ Exit Codes:
 Examples:
 
 - `cashu-fault-lab demo`
-- `cashu-fault-lab demo --keep`
+- `cashu-fault-lab demo --seed cashu-fault-lab-v0.1.0-demo --artifact docs/examples/v0.1.0-demo.json --report docs/examples/v0.1.0-demo.html`
 
 ## `cashu-fault-lab run <scenario>`
 
@@ -224,6 +224,7 @@ Options:
 - `--seed <seed>`: Deterministic seed. Default: `cashu-fault-lab`.
 - `--min-passes <count>`: Minimum passing pairs required.
 - `--release-policy <path>`: Release policy JSON file.
+- `--release-suite <path>`: Release scenario suite JSON file.
 - `--adapters <path>`: External adapter manifest.
 - `--format <format>`: Report format for full matrix output. Default: `text`. Choices: `text`, `json`, `junit`, `html`.
 - `--output <path>`: Write the formatted matrix report to a file.

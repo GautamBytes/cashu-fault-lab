@@ -9,6 +9,8 @@ import {
   type Observation,
   type OracleModel,
 } from '@cashu-fault-lab/oracle';
+import { AdapterNotApplicableError, type CrashArmInput } from '@cashu-fault-lab/adapter-contract';
+import type { CrashBoundary } from '@cashu-fault-lab/delivery-core';
 import { isDeepStrictEqual } from 'node:util';
 import { containsSensitiveData, HistoryRecorder, redact, type HistoryEvent } from './history.js';
 import { assertReplayableArtifact, minimizeFailingCommands } from './replay.js';
@@ -29,6 +31,12 @@ export type ScenarioCommand =
       readonly rule: FaultRule;
     }
   | { readonly type: 'send'; readonly sender: string; readonly requestId: string }
+  | {
+      readonly type: 'arm_crash';
+      readonly component: 'sender' | 'receiver';
+      readonly boundary: CrashBoundary;
+      readonly occurrence?: number;
+    }
   | {
       readonly type: 'start_send';
       readonly operationId: string;
@@ -60,6 +68,7 @@ export interface ScenarioDriver {
   restart(component: string): Promise<void>;
   clearFaults(target?: string): Promise<void>;
   advanceTime?(milliseconds: number): Promise<void>;
+  armCrash?(input: CrashArmInput): Promise<void>;
 }
 
 interface PendingSendOperation {
@@ -178,6 +187,7 @@ function imageDigestsFromCapabilities(
 
 export class ScenarioRunner {
   readonly #driver: ScenarioDriver;
+  #activeSeed = '';
 
   constructor(driver: ScenarioDriver) {
     this.#driver = driver;
@@ -191,6 +201,7 @@ export class ScenarioRunner {
     if (containsSensitiveData(spec.commands)) {
       throw new Error('Scenario commands must not contain sensitive payment material');
     }
+    this.#activeSeed = seed;
 
     const scheduler = new VirtualScheduler();
     const history = new HistoryRecorder(() => scheduler.now);
@@ -348,6 +359,25 @@ export class ScenarioRunner {
       case 'configure_fault':
         await this.#driver.configureFault(command.target, command.rule);
         return { oracle, value: { configured: true } };
+      case 'arm_crash':
+        if (this.#driver.armCrash === undefined) {
+          throw new AdapterNotApplicableError('Scenario driver does not provide crash controls');
+        }
+        await this.#driver.armCrash({
+          runId: this.#activeSeed,
+          component: command.component,
+          boundary: command.boundary,
+          occurrence: command.occurrence ?? 1,
+        });
+        return {
+          oracle,
+          value: {
+            armed: true,
+            component: command.component,
+            boundary: command.boundary,
+            occurrence: command.occurrence ?? 1,
+          },
+        };
       case 'send': {
         const result = await this.#driver.send(command.sender, command.requestId);
         return this.#completeSend(result, history, commandIndex, oracle);
@@ -396,7 +426,7 @@ export class ScenarioRunner {
 
   #actor(command: ScenarioCommand): string {
     if (command.type === 'send' || command.type === 'start_send') return command.sender;
-    if (command.type === 'restart') return command.component;
+    if (command.type === 'restart' || command.type === 'arm_crash') return command.component;
     if (command.type === 'configure_fault') return command.target;
     return 'runner';
   }

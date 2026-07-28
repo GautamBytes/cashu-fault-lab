@@ -1,0 +1,13 @@
+{
+  "name": "receiver-after-receipt-persistence-before-response-or-outbox",
+  "description": "Terminates after durable settled receipt/outbox state and returns the stable receipt after restart.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "receiver",
+      "boundary": "receiver_after_receipt_persistence_before_response_or_outbox"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

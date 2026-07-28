@@ -9,6 +9,9 @@ export {
 export { createSeededRandom, retryDelay, type RetryDelayInput } from './retry.js';
 export {
   InMemorySenderState,
+  type SenderAttemptCode,
+  type SenderAttemptDiagnostic,
+  type SenderAttemptStage,
   type SenderDeliveryRecord,
   type SenderDeliveryStatus,
   type SenderState,

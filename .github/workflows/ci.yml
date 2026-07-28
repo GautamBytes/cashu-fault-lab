@@ -102,6 +102,7 @@ jobs:
         working-directory: /tmp/cashu-fault-lab-templates/template-rust
         run: |
           cargo test
+          cargo build
           docker build .
       - name: Verify Python template
         working-directory: /tmp/cashu-fault-lab-templates/template-python
@@ -109,6 +110,61 @@ jobs:
           python -m pip install -e ".[test]"
           pytest
           docker build .
+      - name: Verify TypeScript template through lab client
+        env:
+          TEMPLATE_CONFORMANCE_TOKEN: generated-template-conformance
+        run: |
+          nohup env PORT=4511 HOST=127.0.0.1 TEMPLATE_TS_TOKEN="${TEMPLATE_CONFORMANCE_TOKEN}" \
+            node /tmp/cashu-fault-lab-templates/template-ts/dist/bin.js \
+            >/tmp/cashu-fault-lab-templates/template-ts/server.log 2>&1 &
+          echo "$!" > /tmp/cashu-fault-lab-templates/template-ts/server.pid
+          node scripts/verify-generated-adapter.mjs \
+            --base-url http://127.0.0.1:4511 \
+            --token "${TEMPLATE_CONFORMANCE_TOKEN}"
+      - name: Verify Rust template through lab client
+        env:
+          TEMPLATE_CONFORMANCE_TOKEN: generated-template-conformance
+        run: |
+          nohup env PORT=4512 HOST=127.0.0.1 TEMPLATE_RUST_TOKEN="${TEMPLATE_CONFORMANCE_TOKEN}" \
+            /tmp/cashu-fault-lab-templates/template-rust/target/debug/template-rust \
+            >/tmp/cashu-fault-lab-templates/template-rust/server.log 2>&1 &
+          echo "$!" > /tmp/cashu-fault-lab-templates/template-rust/server.pid
+          node scripts/verify-generated-adapter.mjs \
+            --base-url http://127.0.0.1:4512 \
+            --token "${TEMPLATE_CONFORMANCE_TOKEN}"
+      - name: Verify Python template through lab client
+        env:
+          TEMPLATE_CONFORMANCE_TOKEN: generated-template-conformance
+        run: |
+          nohup env PORT=4513 TEMPLATE_PYTHON_TOKEN="${TEMPLATE_CONFORMANCE_TOKEN}" \
+            python -m uvicorn template_python.main:app \
+            --app-dir /tmp/cashu-fault-lab-templates/template-python/src \
+            --host 127.0.0.1 \
+            --port 4513 \
+            >/tmp/cashu-fault-lab-templates/template-python/server.log 2>&1 &
+          echo "$!" > /tmp/cashu-fault-lab-templates/template-python/server.pid
+          node scripts/verify-generated-adapter.mjs \
+            --base-url http://127.0.0.1:4513 \
+            --token "${TEMPLATE_CONFORMANCE_TOKEN}"
+      - name: Dump generated adapter logs
+        if: failure()
+        run: |
+          for log in /tmp/cashu-fault-lab-templates/*/server.log; do
+            if [[ -f "${log}" ]]; then
+              sed -n '1,200p' "${log}"
+            fi
+          done
+      - name: Stop generated adapters
+        if: always()
+        run: |
+          for pid_file in /tmp/cashu-fault-lab-templates/*/server.pid; do
+            if [[ -f "${pid_file}" ]]; then
+              pid="$(<"${pid_file}")"
+              if [[ "${pid}" =~ ^[0-9]+$ ]]; then
+                kill "${pid}" 2>/dev/null || true
+              fi
+            fi
+          done
 
   reference-lab-demo:
     name: Reference lab startup and demo
@@ -178,6 +234,21 @@ jobs:
           CFL_HTTP_FAULT_GATEWAY_TOKEN: lab-only-fault-token
           CFL_REFERENCE_RECEIVER_CLAIM_KEY: ERERERERERERERERERERERERERERERERERERERERERE
         run: node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/external-receiver-restart-after-settlement.json --seed ci-external-receiver-restart --sender cdk --receiver cashu-ts --adapters spec/examples/adapters.local.json
+      - name: Funded cashu-ts process crash boundaries
+        env:
+          CFL_CASHU_TS_TOKEN: lab-only-cashu-ts-token
+          CFL_CDK_TOKEN: lab-only-cdk-token
+          CFL_REFERENCE_RECEIVER_TOKEN: lab-only-receiver-token
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: lab-only-fault-token
+        run: |
+          for scenario in scenarios/crash-recovery/boundaries/*.json; do
+            id="$(basename "${scenario}" .json)"
+            node apps/lab-cli/dist/bin.js run "${scenario}" \
+              --seed "ci-${id//_/-}" \
+              --sender cashu-ts \
+              --receiver cashu-ts \
+              --adapters spec/examples/adapters.local.json
+          done
       - name: Dump funded wallet diagnostics
         if: failure()
         env:

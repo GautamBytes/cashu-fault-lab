@@ -133,6 +133,7 @@ services:
     command: ['node', 'adapters/cashu-ts/dist/bin.js']
     environment:
       CFL_CASHU_TS_CONTROL_TOKEN: ${CFL_CASHU_TS_TOKEN:?set CFL_CASHU_TS_TOKEN}
+      CFL_CASHU_TS_CRASH_TENANT_ID: cashu-ts-funded-crash
       CFL_CASHU_TS_CLAIM_KEY: ${CFL_CASHU_TS_CLAIM_KEY:-ERERERERERERERERERERERERERERERERERERERERERE}
       CFL_CASHU_TS_FUNDING_AMOUNT: ${CFL_WALLET_FUNDING_AMOUNT:-64}
       CFL_CASHU_TS_HOST: 0.0.0.0
@@ -150,6 +151,7 @@ services:
       CFL_CASHU_TS_SENDER_RUN_ID: ${CFL_CASHU_TS_SENDER_RUN_ID:-cashu-ts-local}
       CFL_CASHU_TS_SENDER_STATE_KEYS: ${CFL_CASHU_TS_SENDER_STATE_KEYS:-1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc}
       CFL_CASHU_TS_SENDER_TENANT_ID: cashu-ts-local
+      CFL_CASHU_TS_TEST_CRASH_CONTROL: '1'
     depends_on:
       http-fault-gateway:
         condition: service_healthy
@@ -169,6 +171,7 @@ services:
       timeout: 2s
       retries: 60
     init: true
+    restart: 'on-failure:10'
     network_mode: service:lab-netns
 
   cdk:

@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
 import { DockerComposeServiceController, PackagedLabRuntime } from '../src/packaged-runtime.js';
+import type { LoadedReleaseSuite } from '../src/release-suite-loader.js';
 import { REFERENCE_RUNTIME_ENV_PATH } from '../src/runtime-env.js';
 
 async function scenario(path: string): Promise<ScenarioSpec> {
@@ -78,7 +79,18 @@ function demoCapability(id: 'cashu-ts' | 'reference-receiver'): AdapterCapabilit
   };
 }
 
-function externalDemoFetch(fetchCalls: string[]): typeof fetch {
+function externalDemoFetch(
+  fetchCalls: string[],
+  gatewayEvidence: Readonly<{
+    inbound: number;
+    forwarded: number;
+    rules: readonly [Readonly<{ applied: number }>];
+  }> = {
+    inbound: 2,
+    forwarded: 1,
+    rules: [{ applied: 1 }],
+  },
+): typeof fetch {
   const requestId = 'AAECAwQFBgcICQoLDA0ODw';
   let activeDeliveryId = 'EBESExQVFhcYGRobHB0eHw';
   const receipt = () =>
@@ -99,7 +111,7 @@ function externalDemoFetch(fetchCalls: string[]): typeof fetch {
     fetchCalls.push(`${url.port}${url.pathname}`);
     if (url.port === '4300') {
       if (url.pathname === '/__faults/v1/evidence') {
-        return new Response(JSON.stringify({ inbound: 2, forwarded: 1 }), {
+        return new Response(JSON.stringify(gatewayEvidence), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -337,6 +349,32 @@ describe('PackagedLabRuntime', () => {
       const report = await readFile(result.reportPath, 'utf8');
       expect(evidence).not.toContain(leakedSecret);
       expect(report).not.toContain(leakedSecret);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails explicitly when the configured demo gateway is bypassed', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cashu-runtime-demo-bypassed-gateway-'));
+    const services = {
+      isUp: async () => false,
+      up: async () => {},
+      down: async () => {},
+      restart: async () => {},
+    };
+    const runtime = new PackagedLabRuntime({
+      services,
+      runtimeRoot: directory,
+      fetch: externalDemoFetch([], { inbound: 0, forwarded: 0, rules: [{ applied: 0 }] }),
+    });
+
+    try {
+      const result = await runtime.demo({ seed: 'demo-bypassed-gateway' });
+
+      expect(result.status).toBe('failed');
+      expect(result.result.status).toBe('failed');
+      if (result.result.status !== 'failed') throw new Error('Expected bypassed gateway to fail');
+      expect(result.result.error.message).toBe('External configured fault was not exercised');
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -584,7 +622,51 @@ describe('PackagedLabRuntime', () => {
       fetch: fakeFetch,
     });
 
-    const results = await runtime.matrix('delivery-v1', 'external-seed', manifest);
+    const releaseSuite: LoadedReleaseSuite = {
+      schemaVersion: 1,
+      profile: 'delivery-v1',
+      scenarios: [
+        {
+          id: 'first-delivery',
+          scenario: 'scenarios/first-delivery.json',
+          transports: ['http'],
+          senderDurability: 'persistent',
+          receiverDurability: 'persistent',
+          requiredInvariants: ['reproducibility', 'no-unsupported-pass'],
+          spec: {
+            name: 'first-delivery',
+            commands: [
+              {
+                type: 'send',
+                sender: 'reference',
+                requestId: 'AAECAwQFBgcICQoLDA0ODw',
+              },
+              { type: 'assert_quiescent' },
+            ],
+          },
+        },
+        {
+          id: 'second-delivery',
+          scenario: 'scenarios/second-delivery.json',
+          transports: ['http'],
+          senderDurability: 'persistent',
+          receiverDurability: 'persistent',
+          requiredInvariants: ['reproducibility', 'no-unsupported-pass'],
+          spec: {
+            name: 'second-delivery',
+            commands: [
+              {
+                type: 'send',
+                sender: 'reference',
+                requestId: 'AAECAwQFBgcICQoLDA0ODw',
+              },
+              { type: 'assert_quiescent' },
+            ],
+          },
+        },
+      ],
+    };
+    const results = await runtime.matrix('delivery-v1', 'external-seed', manifest, releaseSuite);
 
     expect(results).toContainEqual(
       expect.objectContaining({
@@ -610,8 +692,51 @@ describe('PackagedLabRuntime', () => {
           }),
         ]),
         evidence: expect.objectContaining({ credits: 1, seed: 'external-seed' }),
+        scenarios: [
+          expect.objectContaining({
+            id: 'first-delivery',
+            status: 'passed',
+            seed: expect.any(String),
+          }),
+          expect.objectContaining({
+            id: 'second-delivery',
+            status: 'passed',
+            seed: expect.any(String),
+          }),
+        ],
       }),
     );
+    const passedPair = results.find(
+      (result) =>
+        result.status === 'passed' &&
+        result.sender === 'wallet-sender' &&
+        result.receiver === 'wallet-receiver',
+    );
+    expect(passedPair?.status).toBe('passed');
+    if (passedPair?.status === 'passed') {
+      expect(passedPair.scenarios[0]?.seed).not.toBe(passedPair.scenarios[1]?.seed);
+      expect(passedPair.scenarios.map(({ id }) => id)).toEqual([
+        'first-delivery',
+        'second-delivery',
+      ]);
+      expect(passedPair.scenarios[0]).toMatchObject({
+        requiredInvariants: expect.any(Array),
+        capabilities: expect.objectContaining({
+          sender: expect.objectContaining({
+            implementation: expect.objectContaining({ id: 'wallet-sender' }),
+          }),
+          receiver: expect.objectContaining({
+            implementation: expect.objectContaining({ id: 'wallet-receiver' }),
+          }),
+        }),
+        componentVersions: expect.objectContaining({
+          'scenario-runner': expect.any(String),
+          'sender/wallet-sender': '1.0.0',
+          'receiver/wallet-receiver': '1.0.0',
+        }),
+        imageDigests: {},
+      });
+    }
     expect(fetchCalls).toContain('4101/v1/send');
     expect(fetchCalls).toContain(`4102/v1/deliveries/${activeDeliveryId}`);
 

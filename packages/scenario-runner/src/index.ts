@@ -33,6 +33,7 @@ export {
   type MatrixExecutionResult,
   type MatrixExecutor,
   type MatrixParticipant,
+  type MatrixScenarioEvidence,
 } from './matrix.js';
 export {
   evaluateReleasePolicy,
@@ -42,6 +43,12 @@ export {
   type ReleaseGateResult,
   type ReleasePolicy,
 } from './release-policy.js';
+export {
+  validateReleaseSuite,
+  type ReleaseSuite,
+  type ReleaseSuiteEntry,
+} from './release-suite.js';
+export { seededProtocolId } from './seeded-fixture.js';
 export {
   ScenarioRunner,
   type DriverSendResult,

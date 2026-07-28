@@ -17,6 +17,7 @@ import {
   normalizeMintUrl,
   parseProtocolId,
   serializeDeliveryReceipt,
+  type CrashCheckpoint,
   type DeliveryReceiptWire,
 } from '@cashu-fault-lab/delivery-core';
 import {
@@ -58,6 +59,7 @@ export interface FundedCashuTsReceiverOperationsOptions {
   readonly nostrRelayUrls?: readonly string[];
   readonly nostrTimeoutMs?: number;
   readonly nostrPollIntervalMs?: number;
+  readonly crashCheckpoint?: CrashCheckpoint;
 }
 
 export interface FundedCashuTsDualRoleOperationsOptions {
@@ -155,6 +157,9 @@ export class FundedCashuTsReceiverOperations {
         }),
       verifier: proofVerifier(options),
       now: options.now,
+      ...(options.crashCheckpoint === undefined
+        ? {}
+        : { crashCheckpoint: options.crashCheckpoint }),
     };
     if (
       (options.receiverNostrPrivateKey === undefined) !==
@@ -254,7 +259,7 @@ export class FundedCashuTsReceiverOperations {
       expiresAt,
     });
     const transports = input.transports.map((transport) =>
-      this.#paymentRequestTransport(transport),
+      this.#paymentRequestTransport(transport, expiresAt),
     );
     const request = new PaymentRequest(
       transports,
@@ -336,12 +341,20 @@ export class FundedCashuTsReceiverOperations {
     ];
   }
 
-  #paymentRequestTransport(transport: AdapterTransport) {
+  #paymentRequestTransport(transport: AdapterTransport, expiresAt: number) {
+    const negotiationTags = [
+      ['delivery', '1'],
+      ['expires_at', String(expiresAt)],
+    ];
     if (transport === 'http') {
       if (this.#paymentTarget === undefined) {
         throw new Error('cashu-ts HTTP receiver target is not configured');
       }
-      return { type: PaymentRequestTransportType.POST, target: this.#paymentTarget, tags: [] };
+      return {
+        type: PaymentRequestTransportType.POST,
+        target: this.#paymentTarget,
+        tags: negotiationTags,
+      };
     }
     if (this.#nostr === undefined) {
       throw new Error('cashu-ts Nostr receiver target is not configured');
@@ -349,7 +362,7 @@ export class FundedCashuTsReceiverOperations {
     return {
       type: PaymentRequestTransportType.NOSTR,
       target: this.#nostr.target,
-      tags: [['n', '17']],
+      tags: [...negotiationTags, ['n', '17']],
     };
   }
 }

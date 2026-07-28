@@ -48,7 +48,11 @@ if (separator < 3 || separator === process.argv.length - 1) {
       } else {
         const result = spawnSync(command, args, {
           stdio: 'inherit',
-          env: { ...process.env, CFL_NOSTR_RELAY_E2E: '1' },
+          env: {
+            ...process.env,
+            CFL_NOSTR_RELAY_E2E: '1',
+            CFL_FUNDED_CRASH_E2E: '1',
+          },
         });
         process.exitCode = result.status ?? 1;
       }

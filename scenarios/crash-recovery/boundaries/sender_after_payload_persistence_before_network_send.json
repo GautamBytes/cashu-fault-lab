@@ -1,0 +1,13 @@
+{
+  "name": "sender-after-payload-persistence-before-network-send",
+  "description": "Terminates after exact payload persistence and verifies restart sends the stored bytes.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "sender",
+      "boundary": "sender_after_payload_persistence_before_network_send"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

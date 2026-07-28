@@ -90,6 +90,21 @@ describe('HttpAdapterClient', () => {
         });
         if (request.url === '/v1/capabilities') return json(response, 200, capabilities);
         if (request.url === '/v1/reset') return json(response, 200, { ok: true });
+        if (request.url === '/v1/test/crashes' && request.method === 'POST') {
+          return json(response, 200, { ok: true });
+        }
+        if (request.url === '/v1/test/crashes' && request.method === 'GET') {
+          return json(response, 200, [
+            {
+              runId: 'run-a',
+              component: 'sender',
+              boundary: 'sender_before_proof_reservation',
+              occurrence: 1,
+              hits: 0,
+              consumed: false,
+            },
+          ]);
+        }
         if (request.url === '/v1/send') return json(response, 200, receipt);
         response.writeHead(404).end();
       });
@@ -104,6 +119,24 @@ describe('HttpAdapterClient', () => {
         delivery_id: 'EBESExQVFhcYGRobHB0eHw',
       }),
     );
+    await expect(
+      client.armCrash({
+        runId: 'run-a',
+        component: 'sender',
+        boundary: 'sender_before_proof_reservation',
+        occurrence: 1,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(client.crashStatus()).resolves.toEqual([
+      {
+        runId: 'run-a',
+        component: 'sender',
+        boundary: 'sender_before_proof_reservation',
+        occurrence: 1,
+        hits: 0,
+        consumed: false,
+      },
+    ]);
 
     expect(requests).toEqual([
       {
@@ -124,7 +157,40 @@ describe('HttpAdapterClient', () => {
         authorization: 'Bearer control-token',
         body: '{"request":"creqAexample"}',
       },
+      {
+        method: 'POST',
+        url: '/v1/test/crashes',
+        authorization: 'Bearer control-token',
+        body: '{"runId":"run-a","component":"sender","boundary":"sender_before_proof_reservation","occurrence":1}',
+      },
+      {
+        method: 'GET',
+        url: '/v1/test/crashes',
+        authorization: 'Bearer control-token',
+        body: '',
+      },
     ]);
+  });
+
+  it('rejects invalid crash controls before sending and maps disabled controls to N/A', async () => {
+    let requests = 0;
+    const baseUrl = await serve((_request, response) => {
+      requests += 1;
+      json(response, 501, { status: 'N/A', reason: 'Crash controls are disabled' });
+    });
+    const client = new HttpAdapterClient({ baseUrl, token: 'control-token' });
+
+    await expect(
+      client.armCrash({
+        runId: 'run-a',
+        component: 'sender',
+        boundary: 'receiver_before_mint_request',
+        occurrence: 0,
+      }),
+    ).rejects.toMatchObject({ code: 'ADAPTER_REQUEST_CONTRACT' });
+    expect(requests).toBe(0);
+    await expect(client.crashStatus()).rejects.toBeInstanceOf(AdapterNotApplicableError);
+    expect(requests).toBe(1);
   });
 
   it('rejects redirects without forwarding the control token', async () => {

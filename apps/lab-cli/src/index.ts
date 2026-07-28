@@ -18,7 +18,7 @@ import {
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import { Command, CommanderError, Option } from 'commander';
-import { chmod, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile, readdir, realpath } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
 import { registerAdapterCommands } from './commands/adapter.js';
@@ -30,6 +30,7 @@ import {
   renderDiagnosticText,
 } from './diagnostics.js';
 import { PackagedLabRuntime } from './packaged-runtime.js';
+import { loadReleaseSuite, type LoadedReleaseSuite } from './release-suite-loader.js';
 
 const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
 
@@ -78,11 +79,13 @@ export interface LabRuntime {
     profile: string,
     seed: string,
     adapterManifest?: AdapterManifest,
+    releaseSuite?: LoadedReleaseSuite,
   ): Promise<readonly MatrixCaseResult[]>;
 }
 
 export interface CliIo {
   readonly readText: (path: string) => Promise<string>;
+  readonly realPath: (path: string) => Promise<string>;
   readonly writeText: (path: string, value: string) => Promise<void>;
   readonly stdout: (value: string) => void;
   readonly stderr: (value: string) => void;
@@ -100,6 +103,7 @@ export interface CliOutcome {
 
 const defaultIo: CliIo = {
   readText: async (path) => readFile(path, 'utf8'),
+  realPath: realpath,
   writeText: async (path, value) => {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await writeFile(path, value, { encoding: 'utf8', mode: 0o600 });
@@ -256,7 +260,7 @@ export async function runCli(
     .command('demo')
     .description('Run the response-loss recovery demo against the reference stack')
     .option('--keep', 'leave a stack started by this command running', false)
-    .option('--seed <seed>', 'deterministic demo seed', 'cashu-fault-lab-demo')
+    .option('--seed <seed>', 'deterministic demo seed', 'cashu-fault-lab-v0.1.0-demo')
     .option('--artifact <path>', 'write JSON evidence to this path')
     .option('--report <path>', 'write HTML report to this path')
     .action(
@@ -318,13 +322,15 @@ export async function runCli(
                 ? `send: ${cmd.sender} request ${cmd.requestId}`
                 : cmd.type === 'restart'
                   ? `restart: ${cmd.component}`
-                  : cmd.type === 'clear_faults'
-                    ? `clear_faults${cmd.target !== undefined ? ` (${cmd.target})` : ''}`
-                    : cmd.type === 'advance_time'
-                      ? `advance_time: ${cmd.milliseconds}ms`
-                      : cmd.type === 'assert_quiescent'
-                        ? 'assert_quiescent'
-                        : `unknown: ${JSON.stringify(cmd)}`;
+                  : cmd.type === 'arm_crash'
+                    ? `arm_crash: ${cmd.component} ${cmd.boundary} occurrence=${cmd.occurrence ?? 1}`
+                    : cmd.type === 'clear_faults'
+                      ? `clear_faults${cmd.target !== undefined ? ` (${cmd.target})` : ''}`
+                      : cmd.type === 'advance_time'
+                        ? `advance_time: ${cmd.milliseconds}ms`
+                        : cmd.type === 'assert_quiescent'
+                          ? 'assert_quiescent'
+                          : `unknown: ${JSON.stringify(cmd)}`;
           verboseLine(options.verbose, io, `[${i + 1}/${spec.commands.length}] ${label}`);
         }
 
@@ -441,6 +447,7 @@ export async function runCli(
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .option('--min-passes <count>', 'minimum passing pairs required')
     .option('--release-policy <path>', 'release policy JSON file')
+    .option('--release-suite <path>', 'release scenario suite JSON file')
     .option('--adapters <path>', 'external adapter manifest')
     .addOption(
       new Option('--format <format>', 'report format for full matrix output')
@@ -455,6 +462,7 @@ export async function runCli(
         seed: string;
         minPasses?: string;
         releasePolicy?: string;
+        releaseSuite?: string;
         adapters?: string;
         format: 'text' | 'json' | 'junit' | 'html';
         output?: string;
@@ -474,7 +482,29 @@ export async function runCli(
         verboseLine(options.verbose, io, `seed: ${options.seed}`);
         const start = Date.now();
         const adapterManifest = await readAdapterManifest(io, options.adapters);
-        const results = await runtime.matrix(options.profile, options.seed, adapterManifest);
+        const releaseSuitePath =
+          options.releaseSuite ??
+          (releasePolicy === undefined ? undefined : 'spec/release-suite.json');
+        const releaseSuite =
+          releaseSuitePath === undefined
+            ? undefined
+            : await loadReleaseSuite({
+                repositoryRoot: process.cwd(),
+                path: releaseSuitePath,
+                readText: io.readText,
+                realPath: io.realPath,
+              });
+        if (releaseSuite !== undefined && releaseSuite.profile !== options.profile) {
+          throw new Error(
+            `Release suite profile ${releaseSuite.profile} does not match matrix profile ${options.profile}`,
+          );
+        }
+        const results = await runtime.matrix(
+          options.profile,
+          options.seed,
+          adapterManifest,
+          releaseSuite,
+        );
         const releaseGate =
           releasePolicy === undefined ? undefined : evaluateReleasePolicy(releasePolicy, results);
 
@@ -484,6 +514,24 @@ export async function runCli(
             io.stdout(
               `  ${icon} ${result.sender} → ${result.receiver}: ${result.status}${result.status === 'failed' && result.reason ? ` (${result.reason})` : ''}\n`,
             );
+            if (result.status === 'passed') {
+              for (const scenarioEvidence of result.scenarios) {
+                const scenarioIcon =
+                  scenarioEvidence.status === 'passed'
+                    ? '✓'
+                    : scenarioEvidence.status === 'failed'
+                      ? '✗'
+                      : '—';
+                io.stdout(
+                  `      ${scenarioIcon} ${scenarioEvidence.id}: ${scenarioEvidence.status}${scenarioEvidence.reason === undefined ? '' : ` (${scenarioEvidence.reason})`}\n`,
+                );
+                for (const invariant of scenarioEvidence.invariants.filter(
+                  ({ status }) => status !== 'passed',
+                )) {
+                  io.stdout(`          ${invariant.id}: ${invariant.status}\n`);
+                }
+              }
+            }
           }
         }
 

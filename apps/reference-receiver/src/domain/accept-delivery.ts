@@ -1,4 +1,8 @@
-import type { DeliveryReceipt } from '@cashu-fault-lab/delivery-core';
+import {
+  noopCrashCheckpoint,
+  type CrashCheckpoint,
+  type DeliveryReceipt,
+} from '@cashu-fault-lab/delivery-core';
 import type { AcceptDeliveryCommand, SwapPlanDraft } from './types.js';
 import { ReceiverDomainError } from './types.js';
 import { recoverDelivery } from './recover-delivery.js';
@@ -13,6 +17,7 @@ export interface AcceptDeliveryDependencies {
   readonly mint: MintGateway;
   readonly verifier: ProofVerifier;
   readonly now: () => number;
+  readonly crashCheckpoint?: CrashCheckpoint;
 }
 
 function createPlanDraft(
@@ -40,7 +45,11 @@ export async function acceptDelivery(
   }
   const now = deps.now();
   const previous = await deps.store.preflight(command, now);
-  if (previous) return previous.receipt;
+  if (previous) {
+    return previous.phase === 'settled' || previous.phase === 'rejected'
+      ? previous.receipt
+      : recoverDelivery(command.payload.delivery.id, deps);
+  }
   const inspected = await deps.verifier.inspect({ payload: command.payload });
   const plan = await deps.mint.prepareSwap(
     createPlanDraft(command, inspected.ys, inspected.netAmount),
@@ -56,4 +65,8 @@ export async function acceptDelivery(
   });
   if (prepared.kind === 'duplicate') return prepared.record.receipt;
   return recoverDelivery(command.payload.delivery.id, deps);
+}
+
+export function receiverCrashCheckpoint(deps: AcceptDeliveryDependencies): CrashCheckpoint {
+  return deps.crashCheckpoint ?? noopCrashCheckpoint;
 }

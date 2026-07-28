@@ -1,0 +1,13 @@
+{
+  "name": "receiver-after-mint-response-before-output-persistence",
+  "description": "Terminates after mint success and restores the exact outputs before settlement.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "receiver",
+      "boundary": "receiver_after_mint_response_before_output_persistence"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

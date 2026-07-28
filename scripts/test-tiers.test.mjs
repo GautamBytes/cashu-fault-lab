@@ -22,6 +22,18 @@ test('default tests are Docker-free and explicit tiers are available', () => {
   );
 });
 
+test('funded stack consumers run before the crash suite takes ownership of compose', () => {
+  const command = root.scripts['test:funded:run'];
+  assert.match(
+    command,
+    /cross-language-docker\.test\.ts[^&]*&&[^&]*funded-crash-boundaries\.test\.ts/,
+  );
+  assert.doesNotMatch(
+    command,
+    /vitest run[^&]*cross-language-docker\.test\.ts[^&]*funded-crash-boundaries\.test\.ts/,
+  );
+});
+
 test('unit package tests exclude every container-backed suite', () => {
   const command = root.scripts['test:unit:packages'];
   for (const suite of [

@@ -1,5 +1,9 @@
 .git
 .github
+.worktrees
+.worktrees/
+.pnpm-store
+.pnpm-store/
 .turbo
 **/.turbo
 **/dist

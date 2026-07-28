@@ -8,6 +8,7 @@ import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import type {
   CashuTsDeliveryStore,
   CashuTsDeliveryStoreDurability,
+  CashuTsStoredReservation,
   CashuTsStoredDelivery,
 } from './funded-operations.js';
 
@@ -16,6 +17,15 @@ interface SenderDeliveryRow extends QueryResultRow {
   readonly record_ciphertext: Buffer;
   readonly record_nonce: Buffer;
   readonly record_tag: Buffer;
+  readonly key_version: number;
+}
+
+interface SenderReservationRow extends QueryResultRow {
+  readonly delivery_id: string;
+  readonly request_fingerprint: string;
+  readonly ciphertext: Buffer;
+  readonly nonce: Buffer;
+  readonly tag: Buffer;
   readonly key_version: number;
 }
 
@@ -149,6 +159,23 @@ function deserializeRecord(value: Buffer): CashuTsStoredDelivery {
     ...(parsed as Omit<SerializedCashuTsStoredDelivery, 'payloadBytes'>),
     payloadBytes: Uint8Array.from(Buffer.from(parsed.payloadBytes, 'base64url')),
   };
+}
+
+function deserializeReservation(value: Buffer): CashuTsStoredReservation {
+  const parsed = JSON.parse(value.toString('utf8')) as Partial<CashuTsStoredReservation>;
+  if (
+    typeof parsed.deliveryId !== 'string' ||
+    typeof parsed.requestFingerprint !== 'string' ||
+    typeof parsed.reserved !== 'object' ||
+    parsed.reserved === null ||
+    typeof parsed.reserved.mint !== 'string' ||
+    !Array.isArray(parsed.reserved.proofs) ||
+    typeof parsed.proofEvidence !== 'object' ||
+    parsed.proofEvidence === null
+  ) {
+    throw new Error('Cashu sender proof reservation is invalid');
+  }
+  return parsed as CashuTsStoredReservation;
 }
 
 function selectedTransportIndex(record: CashuTsStoredDelivery): number {
@@ -409,6 +436,74 @@ export class PostgresCashuTsSenderStore implements CashuTsDeliveryStore {
       [this.#tenantId, this.#runId],
     );
     return result.rows.map((row) => this.#decryptRecord(row));
+  }
+
+  async getReservation(deliveryId: string): Promise<CashuTsStoredReservation | undefined> {
+    const result = await this.#pool.query<SenderReservationRow>(
+      `SELECT delivery_id, request_fingerprint, ciphertext, nonce, tag, key_version
+       FROM cashu_sender_reservations
+       WHERE tenant_id = $1 AND run_id = $2 AND delivery_id = $3`,
+      [this.#tenantId, this.#runId, deliveryId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) return undefined;
+    const reservation = deserializeReservation(
+      this.#decrypt(
+        'cashu-sender-reservation',
+        row.delivery_id,
+        row.key_version,
+        row.ciphertext,
+        row.nonce,
+        row.tag,
+      ),
+    );
+    if (
+      reservation.deliveryId !== row.delivery_id ||
+      reservation.requestFingerprint !== row.request_fingerprint
+    ) {
+      throw new Error('Cashu sender proof reservation identity is invalid');
+    }
+    return reservation;
+  }
+
+  async putReservation(reservation: CashuTsStoredReservation): Promise<void> {
+    const encrypted = this.#encrypt(
+      'cashu-sender-reservation',
+      reservation.deliveryId,
+      reservation,
+    );
+    try {
+      await this.#pool.query(
+        `INSERT INTO cashu_sender_reservations (
+           tenant_id, run_id, delivery_id, request_fingerprint, phase,
+           ciphertext, nonce, tag, key_version
+         ) VALUES ($1, $2, $3, $4, 'RESERVED', $5, $6, $7, $8)
+         ON CONFLICT (tenant_id, run_id, delivery_id) DO NOTHING`,
+        [
+          this.#tenantId,
+          this.#runId,
+          reservation.deliveryId,
+          reservation.requestFingerprint,
+          encrypted.ciphertext,
+          encrypted.nonce,
+          encrypted.tag,
+          encrypted.keyVersion,
+        ],
+      );
+    } catch (error) {
+      if (databaseErrorCode(error) === '23503') {
+        throw new Error('Cashu sender run is not initialized');
+      }
+      throw error;
+    }
+    const stored = await this.getReservation(reservation.deliveryId);
+    if (
+      stored === undefined ||
+      stored.requestFingerprint !== reservation.requestFingerprint ||
+      JSON.stringify(stored) !== JSON.stringify(reservation)
+    ) {
+      throw new Error('Cashu delivery reservation identity conflicts');
+    }
   }
 
   async #withRunLock(client: DatabaseConnection): Promise<void> {

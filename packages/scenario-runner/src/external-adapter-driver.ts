@@ -3,6 +3,8 @@ import {
   AdapterNotApplicableError,
   validateAdapterCompatibility,
   type AdapterCapabilities,
+  type CrashArmInput,
+  type CrashArmStatus,
   type AdapterTransport,
   type AdapterClient,
   type LedgerCreditView,
@@ -22,6 +24,9 @@ import { seededProtocolId } from './seeded-fixture.js';
 export interface ExternalFaultEvidence {
   readonly inbound: number;
   readonly forwarded: number;
+  readonly controller: 'direct' | 'http-gateway';
+  readonly observedTarget?: string;
+  readonly appliedFaults?: number;
 }
 
 export interface ExternalFaultController {
@@ -30,6 +35,8 @@ export interface ExternalFaultController {
   clear(target?: string): Promise<void>;
   evidence(): Promise<ExternalFaultEvidence>;
   restart?(component: string): Promise<void>;
+  armCrash?(input: CrashArmInput): Promise<void>;
+  crashStatus?(): Promise<readonly CrashArmStatus[]>;
 }
 
 export interface ExternalAdapterScenarioDriverOptions {
@@ -60,7 +67,7 @@ export class DirectExternalFaultController implements ExternalFaultController {
   async clear(): Promise<void> {}
 
   async evidence(): Promise<ExternalFaultEvidence> {
-    return { inbound: 1, forwarded: 1 };
+    return { inbound: 0, forwarded: 0, controller: 'direct' };
   }
 }
 
@@ -167,6 +174,8 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   #senderCapabilities: AdapterCapabilities | undefined;
   #receiverCapabilities: AdapterCapabilities | undefined;
   readonly #redeemedDeliveries = new Set<string>();
+  readonly #configuredTransportFaults = new Set<string>();
+  readonly #armedCrashes: CrashArmInput[] = [];
 
   constructor(options: ExternalAdapterScenarioDriverOptions) {
     this.#sender = options.sender;
@@ -185,7 +194,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#maxAttempts = positiveSafeInteger(options.maxAttempts ?? 3, 'maxAttempts');
     this.#retryDelayMs = positiveSafeInteger(options.retryDelayMs ?? 100, 'retryDelayMs');
     this.#restartReadinessAttempts = positiveSafeInteger(
-      options.restartReadinessAttempts ?? 20,
+      options.restartReadinessAttempts ?? 120,
       'restartReadinessAttempts',
     );
     this.#restartReadinessDelayMs = positiveSafeInteger(
@@ -205,6 +214,8 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#senderCapabilities = undefined;
     this.#receiverCapabilities = undefined;
     this.#redeemedDeliveries.clear();
+    this.#configuredTransportFaults.clear();
+    this.#armedCrashes.length = 0;
     this.#senderCapabilities = await adapterCall('sender capability discovery', () =>
       this.#sender.capabilities(),
     );
@@ -265,8 +276,35 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   async configureFault(target: string, rule: FaultRule): Promise<void> {
     try {
       await this.#faults.configure(target, rule);
+      if (target === 'http' || target === 'nostr') {
+        this.#configuredTransportFaults.add(target);
+      }
     } catch {
       throw new Error('External fault configuration failed');
+    }
+  }
+
+  async armCrash(input: CrashArmInput): Promise<void> {
+    if (this.#faults.armCrash === undefined || this.#faults.crashStatus === undefined) {
+      throw new AdapterNotApplicableError('Selected adapter does not provide crash controls');
+    }
+    try {
+      await this.#faults.armCrash(input);
+      const status = await this.#faults.crashStatus();
+      const evidence = status.find(
+        (item) =>
+          item.runId === input.runId &&
+          item.component === input.component &&
+          item.boundary === input.boundary &&
+          item.occurrence === input.occurrence,
+      );
+      if (evidence === undefined || evidence.hits !== 0 || evidence.consumed) {
+        throw new Error('Crash arm evidence does not match the requested checkpoint');
+      }
+      this.#armedCrashes.push(input);
+    } catch (error) {
+      if (error instanceof AdapterNotApplicableError) throw error;
+      throw new Error('External crash control could not be armed');
     }
   }
 
@@ -298,6 +336,9 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       } catch (error) {
         if (error instanceof AdapterNotApplicableError) throw error;
         lastSendError = error;
+        if (this.#armedCrashes.length > 0) {
+          await this.#waitForRestartReadiness(this.#armedCrashes.at(-1)?.component ?? 'sender');
+        }
         if (sendAttempts + 1 === this.#maxAttempts) {
           throw new Error(
             `External sender did not return a receipt after retry attempts${adapterErrorHint(lastSendError)}`,
@@ -307,6 +348,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       }
     }
     if (sent === undefined) throw new Error('External sender did not return a receipt');
+    await this.#assertCrashEvidence();
     if (
       sent.requestId !== request.id ||
       sent.deliveryId !== deliveryId ||
@@ -345,8 +387,26 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     } catch {
       throw new Error('External fault evidence collection failed');
     }
+    const controllerAttempts = Math.max(faultEvidence.inbound, faultEvidence.forwarded);
+    if (
+      faultEvidence.appliedFaults !== undefined &&
+      (!Number.isSafeInteger(faultEvidence.appliedFaults) || faultEvidence.appliedFaults < 0)
+    ) {
+      throw new Error('External fault evidence collection failed');
+    }
+    const configuredFaultWasObserved =
+      faultEvidence.controller === 'http-gateway' &&
+      faultEvidence.observedTarget !== undefined &&
+      this.#configuredTransportFaults.has(faultEvidence.observedTarget) &&
+      (faultEvidence.appliedFaults ?? 0) > 0;
+    if (
+      this.#configuredTransportFaults.size > 0 &&
+      (controllerAttempts === 0 || !configuredFaultWasObserved)
+    ) {
+      throw new Error('External configured fault was not exercised');
+    }
     const transportAttempts = positiveSafeInteger(
-      Math.max(faultEvidence.inbound, faultEvidence.forwarded),
+      Math.max(sendAttempts, controllerAttempts),
       'transport attempts',
     );
     const deliveryObservation = (transport: AdapterTransport) =>
@@ -419,6 +479,10 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
         deliveryId: observed.deliveryId,
         controlAttempts: sendAttempts,
         transportAttempts,
+        faultController: faultEvidence.controller,
+        ...(faultEvidence.observedTarget === undefined
+          ? {}
+          : { faultObservedTarget: faultEvidence.observedTarget }),
         creditCount: credit.creditCount,
         proofSetHash: proof.proofSetHash,
       },
@@ -436,6 +500,11 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   async clearFaults(target?: string): Promise<void> {
     try {
       await this.#faults.clear(target);
+      if (target === undefined) {
+        this.#configuredTransportFaults.clear();
+      } else {
+        this.#configuredTransportFaults.delete(target);
+      }
     } catch {
       throw new Error('External fault cleanup failed');
     }
@@ -479,6 +548,26 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
           );
         }
         await this.#sleep(this.#restartReadinessDelayMs);
+      }
+    }
+  }
+
+  async #assertCrashEvidence(): Promise<void> {
+    if (this.#armedCrashes.length === 0) return;
+    if (this.#faults.crashStatus === undefined) {
+      throw new Error('External crash status evidence is unavailable');
+    }
+    const status = await this.#faults.crashStatus();
+    for (const armed of this.#armedCrashes) {
+      const evidence = status.find(
+        (item) =>
+          item.runId === armed.runId &&
+          item.component === armed.component &&
+          item.boundary === armed.boundary &&
+          item.occurrence === armed.occurrence,
+      );
+      if (evidence === undefined || !evidence.consumed || evidence.hits < armed.occurrence) {
+        throw new Error('External crash arm was not consumed');
       }
     }
   }

@@ -131,6 +131,22 @@ const result: ScenarioRunResult = {
           secret: 'secret-a',
         },
       },
+      {
+        sequence: 3,
+        at: 12,
+        phase: 'observation',
+        actor: 'sender',
+        event: 'sender_attempt_diagnostic',
+        commandIndex: 1,
+        data: {
+          attempt: 1,
+          transport: 'post',
+          stage: 'transport',
+          code: 'TRANSPORT_FAILURE',
+          retryable: true,
+          message: 'Bearer top-secret must-not-leak',
+        },
+      },
     ],
   },
 };
@@ -178,6 +194,13 @@ describe('allowlist report rendering', () => {
       deliveryId: 'delivery-1',
       proofSetHash: 'b'.repeat(64),
     });
+    expect(report.timeline[3]?.data).toEqual({
+      attempt: 1,
+      transport: 'post',
+      stage: 'transport',
+      code: 'TRANSPORT_FAILURE',
+      retryable: true,
+    });
     expect(report.commands.at(-2)).toEqual({
       type: 'start_send',
       operationId: 'op-1',
@@ -195,6 +218,33 @@ describe('allowlist report rendering', () => {
     expectSecretFree(junit);
     expect(junit).toContain('<testsuite');
     expect(junit).toContain('<failure');
+  });
+
+  it('drops sender diagnostics whose enum fields are not recognized', () => {
+    const tainted: ScenarioRunResult = {
+      ...result,
+      artifact: {
+        ...result.artifact,
+        history: result.artifact.history.map((event) =>
+          event.event === 'sender_attempt_diagnostic'
+            ? {
+                ...event,
+                data: {
+                  attempt: 1,
+                  transport: 'post',
+                  stage: 'transport',
+                  code: 'Bearer top-secret must-not-leak',
+                  retryable: true,
+                },
+              }
+            : event,
+        ),
+      },
+    };
+
+    const report = createReport({ result: tainted });
+    expect(report.timeline[3]?.data).toBeUndefined();
+    expect(JSON.stringify(report)).not.toContain('top-secret');
   });
 
   it('uses artifact-level component versions and image digests by default', () => {
@@ -281,6 +331,24 @@ const matrixResults: readonly MatrixCaseResult[] = [
     },
     invariants: [],
     mints: [],
+    scenarios: [
+      {
+        id: 'retry-response-lost',
+        seed: 'scenario-seed',
+        status: 'failed',
+        code: 'REQUIRED_INVARIANT_NOT_PASSED',
+        reason: 'Required invariant was not passed: retry-convergence',
+        requiredInvariants: ['retry-convergence'],
+        invariants: [
+          {
+            id: 'retry-convergence',
+            status: 'not_observable',
+            confidence: 'adapter_claimed',
+            evidence: [],
+          },
+        ],
+      },
+    ],
   },
   {
     profile: 'delivery-v1',
@@ -392,13 +460,15 @@ describe('matrix report rendering', () => {
     });
 
     expect(junit).toContain('<testsuite');
-    expect(junit).toContain('tests="4"');
-    expect(junit).toContain('failures="1"');
+    expect(junit).toContain('tests="5"');
+    expect(junit).toContain('failures="2"');
     expect(junit).toContain('skipped="2"');
     expect(junit).toContain('<failure type="ADAPTER_UNSUPPORTED"');
     expect(junit).toContain('<skipped type="NUT26_NIP_MAPPING_MISMATCH"');
     expect(junit).toContain('<skipped message="cdk receiver is not registered"');
-    expect(junit.match(/<testcase/g)?.length).toBe(4);
+    expect(junit).toContain('name="retry-response-lost"');
+    expect(junit).toContain('<failure type="REQUIRED_INVARIANT_NOT_PASSED"');
+    expect(junit.match(/<testcase/g)?.length).toBe(5);
   });
 
   it('renders self-contained HTML without leaking secrets or script tags', () => {
@@ -411,6 +481,8 @@ describe('matrix report rendering', () => {
     expect(html).toContain('<!doctype html>');
     expect(html).toContain('Compatibility matrix');
     expect(html).toContain('ref</td><td>→</td><td>ref');
+    expect(html).toContain('retry-response-lost');
+    expect(html).toContain('retry-convergence: not_observable');
     expect(html).toContain('NUT26_NIP_MAPPING_MISMATCH');
     expect(html).not.toContain('<script>');
   });

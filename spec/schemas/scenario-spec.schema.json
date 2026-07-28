@@ -20,6 +20,7 @@
       "type": "object",
       "oneOf": [
         { "$ref": "#/$defs/configure_fault" },
+        { "$ref": "#/$defs/arm_crash" },
         { "$ref": "#/$defs/send" },
         { "$ref": "#/$defs/start_send" },
         { "$ref": "#/$defs/await_send" },
@@ -50,6 +51,64 @@
         "target": { "enum": ["http", "nostr", "receiver", "mint"] },
         "rule": { "$ref": "#/$defs/faultRule" }
       }
+    },
+    "arm_crash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "component", "boundary"],
+      "properties": {
+        "type": { "const": "arm_crash" },
+        "component": { "enum": ["sender", "receiver"] },
+        "boundary": {
+          "enum": [
+            "sender_before_proof_reservation",
+            "sender_after_reservation_before_payload_persistence",
+            "sender_after_payload_persistence_before_network_send",
+            "sender_after_send_before_response",
+            "receiver_before_mint_request",
+            "receiver_after_mint_request_before_response",
+            "receiver_after_mint_response_before_output_persistence",
+            "receiver_after_output_persistence_before_merchant_credit",
+            "receiver_after_credit_before_receipt_persistence",
+            "receiver_after_receipt_persistence_before_response_or_outbox"
+          ]
+        },
+        "occurrence": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "component": { "const": "sender" } },
+            "required": ["component"]
+          },
+          "then": {
+            "properties": {
+              "boundary": {
+                "enum": [
+                  "sender_before_proof_reservation",
+                  "sender_after_reservation_before_payload_persistence",
+                  "sender_after_payload_persistence_before_network_send",
+                  "sender_after_send_before_response"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "boundary": {
+                "enum": [
+                  "receiver_before_mint_request",
+                  "receiver_after_mint_request_before_response",
+                  "receiver_after_mint_response_before_output_persistence",
+                  "receiver_after_output_persistence_before_merchant_credit",
+                  "receiver_after_credit_before_receipt_persistence",
+                  "receiver_after_receipt_persistence_before_response_or_outbox"
+                ]
+              }
+            }
+          }
+        }
+      ]
     },
     "send": {
       "type": "object",

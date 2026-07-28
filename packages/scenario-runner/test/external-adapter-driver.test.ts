@@ -67,13 +67,55 @@ class Faults implements ExternalFaultController {
 
   async clear(): Promise<void> {}
 
-  async evidence(): Promise<{ readonly inbound: number; readonly forwarded: number }> {
-    return { inbound: this.inbound, forwarded: this.forwards };
+  async evidence(): Promise<{
+    readonly inbound: number;
+    readonly forwarded: number;
+    readonly controller: 'http-gateway';
+    readonly observedTarget: 'http';
+    readonly appliedFaults: number;
+  }> {
+    return {
+      inbound: this.inbound,
+      forwarded: this.forwards,
+      controller: 'http-gateway',
+      observedTarget: 'http',
+      appliedFaults: this.applied.length,
+    };
   }
 
   async restart(component: string): Promise<void> {
     this.restarts.push(component);
     this.onRestart?.(component);
+  }
+}
+
+class ZeroTrafficFaults extends Faults {
+  async reset(): Promise<void> {
+    await super.reset();
+    this.inbound = 0;
+    this.forwards = 0;
+  }
+
+  async configure(target: string, rule: FaultRule): Promise<void> {
+    this.applied.push({ target, rule });
+  }
+}
+
+class UnappliedGatewayFaults extends Faults {
+  async evidence(): Promise<{
+    readonly inbound: number;
+    readonly forwarded: number;
+    readonly controller: 'http-gateway';
+    readonly observedTarget: 'http';
+    readonly appliedFaults: 0;
+  }> {
+    return {
+      inbound: 2,
+      forwarded: 2,
+      controller: 'http-gateway',
+      observedTarget: 'http',
+      appliedFaults: 0,
+    };
   }
 }
 
@@ -227,6 +269,72 @@ function scenario(kind: 'drop_response' | 'duplicate', duplicateCount?: number):
 }
 
 describe('ExternalAdapterScenarioDriver', () => {
+  it('uses runner-observed attempts when an unused gateway reports zero traffic', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new ZeroTrafficFaults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(
+      {
+        name: 'external-no-fault',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-no-fault',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(
+      result.artifact.history.filter(
+        (event) => event.phase === 'observation' && event.event === 'delivery_attempted',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('fails explicitly when a configured gateway fault receives no traffic', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new ZeroTrafficFaults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(scenario('drop_response'), 'external-unexercised-fault');
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected configured fault to fail');
+    expect(result.error.message).toBe('External configured fault was not exercised');
+  });
+
+  it('fails explicitly when gateway traffic did not apply the configured fault rule', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new UnappliedGatewayFaults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(scenario('drop_response'), 'external-unapplied-fault');
+
+    expect(result.status).toBe('failed');
+    if (result.status !== 'failed') throw new Error('Expected unapplied fault to fail');
+    expect(result.error.message).toBe('External configured fault was not exercised');
+  });
+
   it('reuses one logical delivery after a lost response and produces one credit', async () => {
     const receiver = new Receiver();
     const sender = new Sender(receiver);
@@ -444,6 +552,44 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(result.status).toBe('passed');
     expect(faults.restarts).toEqual(['receiver']);
     expect(waits).toEqual([25, 25, 25]);
+  });
+
+  it('allows repeated container restart backoff to exceed twenty readiness probes', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    const waits: number[] = [];
+    faults.onRestart = (component) => {
+      if (component === 'receiver') sender.availabilityFailures = 20;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessDelayMs: 25,
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(
+      {
+        name: 'external-repeated-container-restart-backoff',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-repeated-container-restart-backoff',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(faults.restarts).toEqual(['receiver']);
+    expect(waits).toHaveLength(20);
   });
 
   it('reports the exact sender readiness probe failure after exhausting restart attempts', async () => {

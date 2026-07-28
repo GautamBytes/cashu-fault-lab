@@ -7,7 +7,7 @@ import {
 import type { MatrixCaseResult } from './matrix.js';
 
 export interface ReleasePolicy {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly profile: string;
   readonly minimumQualifyingPairs: number;
   readonly requireCrossImplementation: boolean;
@@ -19,6 +19,7 @@ export interface ReleasePolicy {
     readonly receiver: EvidenceTier;
   };
   readonly requiredInvariants: readonly InvariantId[];
+  readonly requiredScenarios: readonly string[];
   readonly acceptedConfidence: readonly EvidenceConfidence[];
 }
 
@@ -29,6 +30,8 @@ export type ReleaseGateReasonCode =
   | 'SENDER_EVIDENCE_TOO_LOW'
   | 'RECEIVER_EVIDENCE_TOO_LOW'
   | 'MINT_IDENTITY_REQUIRED'
+  | 'REQUIRED_SCENARIO_MISSING'
+  | 'REQUIRED_SCENARIO_NOT_PASSED'
   | 'REQUIRED_INVARIANT_MISSING'
   | 'REQUIRED_INVARIANT_NOT_PASSED'
   | 'INVARIANT_CONFIDENCE_REJECTED'
@@ -41,6 +44,7 @@ export interface ReleaseGateReason {
   readonly code: ReleaseGateReasonCode;
   readonly message: string;
   readonly pair?: string;
+  readonly scenario?: string;
 }
 
 export interface ReleaseGateResult {
@@ -59,6 +63,7 @@ const POLICY_KEYS = new Set([
   'minimumDistinctMints',
   'minimumEvidence',
   'requiredInvariants',
+  'requiredScenarios',
   'acceptedConfidence',
 ]);
 const EVIDENCE_KEYS = new Set(['sender', 'receiver']);
@@ -104,7 +109,7 @@ function tier(value: unknown, name: string): EvidenceTier {
 export function validateReleasePolicy(value: unknown): ReleasePolicy {
   const input = record(value, 'Release policy must be an object');
   exactKeys(input, POLICY_KEYS, 'Release policy contains an unknown field');
-  if (input.schemaVersion !== 1) throw new Error('Release policy schemaVersion must be 1');
+  if (input.schemaVersion !== 2) throw new Error('Release policy schemaVersion must be 2');
   if (typeof input.profile !== 'string' || !INVARIANT_ID.test(input.profile)) {
     throw new Error('Release policy profile is invalid');
   }
@@ -125,6 +130,14 @@ export function validateReleasePolicy(value: unknown): ReleasePolicy {
     throw new Error('Release policy requiredInvariants are invalid');
   }
   if (
+    !Array.isArray(input.requiredScenarios) ||
+    input.requiredScenarios.length === 0 ||
+    input.requiredScenarios.some((id) => typeof id !== 'string' || !INVARIANT_ID.test(id)) ||
+    new Set(input.requiredScenarios).size !== input.requiredScenarios.length
+  ) {
+    throw new Error('Release policy requiredScenarios are invalid');
+  }
+  if (
     !Array.isArray(input.acceptedConfidence) ||
     input.acceptedConfidence.length === 0 ||
     input.acceptedConfidence.some(
@@ -135,7 +148,7 @@ export function validateReleasePolicy(value: unknown): ReleasePolicy {
     throw new Error('Release policy acceptedConfidence is invalid');
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     profile: input.profile,
     minimumQualifyingPairs: nonnegativeInteger(
       input.minimumQualifyingPairs,
@@ -153,6 +166,7 @@ export function validateReleasePolicy(value: unknown): ReleasePolicy {
       receiver: tier(evidence.receiver, 'minimumEvidence.receiver'),
     },
     requiredInvariants: input.requiredInvariants as readonly InvariantId[],
+    requiredScenarios: input.requiredScenarios as readonly string[],
     acceptedConfidence: input.acceptedConfidence as readonly EvidenceConfidence[],
   };
 }
@@ -253,6 +267,69 @@ function pairReasons(
     add('MINT_IDENTITY_REQUIRED', 'A configured mint identity is required.');
   }
 
+  const addScenarioInvariantReason = (
+    code: ReleaseGateReasonCode,
+    scenario: string,
+    message: string,
+  ): void => {
+    reasons.push({ code, message, pair, scenario });
+  };
+
+  for (const id of policy.requiredScenarios) {
+    const matches = selected.scenarios.filter((scenario) => scenario.id === id);
+    if (matches.length === 0) {
+      reasons.push({
+        code: 'REQUIRED_SCENARIO_MISSING',
+        message: `Required scenario ${id} is missing for ${pair}.`,
+        pair,
+        scenario: id,
+      });
+      continue;
+    }
+    const result = matches[0]!;
+    if (matches.length !== 1 || result.status !== 'passed') {
+      reasons.push({
+        code: 'REQUIRED_SCENARIO_NOT_PASSED',
+        message:
+          matches.length === 1
+            ? `Required scenario ${id} has status ${result.status} for ${pair}.`
+            : `Required scenario ${id} does not have unique passing evidence for ${pair}.`,
+        pair,
+        scenario: id,
+      });
+      continue;
+    }
+    const scenarioInvariants = new Map(
+      result.invariants.map((invariant) => [invariant.id, invariant]),
+    );
+    for (const invariantId of result.requiredInvariants) {
+      const invariant = scenarioInvariants.get(invariantId);
+      if (invariant === undefined) {
+        addScenarioInvariantReason(
+          'REQUIRED_INVARIANT_MISSING',
+          id,
+          `Required scenario ${id} is missing invariant ${invariantId} for ${pair}.`,
+        );
+        continue;
+      }
+      if (invariant.status !== 'passed') {
+        addScenarioInvariantReason(
+          'REQUIRED_INVARIANT_NOT_PASSED',
+          id,
+          `Required scenario ${id} invariant ${invariantId} has status ${invariant.status} for ${pair}.`,
+        );
+        continue;
+      }
+      if (!policy.acceptedConfidence.includes(invariant.confidence)) {
+        addScenarioInvariantReason(
+          'INVARIANT_CONFIDENCE_REJECTED',
+          id,
+          `Required scenario ${id} invariant ${invariantId} has rejected confidence ${invariant.confidence} for ${pair}.`,
+        );
+      }
+    }
+  }
+
   const invariants = new Map(selected.invariants.map((result) => [result.id, result]));
   for (const id of policy.requiredInvariants) {
     const result = invariants.get(id);
@@ -277,7 +354,9 @@ function pairReasons(
 function sortReasons(reasons: readonly ReleaseGateReason[]): readonly ReleaseGateReason[] {
   return [...reasons].sort((left, right) => {
     const pair = (left.pair ?? '').localeCompare(right.pair ?? '');
-    return pair === 0 ? left.code.localeCompare(right.code) : pair;
+    if (pair !== 0) return pair;
+    const code = left.code.localeCompare(right.code);
+    return code === 0 ? (left.scenario ?? '').localeCompare(right.scenario ?? '') : code;
   });
 }
 

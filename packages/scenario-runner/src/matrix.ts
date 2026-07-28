@@ -5,7 +5,7 @@ import {
   type AdapterMintIdentity,
   type AdapterRole,
 } from '@cashu-fault-lab/adapter-contract';
-import type { InvariantResult } from '@cashu-fault-lab/oracle';
+import type { InvariantId, InvariantResult } from '@cashu-fault-lab/oracle';
 
 export interface MatrixParticipant {
   readonly id: string;
@@ -17,12 +17,26 @@ export interface MatrixCaseCompatibility {
   readonly receiver: AdapterCompatibilityResult;
 }
 
+export interface MatrixScenarioEvidence {
+  readonly id: string;
+  readonly seed: string;
+  readonly status: 'passed' | 'failed' | 'not_applicable';
+  readonly requiredInvariants: readonly InvariantId[];
+  readonly invariants: readonly InvariantResult[];
+  readonly capabilities?: Readonly<Record<string, unknown>>;
+  readonly componentVersions?: Readonly<Record<string, string>>;
+  readonly imageDigests?: Readonly<Record<string, string>>;
+  readonly code?: string;
+  readonly reason?: string;
+}
+
 export type MatrixExecutionResult =
   | {
       readonly ok: true;
       readonly evidence?: Readonly<Record<string, unknown>>;
       readonly invariants?: readonly InvariantResult[];
       readonly mints?: readonly AdapterMintIdentity[];
+      readonly scenarios?: readonly MatrixScenarioEvidence[];
     }
   | { readonly ok: null; readonly reason: string }
   | { readonly ok: false; readonly code: string; readonly reason: string };
@@ -47,6 +61,7 @@ export type MatrixCaseResult =
       readonly receiverCapabilities: AdapterCapabilities;
       readonly invariants: readonly InvariantResult[];
       readonly mints: readonly AdapterMintIdentity[];
+      readonly scenarios: readonly MatrixScenarioEvidence[];
       readonly evidence?: Readonly<Record<string, unknown>>;
     })
   | (MatrixCaseIdentity & {
@@ -146,6 +161,7 @@ export class CompatibilityMatrix {
             receiverCapabilities: structuredClone(receiver.capabilities),
             invariants: structuredClone(execution.invariants ?? []),
             mints: structuredClone(execution.mints ?? []),
+            scenarios: structuredClone(execution.scenarios ?? []),
             ...(execution.evidence === undefined ? {} : { evidence: execution.evidence }),
           });
           continue;
