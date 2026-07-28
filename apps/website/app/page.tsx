@@ -3,6 +3,7 @@ import { EvidenceReport } from '../components/home/evidence-report';
 import { FaultTimeline } from '../components/home/fault-timeline';
 import styles from '../components/home/home.module.css';
 import { getDemoSummary } from '../lib/demo';
+import { getReleaseStatus } from '../lib/release-status';
 
 const testedFaults = [
   {
@@ -35,7 +36,7 @@ const profileSteps = [
 ] as const;
 
 export default async function HomePage() {
-  const summary = await getDemoSummary();
+  const [summary, releaseStatus] = await Promise.all([getDemoSummary(), getReleaseStatus()]);
 
   return (
     <div className={styles.home}>
@@ -218,17 +219,20 @@ export default async function HomePage() {
       >
         <div className={styles.releaseFlag}>
           <span aria-hidden="true">!</span>
-          Experimental developer preview
+          {releaseStatus.label}
         </div>
         <div>
           <p className={styles.eyebrow}>Release status</p>
           <h2 id="release-title">Useful evidence. Not certification.</h2>
           <p>
-            The strict gate remains blocked on an independent wallet receiver, distinct qualifying
-            mint identities, trustworthy build provenance, and external integrations.
+            The checked-in {releaseStatus.profile} policy requires{' '}
+            {releaseStatus.minimumQualifyingPairs} qualifying implementation pairs and{' '}
+            {releaseStatus.minimumDistinctMints} distinct mints. Current signed qualifying matrix
+            evidence: {releaseStatus.currentQualifyingPairs} pairs and{' '}
+            {releaseStatus.currentDistinctMints} mints.
           </p>
-          <a className={styles.textLink} href="/docs/release-notes">
-            Read the v0.1 release notes <span aria-hidden="true">→</span>
+          <a className={styles.textLink} href="/release-status">
+            Inspect the blocked release gate <span aria-hidden="true">→</span>
           </a>
         </div>
       </section>
