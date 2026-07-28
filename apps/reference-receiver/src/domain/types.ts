@@ -85,7 +85,14 @@ export interface ExactSwapPlan extends SwapPlanDraft {
   };
 }
 
-export type DeliveryPhase = 'prepared' | 'mint_sent' | 'recovery_blocked' | 'settled' | 'rejected';
+export type DeliveryPhase =
+  | 'prepared'
+  | 'mint_sent'
+  | 'recovery_blocked'
+  | 'outputs_persisted'
+  | 'credited'
+  | 'settled'
+  | 'rejected';
 
 export interface DeliveryRecord {
   readonly requestId: ProtocolId;

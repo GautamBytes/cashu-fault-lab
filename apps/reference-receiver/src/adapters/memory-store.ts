@@ -200,9 +200,21 @@ export class MemoryReceiverStore implements ReceiverStore {
   }
 
   async settle(input: CommitSettlement): Promise<DeliveryReceipt> {
+    await this.persistSettlementOutputs(input);
+    await this.creditSettlement(input.deliveryId, input.now);
+    return this.finalizeSettlement(input.deliveryId);
+  }
+
+  async persistSettlementOutputs(input: CommitSettlement): Promise<DeliveryReceipt> {
     return this.#transaction((draft) => {
       const record = this.#requireDelivery(draft, input.deliveryId);
       if (record.phase === 'settled') {
+        if (record.replacementPlanHash !== input.replacementPlanHash) {
+          throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
+        }
+        return structuredClone(record.receipt);
+      }
+      if (record.phase === 'outputs_persisted' || record.phase === 'credited') {
         if (record.replacementPlanHash !== input.replacementPlanHash) {
           throw new ReceiverDomainError('INVALID_STATE', 'Settlement result is conflicting');
         }
@@ -221,27 +233,53 @@ export class MemoryReceiverStore implements ReceiverStore {
         throw new ReceiverDomainError('INVALID_STATE', 'Recovered outputs are required to settle');
       }
       assertSafeInteger(input.now, 'Settlement time');
-      const receipt = nextReceipt(record.receipt, 'settled', 'settled');
+      draft.deliveries.set(record.deliveryId, {
+        ...record,
+        phase: 'outputs_persisted',
+        replacementPlanHash: input.replacementPlanHash,
+        replacementProofs: [...input.replacementProofs],
+      });
+      return structuredClone(record.receipt);
+    });
+  }
+
+  async creditSettlement(deliveryId: string, now: number): Promise<DeliveryReceipt> {
+    return this.#transaction((draft) => {
+      const record = this.#requireDelivery(draft, deliveryId);
+      if (record.phase === 'settled' || record.phase === 'credited') {
+        return structuredClone(record.receipt);
+      }
+      if (record.phase !== 'outputs_persisted') {
+        throw new ReceiverDomainError('INVALID_STATE', 'Settlement outputs are not persistent');
+      }
+      assertSafeInteger(now, 'Settlement time');
       const credit: MerchantCredit = {
         creditId: record.deliveryId,
         requestId: record.requestId,
         deliveryId: record.deliveryId,
         amount: record.amount,
         unit: record.receipt.unit,
-        createdAt: input.now,
+        createdAt: now,
       };
       const previousCredit = draft.credits.get(record.deliveryId);
       if (previousCredit && JSON.stringify(previousCredit) !== JSON.stringify(credit)) {
         throw new ReceiverDomainError('INVALID_STATE', 'Merchant credit is conflicting');
       }
       draft.credits.set(record.deliveryId, previousCredit ?? credit);
-      draft.deliveries.set(record.deliveryId, {
-        ...record,
-        phase: 'settled',
-        receipt,
-        replacementPlanHash: input.replacementPlanHash,
-        replacementProofs: [...input.replacementProofs],
-      });
+      draft.deliveries.set(record.deliveryId, { ...record, phase: 'credited' });
+      return structuredClone(record.receipt);
+    });
+  }
+
+  async finalizeSettlement(deliveryId: string): Promise<DeliveryReceipt> {
+    return this.#transaction((draft) => {
+      const record = this.#requireDelivery(draft, deliveryId);
+      if (record.phase === 'settled') return structuredClone(record.receipt);
+      if (record.phase !== 'credited') {
+        throw new ReceiverDomainError('INVALID_STATE', 'Merchant credit is not persistent');
+      }
+      const receipt = nextReceipt(record.receipt, 'settled', 'settled');
+      draft.deliveries.set(record.deliveryId, { ...record, phase: 'settled', receipt });
       return structuredClone(receipt);
     });
   }
@@ -249,7 +287,12 @@ export class MemoryReceiverStore implements ReceiverStore {
   async blockRecovery(deliveryId: string): Promise<DeliveryReceipt> {
     return this.#transaction((draft) => {
       const record = this.#requireDelivery(draft, deliveryId);
-      if (record.phase === 'settled' || record.phase === 'recovery_blocked') {
+      if (
+        record.phase === 'settled' ||
+        record.phase === 'recovery_blocked' ||
+        record.phase === 'outputs_persisted' ||
+        record.phase === 'credited'
+      ) {
         return structuredClone(record.receipt);
       }
       if (record.phase === 'rejected') {
@@ -269,7 +312,12 @@ export class MemoryReceiverStore implements ReceiverStore {
     return this.#transaction((draft) => {
       const record = this.#requireDelivery(draft, deliveryId);
       if (record.phase === 'rejected') return structuredClone(record.receipt);
-      if (record.phase === 'settled' || record.phase === 'recovery_blocked') {
+      if (
+        record.phase === 'settled' ||
+        record.phase === 'recovery_blocked' ||
+        record.phase === 'outputs_persisted' ||
+        record.phase === 'credited'
+      ) {
         throw new ReceiverDomainError('INVALID_STATE', 'Possibly consumed delivery cannot reject');
       }
       const receipt = nextReceipt(record.receipt, 'rejected', detailCode);

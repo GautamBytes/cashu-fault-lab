@@ -74,16 +74,22 @@ describe('PostgresReceiverStore', () => {
     if (fixture) await stopPostgresFixture(fixture);
   });
 
-  it('installs the upgraded recovery index for prepared deliveries', async () => {
+  it('installs the upgraded recovery index for every durable recovery phase', async () => {
     const indexes = await fixture.pool.query<{ indexname: string; indexdef: string }>(
       `SELECT indexname, indexdef FROM pg_indexes
        WHERE schemaname = current_schema()
-         AND indexname IN ('recoverable_deliveries', 'recoverable_deliveries_v2')`,
+         AND indexname IN (
+           'recoverable_deliveries',
+           'recoverable_deliveries_v2',
+           'recoverable_deliveries_v3'
+         )`,
     );
 
     expect(indexes.rows).toHaveLength(1);
-    expect(indexes.rows[0]).toMatchObject({ indexname: 'recoverable_deliveries_v2' });
+    expect(indexes.rows[0]).toMatchObject({ indexname: 'recoverable_deliveries_v3' });
     expect(indexes.rows[0]!.indexdef).toContain("'prepared'::text");
+    expect(indexes.rows[0]!.indexdef).toContain("'outputs_persisted'::text");
+    expect(indexes.rows[0]!.indexdef).toContain("'credited'::text");
   });
 
   it('atomically collapses 100 duplicate prepares into one encrypted plan and proof claim', async () => {
