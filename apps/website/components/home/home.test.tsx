@@ -121,9 +121,15 @@ describe('home components', () => {
     const summary = await getDemoSummary();
     render(<EvidenceReport summary={summary} />);
 
+    const overview = screen.getByRole('group', { name: 'Reviewed evidence summary' });
     const list = screen.getByRole('list', { name: 'Invariant evidence states' });
     const items = within(list).getAllByRole('listitem');
 
+    expect(within(overview).getByText(summary.scenarioId)).toBeVisible();
+    expect(within(overview).getByText(new RegExp(`Run ${summary.status}`, 'i'))).toBeVisible();
+    expect(list).toBeVisible();
+    expect(screen.getByText('18', { selector: 'dd, strong' })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Inspect the reviewed artifact/ })).toBeVisible();
     expect(items).toHaveLength(18);
     expect(within(list).getByText('at-most-once-redemption-start')).toBeVisible();
     expect(within(list).getAllByText('Not observable').length).toBeGreaterThan(0);

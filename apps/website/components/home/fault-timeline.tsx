@@ -41,7 +41,7 @@ export function FaultTimeline() {
       <div className={styles.sectionHeading}>
         <p className={styles.eyebrow}>Deterministic fault trace</p>
         <h2 id="fault-timeline-title">A lost response is not a lost result.</h2>
-        <p>
+        <p id="fault-timeline-description">
           The lab repeats the exact delivery after transport ambiguity, then checks proof state and
           durable credit before it calls the run converged.
         </p>
@@ -52,6 +52,7 @@ export function FaultTimeline() {
           <span className={styles.deliverySignal}>◆</span>
         </div>
         <ol
+          aria-describedby="fault-timeline-description"
           aria-label="Six-stage response-loss recovery flow"
           className={styles.timeline}
           data-motion={reducedMotion ? 'reduced' : 'full'}
