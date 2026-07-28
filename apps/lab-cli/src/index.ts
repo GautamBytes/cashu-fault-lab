@@ -30,6 +30,10 @@ import {
   renderDiagnosticText,
 } from './diagnostics.js';
 import { PackagedLabRuntime } from './packaged-runtime.js';
+import {
+  loadReleaseSuite,
+  type LoadedReleaseSuite,
+} from './release-suite-loader.js';
 
 const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
 
@@ -78,6 +82,7 @@ export interface LabRuntime {
     profile: string,
     seed: string,
     adapterManifest?: AdapterManifest,
+    releaseSuite?: LoadedReleaseSuite,
   ): Promise<readonly MatrixCaseResult[]>;
 }
 
@@ -441,6 +446,7 @@ export async function runCli(
     .option('--seed <seed>', 'deterministic seed', 'cashu-fault-lab')
     .option('--min-passes <count>', 'minimum passing pairs required')
     .option('--release-policy <path>', 'release policy JSON file')
+    .option('--release-suite <path>', 'release scenario suite JSON file')
     .option('--adapters <path>', 'external adapter manifest')
     .addOption(
       new Option('--format <format>', 'report format for full matrix output')
@@ -455,6 +461,7 @@ export async function runCli(
         seed: string;
         minPasses?: string;
         releasePolicy?: string;
+        releaseSuite?: string;
         adapters?: string;
         format: 'text' | 'json' | 'junit' | 'html';
         output?: string;
@@ -474,7 +481,28 @@ export async function runCli(
         verboseLine(options.verbose, io, `seed: ${options.seed}`);
         const start = Date.now();
         const adapterManifest = await readAdapterManifest(io, options.adapters);
-        const results = await runtime.matrix(options.profile, options.seed, adapterManifest);
+        const releaseSuitePath =
+          options.releaseSuite ??
+          (releasePolicy === undefined ? undefined : 'spec/release-suite.json');
+        const releaseSuite =
+          releaseSuitePath === undefined
+            ? undefined
+            : await loadReleaseSuite({
+                repositoryRoot: process.cwd(),
+                path: releaseSuitePath,
+                readText: io.readText,
+              });
+        if (releaseSuite !== undefined && releaseSuite.profile !== options.profile) {
+          throw new Error(
+            `Release suite profile ${releaseSuite.profile} does not match matrix profile ${options.profile}`,
+          );
+        }
+        const results = await runtime.matrix(
+          options.profile,
+          options.seed,
+          adapterManifest,
+          releaseSuite,
+        );
         const releaseGate =
           releasePolicy === undefined ? undefined : evaluateReleasePolicy(releasePolicy, results);
 
@@ -484,6 +512,24 @@ export async function runCli(
             io.stdout(
               `  ${icon} ${result.sender} → ${result.receiver}: ${result.status}${result.status === 'failed' && result.reason ? ` (${result.reason})` : ''}\n`,
             );
+            if (result.status === 'passed') {
+              for (const scenarioEvidence of result.scenarios) {
+                const scenarioIcon =
+                  scenarioEvidence.status === 'passed'
+                    ? '✓'
+                    : scenarioEvidence.status === 'failed'
+                      ? '✗'
+                      : '—';
+                io.stdout(
+                  `      ${scenarioIcon} ${scenarioEvidence.id}: ${scenarioEvidence.status}${scenarioEvidence.reason === undefined ? '' : ` (${scenarioEvidence.reason})`}\n`,
+                );
+                for (const invariant of scenarioEvidence.invariants.filter(
+                  ({ status }) => status !== 'passed',
+                )) {
+                  io.stdout(`          ${invariant.id}: ${invariant.status}\n`);
+                }
+              }
+            }
           }
         }
 

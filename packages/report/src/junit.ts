@@ -30,9 +30,20 @@ export function renderMatrixJunit(input: MatrixReportInput): string {
   const report = createMatrixReport(input);
   const gateFailed = report.releaseGate !== undefined && !report.releaseGate.passed;
   const gateTests = report.releaseGate === undefined ? 0 : 1;
+  const scenarioEvidence = report.cases.flatMap((result) =>
+    result.status === 'passed'
+      ? result.scenarios.map((scenario) => ({ pair: result, scenario }))
+      : [],
+  );
+  const scenarioFailures = scenarioEvidence.filter(
+    ({ scenario }) => scenario.status === 'failed',
+  ).length;
+  const scenarioSkipped = scenarioEvidence.filter(
+    ({ scenario }) => scenario.status === 'not_applicable',
+  ).length;
   const lines: string[] = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    `<testsuite name="cashu-fault-lab.matrix" tests="${report.summary.total + gateTests}" failures="${report.summary.failed + (gateFailed ? 1 : 0)}" errors="0" skipped="${report.summary.notApplicable + report.summary.expectedFailure}">`,
+    `<testsuite name="cashu-fault-lab.matrix" tests="${report.summary.total + scenarioEvidence.length + gateTests}" failures="${report.summary.failed + scenarioFailures + (gateFailed ? 1 : 0)}" errors="0" skipped="${report.summary.notApplicable + report.summary.expectedFailure + scenarioSkipped}">`,
   ];
   for (const result of report.cases) {
     const classname = `cashu-fault-lab.matrix.${xml(report.profile)}`;
@@ -48,6 +59,21 @@ export function renderMatrixJunit(input: MatrixReportInput): string {
     } else if (result.status === 'not_applicable') {
       lines.push(
         `  <testcase classname="${classname}" name="${name}"><skipped message="${xml(result.reason)}"/></testcase>`,
+      );
+    } else {
+      lines.push(`  <testcase classname="${classname}" name="${name}"/>`);
+    }
+  }
+  for (const { pair, scenario } of scenarioEvidence) {
+    const classname = `cashu-fault-lab.matrix.${xml(report.profile)}.${xml(pair.sender)}->${xml(pair.receiver)}`;
+    const name = xml(scenario.id);
+    if (scenario.status === 'failed') {
+      lines.push(
+        `  <testcase classname="${classname}" name="${name}"><failure type="${xml(scenario.code ?? 'SCENARIO_EXECUTION_FAILED')}" message="${xml(scenario.reason ?? 'Release scenario failed')}"/></testcase>`,
+      );
+    } else if (scenario.status === 'not_applicable') {
+      lines.push(
+        `  <testcase classname="${classname}" name="${name}"><skipped message="${xml(scenario.reason ?? 'Release scenario is not applicable')}"/></testcase>`,
       );
     } else {
       lines.push(`  <testcase classname="${classname}" name="${name}"/>`);

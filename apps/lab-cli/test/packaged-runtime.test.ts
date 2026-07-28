@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
 import { DockerComposeServiceController, PackagedLabRuntime } from '../src/packaged-runtime.js';
+import type { LoadedReleaseSuite } from '../src/release-suite-loader.js';
 import { REFERENCE_RUNTIME_ENV_PATH } from '../src/runtime-env.js';
 
 async function scenario(path: string): Promise<ScenarioSpec> {
@@ -616,7 +617,56 @@ describe('PackagedLabRuntime', () => {
       fetch: fakeFetch,
     });
 
-    const results = await runtime.matrix('delivery-v1', 'external-seed', manifest);
+    const releaseSuite: LoadedReleaseSuite = {
+      schemaVersion: 1,
+      profile: 'delivery-v1',
+      scenarios: [
+        {
+          id: 'first-delivery',
+          scenario: 'scenarios/first-delivery.json',
+          transports: ['http'],
+          senderDurability: 'persistent',
+          receiverDurability: 'persistent',
+          requiredInvariants: ['reproducibility', 'no-unsupported-pass'],
+          spec: {
+            name: 'first-delivery',
+            commands: [
+              {
+                type: 'send',
+                sender: 'reference',
+                requestId: 'AAECAwQFBgcICQoLDA0ODw',
+              },
+              { type: 'assert_quiescent' },
+            ],
+          },
+        },
+        {
+          id: 'second-delivery',
+          scenario: 'scenarios/second-delivery.json',
+          transports: ['http'],
+          senderDurability: 'persistent',
+          receiverDurability: 'persistent',
+          requiredInvariants: ['reproducibility', 'no-unsupported-pass'],
+          spec: {
+            name: 'second-delivery',
+            commands: [
+              {
+                type: 'send',
+                sender: 'reference',
+                requestId: 'AAECAwQFBgcICQoLDA0ODw',
+              },
+              { type: 'assert_quiescent' },
+            ],
+          },
+        },
+      ],
+    };
+    const results = await runtime.matrix(
+      'delivery-v1',
+      'external-seed',
+      manifest,
+      releaseSuite,
+    );
 
     expect(results).toContainEqual(
       expect.objectContaining({
@@ -642,8 +692,34 @@ describe('PackagedLabRuntime', () => {
           }),
         ]),
         evidence: expect.objectContaining({ credits: 1, seed: 'external-seed' }),
+        scenarios: [
+          expect.objectContaining({
+            id: 'first-delivery',
+            status: 'passed',
+            seed: expect.any(String),
+          }),
+          expect.objectContaining({
+            id: 'second-delivery',
+            status: 'passed',
+            seed: expect.any(String),
+          }),
+        ],
       }),
     );
+    const passedPair = results.find(
+      (result) =>
+        result.status === 'passed' &&
+        result.sender === 'wallet-sender' &&
+        result.receiver === 'wallet-receiver',
+    );
+    expect(passedPair?.status).toBe('passed');
+    if (passedPair?.status === 'passed') {
+      expect(passedPair.scenarios[0]?.seed).not.toBe(passedPair.scenarios[1]?.seed);
+      expect(passedPair.scenarios.map(({ id }) => id)).toEqual([
+        'first-delivery',
+        'second-delivery',
+      ]);
+    }
     expect(fetchCalls).toContain('4101/v1/send');
     expect(fetchCalls).toContain(`4102/v1/deliveries/${activeDeliveryId}`);
 

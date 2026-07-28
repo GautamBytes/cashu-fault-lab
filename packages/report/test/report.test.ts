@@ -331,7 +331,23 @@ const matrixResults: readonly MatrixCaseResult[] = [
     },
     invariants: [],
     mints: [],
-    scenarios: [],
+    scenarios: [
+      {
+        id: 'retry-response-lost',
+        seed: 'scenario-seed',
+        status: 'failed',
+        code: 'REQUIRED_INVARIANT_NOT_PASSED',
+        reason: 'Required invariant was not passed: retry-convergence',
+        invariants: [
+          {
+            id: 'retry-convergence',
+            status: 'not_observable',
+            confidence: 'adapter_claimed',
+            evidence: [],
+          },
+        ],
+      },
+    ],
   },
   {
     profile: 'delivery-v1',
@@ -443,13 +459,15 @@ describe('matrix report rendering', () => {
     });
 
     expect(junit).toContain('<testsuite');
-    expect(junit).toContain('tests="4"');
-    expect(junit).toContain('failures="1"');
+    expect(junit).toContain('tests="5"');
+    expect(junit).toContain('failures="2"');
     expect(junit).toContain('skipped="2"');
     expect(junit).toContain('<failure type="ADAPTER_UNSUPPORTED"');
     expect(junit).toContain('<skipped type="NUT26_NIP_MAPPING_MISMATCH"');
     expect(junit).toContain('<skipped message="cdk receiver is not registered"');
-    expect(junit.match(/<testcase/g)?.length).toBe(4);
+    expect(junit).toContain('name="retry-response-lost"');
+    expect(junit).toContain('<failure type="REQUIRED_INVARIANT_NOT_PASSED"');
+    expect(junit.match(/<testcase/g)?.length).toBe(5);
   });
 
   it('renders self-contained HTML without leaking secrets or script tags', () => {
@@ -462,6 +480,8 @@ describe('matrix report rendering', () => {
     expect(html).toContain('<!doctype html>');
     expect(html).toContain('Compatibility matrix');
     expect(html).toContain('ref</td><td>→</td><td>ref');
+    expect(html).toContain('retry-response-lost');
+    expect(html).toContain('retry-convergence: not_observable');
     expect(html).toContain('NUT26_NIP_MAPPING_MISMATCH');
     expect(html).not.toContain('<script>');
   });

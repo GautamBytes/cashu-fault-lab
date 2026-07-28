@@ -48,6 +48,7 @@ export {
   type ReleaseSuite,
   type ReleaseSuiteEntry,
 } from './release-suite.js';
+export { seededProtocolId } from './seeded-fixture.js';
 export {
   ScenarioRunner,
   type DriverSendResult,
