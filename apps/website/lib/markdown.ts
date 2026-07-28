@@ -28,7 +28,11 @@ export function extractHeadings(markdown: string): DocumentHeading[] {
         fence = { marker, length: fenceMatch[1].length };
         continue;
       }
-      if (fence.marker === marker && fenceMatch[1].length >= fence.length) {
+      if (
+        fence.marker === marker &&
+        fenceMatch[1].length >= fence.length &&
+        /^[ \t]*$/.test(line.slice(fenceMatch[0].length))
+      ) {
         fence = undefined;
         continue;
       }

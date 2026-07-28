@@ -21,6 +21,18 @@ describe("canonical content", () => {
     ]);
   });
 
+  it("keeps headings hidden after a backtick fence marker with trailing text", () => {
+    expect(
+      extractHeadings("```md\n```` not a closing fence\n## hidden\n```   \n## visible"),
+    ).toEqual([{ depth: 2, id: "visible", text: "visible" }]);
+  });
+
+  it("keeps headings hidden after a tilde fence marker with trailing text", () => {
+    expect(
+      extractHeadings("~~~md\n~~~~ not a closing fence\n## hidden\n~~~\t\n## visible"),
+    ).toEqual([{ depth: 2, id: "visible", text: "visible" }]);
+  });
+
   it("removes Markdown decoration when extracting heading text", () => {
     expect(extractHeadings("## [Exact *retry*](#retry) with `payload` ###")).toEqual([
       { depth: 2, id: "exact-retry-with-payload", text: "Exact retry with payload" },
