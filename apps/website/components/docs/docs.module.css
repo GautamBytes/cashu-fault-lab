@@ -518,7 +518,7 @@
   }
 
   .articleHeader h1 {
-    font-size: clamp(2.25rem, 12vw, 3.25rem);
+    font-size: 2.75rem;
   }
 
   .pagination {

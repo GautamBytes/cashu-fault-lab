@@ -1179,7 +1179,7 @@
 
 @media (min-width: 761px) and (max-height: 900px) {
   .hero {
-    min-height: min(45rem, calc(100svh - 4.25rem));
+    min-height: min(45rem, calc(100svh - 5.25rem));
     padding-block: 3rem 4.5rem;
   }
 }
@@ -1442,6 +1442,10 @@
   .hero,
   .section {
     padding-block: 3.5rem;
+  }
+
+  .boundarySection {
+    grid-template-columns: 1fr;
   }
 
   .hero h1 {

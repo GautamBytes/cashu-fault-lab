@@ -91,22 +91,80 @@ test('home is accessible, has one visible title, and fits the viewport', async (
     });
     const traceSectionBox = await trace.boundingBox();
     const traceHeading = page.getByRole('heading', { name: /lost response/i });
-    const traceBox = await traceHeading.boundingBox();
 
     await expect(traceHeading).toBeVisible();
     expect(heroBox?.height).toBeLessThanOrEqual(820);
     expect(traceSectionBox?.y).toBeLessThan(viewportHeight);
-    expect(traceBox?.y).toBeLessThan(viewportHeight);
   }
 
   await expect(page.locator('h1:visible')).toHaveCount(1);
   await expectNoSeriousAccessibilityViolations(page);
   await expectNoPageOverflow(page);
 
+  if (testInfo.project.name === 'mobile-chromium') {
+    const securityHeading = page.getByRole('heading', {
+      name: 'The implementation does not judge itself.',
+    });
+    const headingWidth = await securityHeading.evaluate((heading) => ({
+      clientWidth: heading.clientWidth,
+      scrollWidth: heading.scrollWidth,
+    }));
+
+    expect(headingWidth.scrollWidth).toBeLessThanOrEqual(headingWidth.clientWidth);
+  }
+
   await saveScreenshot(
     page,
     testInfo.project.name === 'mobile-chromium' ? 'home-mobile.png' : 'home-desktop.png',
   );
+});
+
+test('user laptop viewport shows the complete hero and next section cue', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+
+  await page.setViewportSize({ width: 1905, height: 781 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+
+  const hero = page.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
+  const requiredElements = [
+    hero.getByRole('heading', { level: 1, name: 'Make Cashu delivery fail safely.' }),
+    hero.locator('h1 + p'),
+    hero.getByRole('link', { name: 'Run the deterministic demo' }),
+    hero.getByRole('link', { name: /View on GitHub/ }),
+    hero.getByLabel('Demo command'),
+    hero.getByRole('complementary', { name: 'Deterministic demo run' }),
+  ];
+
+  for (const element of requiredElements) {
+    const elementBox = await element.boundingBox();
+    expect(elementBox).not.toBeNull();
+    if (elementBox) {
+      expect(elementBox.y).toBeGreaterThanOrEqual(0);
+      expect(elementBox.y + elementBox.height).toBeLessThanOrEqual(781);
+    }
+  }
+
+  const trace = page.getByRole('region', {
+    name: 'A lost response is not a lost result.',
+  });
+  const traceBox = await trace.boundingBox();
+
+  expect(traceBox?.y).toBeLessThan(781);
+  await expect(page.getByLabel('Six-stage response-loss recovery flow')).toHaveAttribute(
+    'data-motion',
+    'reduced',
+  );
+  await expectNoPageOverflow(page);
+
+  await mkdir(screenshotDirectory, { recursive: true });
+  await page.screenshot({
+    animations: 'disabled',
+    fullPage: false,
+    path: path.join(screenshotDirectory, 'home-user-viewport.png'),
+  });
 });
 
 test('documentation is accessible and wide code scrolls locally', async ({ page }, testInfo) => {
@@ -133,6 +191,24 @@ test('documentation is accessible and wide code scrolls locally', async ({ page 
     page,
     testInfo.project.name === 'mobile-chromium' ? 'docs-mobile.png' : 'docs-desktop.png',
   );
+});
+
+test('mobile documentation heading uses a fixed responsive step', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium');
+
+  const headingSizeAt = async (width: number) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/docs/getting-started');
+
+    return page
+      .getByRole('heading', { level: 1, name: 'Getting started' })
+      .evaluate((heading) => Number.parseFloat(getComputedStyle(heading).fontSize));
+  };
+
+  const narrowHeadingSize = await headingSizeAt(390);
+  const wideHeadingSize = await headingSizeAt(430);
+
+  expect(wideHeadingSize).toBe(narrowHeadingSize);
 });
 
 test('keyboard search navigates directly to a matching docs heading', async ({
@@ -163,27 +239,24 @@ test('keyboard search navigates directly to a matching docs heading', async ({
   expect(browserName).toBe('chromium');
 });
 
-test('mobile menu reaches scenarios and exposes 44px controls', async ({ page }, testInfo) => {
+test('mobile menu exposes compact navigation and 44px controls', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-chromium');
 
   const menu = page.getByRole('button', { name: 'Toggle primary navigation' });
   await page.goto('/');
   await menu.click();
+  await expect(page.getByRole('link', { name: 'Home', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Docs', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Release status', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Scenarios', exact: true })).toHaveCount(0);
   await expectMinimumTouchTargets(page, 'header a, header button');
-  await page.getByRole('link', { name: 'Scenarios', exact: true }).click();
-  await expect(page).toHaveURL(/\/scenarios$/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'Choose where delivery breaks',
-  );
-
-  await expectMinimumTouchTargets(page, 'button, header a, main article > a');
-  await expectNoPageOverflow(page);
-
-  await page.goto('/docs/getting-started');
+  await page.getByRole('link', { name: 'Docs', exact: true }).click();
+  await expect(page).toHaveURL(/\/docs\/getting-started$/);
   const docsNavigation = page.getByText('Browse documentation', { exact: true });
   await expect(docsNavigation).toBeVisible();
   await docsNavigation.click();
   await expectMinimumTouchTargets(page, 'button, header a, aside a, nav a, article a');
+  await expectNoPageOverflow(page);
 });
 
 test('reduced motion is exposed as a timeline data signal', async ({ page }, testInfo) => {
@@ -242,7 +315,7 @@ test('public routes expose canonical metadata and discovery endpoints', async ({
   expect(await robots.text()).toContain('Allow: /');
   expect(manifest.ok()).toBe(true);
   expect(await manifest.json()).toMatchObject({
-    background_color: '#f6ebd6',
+    background_color: '#09070d',
     theme_color: '#2b0c4a',
   });
   expect(openGraphImage.ok()).toBe(true);
