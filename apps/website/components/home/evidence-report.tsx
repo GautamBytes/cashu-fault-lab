@@ -81,14 +81,42 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           ))}
         </ul>
 
-        <a
-          className={styles.reportLink}
-          href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.0-demo.json"
-          rel="noreferrer noopener"
-          target="_blank"
-        >
-          Inspect the reviewed artifact <span aria-hidden="true">↗</span>
-        </a>
+        <div className={styles.invariantEvidence}>
+          <h3>Invariant evidence states</h3>
+          <p>
+            Every evaluated invariant remains visible; unsupported observations are never promoted
+            to passes.
+          </p>
+          <ul aria-label="Invariant evidence states" className={styles.invariantList}>
+            {summary.invariants.map((invariant) => (
+              <li className={styles.invariantItem} key={invariant.id}>
+                <code>{invariant.id}</code>
+                <span className={`${styles.invariantStatus} ${statusStyles[invariant.status]}`}>
+                  <span aria-hidden="true">{statusLabels[invariant.status].icon}</span>
+                  {statusLabels[invariant.status].label}
+                </span>
+                <span className={styles.invariantConfidence}>{invariant.confidence}</span>
+                {invariant.reason ? (
+                  <span className={styles.invariantReason}>{invariant.reason}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className={styles.reportLinks}>
+          <a className={styles.reportLink} href="/docs/invariants">
+            Read the invariant definitions <span aria-hidden="true">→</span>
+          </a>
+          <a
+            className={styles.reportLink}
+            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.0-demo.json"
+            rel="noreferrer noopener"
+            target="_blank"
+          >
+            Inspect the reviewed artifact <span aria-hidden="true">↗</span>
+          </a>
+        </div>
       </div>
     </section>
   );

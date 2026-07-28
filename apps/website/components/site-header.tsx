@@ -10,9 +10,9 @@ export interface SiteHeaderProps {
 const navigation = [
   { href: '/', label: 'Home' },
   { href: '/docs/getting-started', label: 'Docs' },
-  { href: '/cli', label: 'CLI' },
+  { href: '/docs/cli', label: 'CLI' },
   { href: '/scenarios', label: 'Scenarios' },
-  { href: '/adapters', label: 'Adapters' },
+  { href: '/docs/adapters', label: 'Adapters' },
   { href: '/architecture', label: 'Architecture' },
   { href: '/release-status', label: 'Release status' },
 ];
@@ -24,6 +24,13 @@ export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
     <header className={styles.header}>
       <div className={styles.inner}>
         <a className={styles.brand} href="/">
+          <img
+            alt=""
+            className={styles.brandMark}
+            height="28"
+            src="/cashu-fault-lab.png"
+            width="28"
+          />
           Cashu Fault Lab
         </a>
         <button
@@ -47,7 +54,11 @@ export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
                 {item.label}
               </a>
             ))}
-            <a href="https://github.com/cashubtc/cashu" rel="noreferrer noopener" target="_blank">
+            <a
+              href="https://github.com/GautamBytes/cashu-fault-lab"
+              rel="noreferrer noopener"
+              target="_blank"
+            >
               GitHub
             </a>
           </div>

@@ -996,31 +996,31 @@ git commit -m "feat: harden website accessibility and metadata"
 
 **Files:**
 
-- Create: `.vercelignore`
-- Create: `vercel.json`
+- Create: `apps/website/.vercelignore`
+- Create: `apps/website/vercel.json`
 - Modify: `README.md`
 
 **Interfaces:**
 
-- Consumes: repository-root deployment and `@cashu-fault-lab/website`.
+- Consumes: an `apps/website` Vercel project root with outside-root build files enabled.
 - Produces: one newly created Vercel project and one preview URL.
 - Produces: local contributor commands documented in canonical `README.md`.
 
 - [ ] **Step 1: Write the deployment contract**
 
-Create `vercel.json`:
+Create `apps/website/vercel.json`:
 
 ```json
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @cashu-fault-lab/website build",
-  "outputDirectory": "apps/website/.next"
+  "buildCommand": "pnpm build",
+  "outputDirectory": ".next"
 }
 ```
 
-Create `.vercelignore`:
+Create `apps/website/.vercelignore`:
 
 ```text
 .git
@@ -1074,19 +1074,20 @@ Open `http://127.0.0.1:3000` with the connected browser. Capture and inspect hom
 - [ ] **Step 4: Commit deployment configuration**
 
 ```bash
-git add .vercelignore vercel.json README.md
+git add apps/website/.vercelignore apps/website/vercel.json README.md
 git commit -m "feat: configure Cashu Fault Lab website deployment"
 ```
 
 - [ ] **Step 5: Create the Vercel project and deploy the preview**
 
-Because the Vercel CLI is absent, run the approved fallback from the repository root with a 10-minute timeout:
+Use the connected, authenticated Vercel browser session. Create one project for
+`GautamBytes/cashu-fault-lab`, set the Root Directory to `apps/website`, enable outside-root build
+files, and deploy `codex/release-gate-integrity` as a Preview.
 
-```bash
-bash /Users/gautammanch/.codex/skills/vercel-deploy/scripts/deploy.sh /Users/gautammanch/Developer/cashu-fault-lab/.worktrees/release-gate-integrity
-```
-
-Expected: JSON containing `previewUrl` and `claimUrl`. Do not fetch the deployed URL after deployment; local production-build and browser evidence are the deployment verification.
+Expected: a Ready Preview URL and project dashboard. A `claimUrl` exists only for an anonymous
+fallback deployment and is not expected for a project created inside the authenticated account. Do
+not fetch the deployed URL after deployment; local production-build and browser evidence are the
+deployment verification.
 
 - [ ] **Step 6: Run final source-state checks**
 
@@ -1100,7 +1101,8 @@ git diff --check
 git status --short
 ```
 
-Expected: all checks pass, the worktree is clean, and the final response can return `previewUrl` plus `claimUrl`.
+Expected: all checks pass, the worktree is clean, and the final response can return the Preview URL
+and Vercel project dashboard.
 
 ---
 
@@ -1120,5 +1122,6 @@ Expected: all checks pass, the worktree is clean, and the final response can ret
 - [ ] Keyboard search, mobile navigation, code copy, focus, and reduced motion work.
 - [ ] Axe reports no serious or critical violations.
 - [ ] Unit, type, build, repository, and browser gates pass.
-- [ ] A new Vercel project returns a preview URL and claim URL.
+- [ ] A new Vercel project returns a Preview URL; anonymous fallback deployments also return a
+      claim URL.
 - [ ] Canonical repository docs explain the website workflow without pinning an ephemeral preview URL.

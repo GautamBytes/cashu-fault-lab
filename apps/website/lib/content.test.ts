@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CONTENT_REGISTRY, validateContentRegistry } from './content-registry';
-import { extractHeadings, getAllDocuments, getDocument, getSearchRecords } from './markdown';
+import {
+  extractHeadingSections,
+  extractHeadings,
+  getAllDocuments,
+  getDocument,
+  getSearchRecords,
+} from './markdown';
 import { resolveRepositoryPath, sourceUrl } from './repository';
 
 describe('canonical content', () => {
@@ -32,6 +38,33 @@ describe('canonical content', () => {
   it('removes Markdown decoration when extracting heading text', () => {
     expect(extractHeadings('## [Exact *retry*](#retry) with `payload` ###')).toEqual([
       { depth: 2, id: 'exact-retry-with-payload', text: 'Exact retry with payload' },
+    ]);
+  });
+
+  it('associates prose with the exact heading anchor that introduces it', () => {
+    expect(
+      extractHeadingSections(
+        '# Title\n\n## Retry\n\nRepeat the immutable payload.\n\n### Evidence\n\nInspect the durable receipt.\n\n## Security\n\nKeep proof secrets local.',
+      ),
+    ).toEqual([
+      {
+        depth: 2,
+        id: 'retry',
+        text: 'Retry',
+        searchableText: 'Repeat the immutable payload.',
+      },
+      {
+        depth: 3,
+        id: 'evidence',
+        text: 'Evidence',
+        searchableText: 'Inspect the durable receipt.',
+      },
+      {
+        depth: 2,
+        id: 'security',
+        text: 'Security',
+        searchableText: 'Keep proof secrets local.',
+      },
     ]);
   });
 
@@ -88,6 +121,9 @@ describe('canonical content', () => {
           title: 'Requirements',
         }),
       ]),
+    );
+    expect(records.find((record) => record.id === 'getting-started#requirements')?.text).toContain(
+      'Node.js 24',
     );
     expect(readme).toBeDefined();
     expect(records.find((record) => record.id === 'getting-started')?.text).not.toContain('<');

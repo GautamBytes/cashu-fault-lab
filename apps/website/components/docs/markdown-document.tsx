@@ -13,6 +13,10 @@ import styles from './docs.module.css';
 
 const cssVariablesTheme = createCssVariablesTheme();
 
+export function prepareMarkdownForDocumentPage(markdown: string): string {
+  return markdown.replace(/^(?:\uFEFF)?[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/, '');
+}
+
 async function getCssVariablesHighlighter(options: BundledHighlighterOptions<string, string>) {
   return getSingletonHighlighter({
     ...options,
@@ -105,7 +109,7 @@ export function MarkdownDocument({
           a: (props) => <SafeMarkdownLink {...props} sourcePath={sourcePath} />,
         }}
       >
-        {markdown}
+        {prepareMarkdownForDocumentPage(markdown)}
       </ReactMarkdown>
     </div>
   );

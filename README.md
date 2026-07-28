@@ -39,6 +39,10 @@ The site reads `README.md`, `docs/`, `spec/`, `scenarios/`, and the reviewed dem
 its build. Preview URLs are deployment outputs returned to the user rather than committed as
 canonical project URLs.
 
+For Vercel, set the project Root Directory to `apps/website` and keep “Include files outside the
+root directory in the Build Step” enabled. The deployment contract lives beside the Next.js app in
+`apps/website/vercel.json`; canonical repository docs remain the website's single content source.
+
 ## Run the deterministic demo
 
 ```bash

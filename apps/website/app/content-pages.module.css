@@ -20,15 +20,15 @@
 .blockersSection,
 .sourceRail {
   max-width: none;
-  padding: clamp(4rem, 8vw, 7rem) 1.25rem;
+  padding: clamp(3.25rem, 5.5vw, 5.5rem) 1.25rem;
 }
 
 .pageHero {
   align-items: end;
   display: grid;
-  gap: clamp(2.5rem, 7vw, 6rem);
-  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
-  min-height: 39rem;
+  gap: clamp(2.5rem, 5vw, 4.5rem);
+  grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.65fr);
+  min-height: 34rem;
   overflow: hidden;
   position: relative;
 }
@@ -89,8 +89,8 @@
 }
 
 .pageHero h1 {
-  font-size: clamp(3.7rem, 9vw, 8.5rem);
-  line-height: 0.84;
+  font-size: clamp(3.7rem, 6.5vw, 6.5rem);
+  line-height: 0.88;
   margin: 0;
   max-width: 9ch;
   text-wrap: balance;
@@ -166,7 +166,7 @@
 .separationSection h2,
 .blockersSection h2 {
   font-family: 'Archivo Black', sans-serif;
-  font-size: clamp(2.25rem, 5vw, 4.6rem);
+  font-size: clamp(2.25rem, 4vw, 3.75rem);
   letter-spacing: -0.055em;
   line-height: 0.95;
   margin: 0;
@@ -191,7 +191,7 @@
   border: 1px solid var(--purple-700);
   display: flex;
   flex-direction: column;
-  min-height: 26rem;
+  min-height: 23rem;
   padding: 1.25rem;
   position: relative;
 }

@@ -17,6 +17,10 @@
   top: 1.5rem;
 }
 
+.mobileDocsNav {
+  display: none;
+}
+
 .navigationGroup {
   margin-bottom: 1.5rem;
 }
@@ -335,15 +339,45 @@
   }
 
   .sidebar {
-    border-bottom: 1px solid var(--sand-500);
-    margin-bottom: 2rem;
-    position: static;
+    display: none;
   }
 
-  .sidebar nav {
+  .mobileDocsNav {
+    border: 1px solid var(--purple-700);
+    display: block;
+    margin-bottom: 2rem;
+  }
+
+  .mobileDocsNav summary {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    justify-content: space-between;
+    min-height: 48px;
+    padding: 0.7rem 0.9rem;
+  }
+
+  .mobileDocsNav summary::after {
+    content: '+';
+    font-size: 1.1rem;
+  }
+
+  .mobileDocsNav[open] summary {
+    border-bottom: 1px solid var(--sand-500);
+  }
+
+  .mobileDocsNav[open] summary::after {
+    content: '−';
+  }
+
+  .mobileDocsNav nav {
     display: grid;
     gap: 1rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 1rem;
   }
 
   .navigationGroup {

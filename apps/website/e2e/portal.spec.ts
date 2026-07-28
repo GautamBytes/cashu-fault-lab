@@ -119,10 +119,11 @@ test('keyboard search navigates directly to a matching docs heading', async ({
   await page.keyboard.press('Shift+Tab');
   await expect(lastResult).toBeFocused();
 
-  await dialog.getByRole('link', { name: /Delivery profile/ }).click();
+  await dialog.getByRole('link', { name: /^Upstream basis/ }).click();
 
-  await expect(page).toHaveURL(/\/docs\/delivery-profile$/);
+  await expect(page).toHaveURL(/\/docs\/delivery-profile#upstream-basis$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Delivery profile' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Upstream basis' })).toBeVisible();
   expect(browserName).toBe('chromium');
 });
 
@@ -143,6 +144,9 @@ test('mobile menu reaches scenarios and exposes 44px controls', async ({ page },
   await expectNoPageOverflow(page);
 
   await page.goto('/docs/getting-started');
+  const docsNavigation = page.getByText('Browse documentation', { exact: true });
+  await expect(docsNavigation).toBeVisible();
+  await docsNavigation.click();
   await expectMinimumTouchTargets(page, 'button, header a, aside a, nav a, article a');
 });
 

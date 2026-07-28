@@ -4,6 +4,41 @@ import styles from './docs.module.css';
 
 const groups: DocumentPage['group'][] = ['Start', 'Operate', 'Integrate', 'Understand', 'Release'];
 
+function DocumentationNavigation({
+  document,
+  documents,
+}: {
+  document: DocumentPage;
+  documents: DocumentPage[];
+}) {
+  return (
+    <nav aria-label="Documentation">
+      {groups.map((group) => {
+        const groupDocuments = documents.filter((item) => item.group === group);
+        if (groupDocuments.length === 0) return null;
+
+        return (
+          <section className={styles.navigationGroup} key={group}>
+            <h2>{group}</h2>
+            <ul>
+              {groupDocuments.map((item) => (
+                <li key={item.slug}>
+                  <a
+                    aria-current={item.slug === document.slug ? 'page' : undefined}
+                    href={`/docs/${item.slug}`}
+                  >
+                    {item.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </nav>
+  );
+}
+
 function TableOfContents({
   className,
   headings,
@@ -39,31 +74,13 @@ export function DocsShell({
   return (
     <div className={styles.docsShell}>
       <aside className={styles.sidebar}>
-        <nav aria-label="Documentation">
-          {groups.map((group) => {
-            const groupDocuments = documents.filter((item) => item.group === group);
-            if (groupDocuments.length === 0) return null;
-
-            return (
-              <section className={styles.navigationGroup} key={group}>
-                <h2>{group}</h2>
-                <ul>
-                  {groupDocuments.map((item) => (
-                    <li key={item.slug}>
-                      <a
-                        aria-current={item.slug === document.slug ? 'page' : undefined}
-                        href={`/docs/${item.slug}`}
-                      >
-                        {item.title}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </nav>
+        <DocumentationNavigation document={document} documents={documents} />
       </aside>
+
+      <details className={styles.mobileDocsNav}>
+        <summary>Browse documentation</summary>
+        <DocumentationNavigation document={document} documents={documents} />
+      </details>
 
       <article className={styles.article}>
         <header className={styles.articleHeader}>

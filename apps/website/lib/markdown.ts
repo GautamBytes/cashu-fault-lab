@@ -20,9 +20,14 @@ function headingText(value: string): string {
     .trim();
 }
 
-export function extractHeadings(markdown: string): DocumentHeading[] {
+interface HeadingSection extends DocumentHeading {
+  searchableText: string;
+}
+
+export function extractHeadingSections(markdown: string): HeadingSection[] {
   const slugger = new GithubSlugger();
-  const headings: DocumentHeading[] = [];
+  const sections: Array<DocumentHeading & { body: string[] }> = [];
+  let currentSection: (typeof sections)[number] | undefined;
   let fence: { marker: '`' | '~'; length: number } | undefined;
 
   for (const line of markdown.split(/\r?\n/)) {
@@ -31,6 +36,7 @@ export function extractHeadings(markdown: string): DocumentHeading[] {
       const marker = fenceMatch[1][0] as '`' | '~';
       if (!fence) {
         fence = { marker, length: fenceMatch[1].length };
+        currentSection?.body.push(line);
         continue;
       }
       if (
@@ -39,25 +45,49 @@ export function extractHeadings(markdown: string): DocumentHeading[] {
         /^[ \t]*$/.test(line.slice(fenceMatch[0].length))
       ) {
         fence = undefined;
+        currentSection?.body.push(line);
         continue;
       }
     }
 
-    if (fence) continue;
+    if (fence) {
+      currentSection?.body.push(line);
+      continue;
+    }
 
     const match = line.match(/^\s{0,3}(##|###)\s+(.+?)\s*$/);
-    if (!match) continue;
+    if (!match) {
+      if (/^\s{0,3}#{1,6}(?:\s+|$)/.test(line)) {
+        currentSection = undefined;
+      } else {
+        currentSection?.body.push(line);
+      }
+      continue;
+    }
 
     const text = headingText(match[2]);
     if (!text) continue;
-    headings.push({
+    currentSection = {
+      body: [],
       depth: match[1].length as 2 | 3,
       id: slugger.slug(text),
       text,
-    });
+    };
+    sections.push(currentSection);
   }
 
-  return headings;
+  return sections.map(({ body, ...heading }) => ({
+    ...heading,
+    searchableText: searchableText(body.join('\n')),
+  }));
+}
+
+export function extractHeadings(markdown: string): DocumentHeading[] {
+  return extractHeadingSections(markdown).map(
+    ({ searchableText: _searchableText, ...heading }) => ({
+      ...heading,
+    }),
+  );
 }
 
 function searchableText(markdown: string): string {
@@ -116,12 +146,12 @@ export async function getSearchRecords(): Promise<SearchRecord[]> {
       href: `/docs/${document.slug}`,
       text: searchableText(document.markdown),
     },
-    ...document.headings.map((heading) => ({
+    ...extractHeadingSections(document.markdown).map((heading) => ({
       id: `${document.slug}#${heading.id}`,
       title: heading.text,
       description: document.title,
       href: `/docs/${document.slug}#${heading.id}`,
-      text: heading.text,
+      text: heading.searchableText,
     })),
   ]);
 }

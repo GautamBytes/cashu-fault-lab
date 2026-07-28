@@ -340,11 +340,12 @@ No page may describe the current preview as certified or production-safe.
 
 ## 15. Deployment
 
-The repository root is the Vercel deployment source so the website build can read canonical files outside `apps/website`.
+`apps/website` is the Vercel project root. “Include files outside the root directory in the Build
+Step” stays enabled so the website can read canonical repository content.
 
-A root `vercel.json` declares:
+`apps/website/vercel.json` declares:
 
-- the website workspace build command;
+- the website build command;
 - the Next.js output directory;
 - the pnpm install command;
 - the framework.

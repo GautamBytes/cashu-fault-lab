@@ -2,7 +2,11 @@ import { render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { describe, expect, it } from 'vitest';
 import { CodeBlock } from './code-block';
-import { resolveMarkdownHref, SafeMarkdownLink } from './markdown-document';
+import {
+  prepareMarkdownForDocumentPage,
+  resolveMarkdownHref,
+  SafeMarkdownLink,
+} from './markdown-document';
 
 describe('repository Markdown links', () => {
   it('maps a canonical document linked from the repository root to its docs route', () => {
@@ -42,6 +46,15 @@ describe('repository Markdown links', () => {
 });
 
 describe('Markdown component props', () => {
+  it('removes only the canonical leading title before rendering inside the page shell', () => {
+    const markdown =
+      '# Canonical title\n\nIntroduction.\n\n## Details\n\nBody.\n\n# Deliberate later heading\n';
+
+    expect(prepareMarkdownForDocumentPage(markdown)).toBe(
+      '\nIntroduction.\n\n## Details\n\nBody.\n\n# Deliberate later heading\n',
+    );
+  });
+
   it("does not emit React Markdown's internal node prop on links", () => {
     const props = {
       href: '../examples/v0.1.0-demo.json',
