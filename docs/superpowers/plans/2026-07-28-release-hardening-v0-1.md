@@ -25,6 +25,7 @@
 ### Task 1: Correct generated adapter contracts
 
 **Files:**
+
 - Modify: `apps/lab-cli/src/adapter-init.ts`
 - Modify: `apps/lab-cli/test/adapter-init.test.ts`
 - Test: `packages/adapter-contract/src/validation.ts`
@@ -32,6 +33,7 @@
 - Reference: `spec/schemas/adapter-capabilities.schema.json`
 
 **Interfaces:**
+
 - Consumes: `currentAdapterContract(): AdapterContractMetadata`
 - Consumes: `validateAdapterResponse(operation, value): ValidationResult`
 - Produces: generated capability JSON accepted by `validateAdapterResponse('capabilities', value)`
@@ -62,30 +64,21 @@ status/detail-code assertions.
 
 - [ ] **Step 3: Generate valid development identities**
 
-Replace repeated-zero digests with deterministic SHA-256 values:
+Use the existing release-gate-aware helper:
 
 ```ts
-function templateDigest(domain: 'source' | 'build', context: {
-  language: AdapterTemplateLanguage;
-  name: string;
-  role: AdapterTemplateRole;
-  specDigest: string;
-}): string {
-  return `sha256:${createHash('sha256')
-    .update(`cashu-fault-lab/generated-adapter-${domain}-v1\0`)
-    .update(context.language)
-    .update('\0')
-    .update(context.name)
-    .update('\0')
-    .update(context.role)
-    .update('\0')
-    .update(context.specDigest)
-    .digest('hex')}`;
-}
+const implementation = developmentIdentity({
+  id: name,
+  version: '0.1.0',
+  language,
+  runtime: language === 'rust' ? 'rust-1.97' : language === 'python' ? 'python-3.12' : 'node-24',
+});
 ```
 
-Use these values in generated capabilities and add a generated README statement
-that they are deterministic development identities, not release provenance.
+This produces non-placeholder schema-valid digests while ensuring
+`isDevelopmentIdentity(implementation)` remains true. Add a generated README
+statement that these are deterministic development identities, not release
+provenance.
 
 - [ ] **Step 4: Correct all three generated receipt models**
 
@@ -115,12 +108,14 @@ git commit -m "fix: generate contract-valid adapter templates"
 ### Task 2: Validate generated projects through the real lab client
 
 **Files:**
+
 - Create: `scripts/verify-generated-adapter.mjs`
 - Modify: `.github/workflows/ci.yml`
 - Modify: `apps/lab-cli/test/funded-wallet-workflows.test.ts`
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Consumes: generated project base URL and token from command arguments
 - Consumes: built `HttpAdapterClient`
 - Produces: a nonzero exit when capabilities, reset, authentication, or canonical `N/A` behavior drifts
@@ -191,6 +186,7 @@ git commit -m "test: verify generated adapters through lab client"
 ### Task 3: Make transport-fault evidence route-aware
 
 **Files:**
+
 - Modify: `packages/scenario-runner/src/external-adapter-driver.ts`
 - Modify: `packages/scenario-runner/src/external-http-fault-controller.ts`
 - Modify: `packages/scenario-runner/test/external-adapter-driver.test.ts`
@@ -198,6 +194,7 @@ git commit -m "test: verify generated adapters through lab client"
 - Modify: `apps/lab-cli/test/packaged-runtime.test.ts`
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -274,6 +271,7 @@ git commit -m "fix: make external fault evidence route aware"
 ### Task 4: Preserve bounded, secret-safe sender diagnostics
 
 **Files:**
+
 - Modify: `apps/reference-sender/src/state.ts`
 - Modify: `apps/reference-sender/src/send-payment.ts`
 - Modify: `apps/reference-sender/src/postgres-state.ts`
@@ -283,6 +281,7 @@ git commit -m "fix: make external fault evidence route aware"
 - Modify: `packages/report/test/report.test.ts`
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -326,7 +325,7 @@ Expected: no diagnostics exist.
 Add a pure classifier that returns enum-only diagnostics. Append with:
 
 ```ts
-diagnostics: [...(record.diagnostics ?? []), diagnostic].slice(-20)
+diagnostics: [...(record.diagnostics ?? []), diagnostic].slice(-20);
 ```
 
 Do not store `Error.message`, stack, response body, payload, target URL, or
@@ -358,6 +357,7 @@ git commit -m "feat: retain safe sender attempt diagnostics"
 ### Task 5: Define and validate the release suite
 
 **Files:**
+
 - Create: `spec/release-suite.json`
 - Create: `spec/schemas/release-suite.schema.json`
 - Create: `packages/scenario-runner/src/release-suite.ts`
@@ -369,6 +369,7 @@ git commit -m "feat: retain safe sender attempt diagnostics"
 - Modify: `spec/schemas/release-policy.schema.json`
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -453,12 +454,14 @@ git commit -m "feat: define delivery release scenario suite"
 ### Task 6: Carry per-scenario evidence through matrix results
 
 **Files:**
+
 - Modify: `packages/scenario-runner/src/matrix.ts`
 - Modify: `packages/scenario-runner/src/release-policy.ts`
 - Modify: `packages/scenario-runner/test/matrix.test.ts`
 - Modify: `packages/scenario-runner/test/release-policy.test.ts`
 
 **Interfaces:**
+
 - Produces:
 
 ```ts
@@ -515,6 +518,7 @@ git commit -m "feat: require scenario evidence for release"
 ### Task 7: Execute release suites for external matrix pairs
 
 **Files:**
+
 - Create: `apps/lab-cli/src/release-suite-loader.ts`
 - Create: `apps/lab-cli/test/release-suite-loader.test.ts`
 - Modify: `apps/lab-cli/src/index.ts`
@@ -527,6 +531,7 @@ git commit -m "feat: require scenario evidence for release"
 - Modify: `packages/report/test/report.test.ts`
 
 **Interfaces:**
+
 - `matrix(profile, seed, adapterManifest, releaseSuite?)`
 - CLI option:
 
@@ -560,7 +565,7 @@ pnpm --filter @cashu-fault-lab/lab-cli exec vitest run test/release-suite-loader
 Use:
 
 ```ts
-seededProtocolId(matrixSeed, `release-suite:${senderId}:${receiverId}:${scenarioId}`)
+seededProtocolId(matrixSeed, `release-suite:${senderId}:${receiverId}:${scenarioId}`);
 ```
 
 as seed material. Execute through `ExternalAdapterScenarioDriver`. Convert failed
@@ -587,6 +592,7 @@ git commit -m "feat: run release suite for matrix pairs"
 ### Task 8: Add optional authenticated crash-control contract
 
 **Files:**
+
 - Modify: `packages/adapter-contract/src/types.ts`
 - Modify: `packages/adapter-contract/src/http-client.ts`
 - Modify: `packages/adapter-contract/src/validation.ts`
@@ -598,6 +604,7 @@ git commit -m "feat: run release suite for matrix pairs"
 - Modify: `packages/adapter-contract/test/contract.test.ts`
 
 **Interfaces:**
+
 - Optional capability:
 
 ```ts
@@ -660,6 +667,7 @@ git commit -m "feat: add optional authenticated crash controls"
 ### Task 9: Implement durable PostgreSQL crash arms
 
 **Files:**
+
 - Create: `infra/migrations/003_crash_arms.sql`
 - Create: `adapters/cashu-ts/src/postgres-crash-arm-store.ts`
 - Create: `adapters/cashu-ts/test/postgres-crash-arm-store.test.ts`
@@ -715,6 +723,7 @@ git commit -m "feat: persist one-shot crash arms"
 ### Task 10: Instrument all receiver crash boundaries
 
 **Files:**
+
 - Modify: `apps/reference-receiver/src/domain/accept-delivery.ts`
 - Modify: `apps/reference-receiver/src/domain/recover-delivery.ts`
 - Modify: `apps/reference-receiver/src/domain/types.ts`
@@ -723,6 +732,7 @@ git commit -m "feat: persist one-shot crash arms"
 - Modify: `apps/reference-receiver/test/fakes.ts`
 
 **Interfaces:**
+
 - Extend `AcceptDeliveryDependencies` with:
 
 ```ts
@@ -767,6 +777,7 @@ Run all reference-receiver unit and integration tests, then commit.
 ### Task 11: Wire cashu-ts crash controls and real process termination
 
 **Files:**
+
 - Modify: `adapters/cashu-ts/src/funded-server.ts`
 - Modify: `adapters/cashu-ts/src/funded-operations.ts`
 - Modify: `adapters/cashu-ts/src/funded-receiver-operations.ts`
@@ -812,8 +823,7 @@ the production terminator selected by the funded Docker test environment.
 
 - [ ] **Step 5: Inject checkpoint into both funded operations**
 
-Use the already existing four sender calls and the six receiver calls from Task
-10. Reset only arms for the active lab run.
+Use the already existing four sender calls and the six receiver calls from Task 10. Reset only arms for the active lab run.
 
 - [ ] **Step 6: Verify GREEN and commit**
 
@@ -824,6 +834,7 @@ Run all cashu-ts and reference-receiver tests, then commit.
 ### Task 12: Execute all real funded crash-boundary scenarios
 
 **Files:**
+
 - Create: ten scenario files under `scenarios/crash-recovery/boundaries/`
 - Modify: `packages/scenario-runner/src/external-adapter-driver.ts`
 - Modify: `apps/lab-cli/src/packaged-runtime.ts`
@@ -834,6 +845,7 @@ Run all cashu-ts and reference-receiver tests, then commit.
 - Modify: `.github/workflows/nightly.yml`
 
 **Interfaces:**
+
 - External fault controller gains optional:
 
 ```ts
@@ -895,11 +907,13 @@ cases remain explicit `N/A`.
 ### Task 13: Protect Docker build context
 
 **Files:**
+
 - Modify: `.dockerignore`
 - Create: `scripts/docker-context.test.mjs`
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Required ignore entries: `.worktrees`, `.worktrees/`, `.pnpm-store`, `.pnpm-store/`
 
 - [ ] **Step 1: Add failing test**
@@ -930,6 +944,7 @@ git commit -m "chore: exclude local stores from Docker context"
 ### Task 14: Prepare v0.1 release materials
 
 **Files:**
+
 - Modify: `package.json`
 - Modify: `adapters/cashu-ts/package.json`
 - Modify: `adapters/template/package.json`
@@ -959,6 +974,7 @@ git commit -m "chore: exclude local stores from Docker context"
 - Modify: `docs/cli-reference.md`
 
 **Interfaces:**
+
 - Internal project version: `0.1.0`
 - Demo seed: `cashu-fault-lab-v0.1.0-demo`
 - Demo artifacts contain no values matching configured test secrets
@@ -1004,6 +1020,7 @@ git commit -m "docs: prepare v0.1 developer preview"
 ### Task 15: Full correctness and security verification
 
 **Files:**
+
 - No planned file changes. If a verification command exposes a defect, add a
   failing regression test in the package owning that defect, then modify only
   the corresponding production file and record both paths in the plan checklist

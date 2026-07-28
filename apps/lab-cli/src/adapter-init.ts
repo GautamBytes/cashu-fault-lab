@@ -1,4 +1,4 @@
-import { currentAdapterContract } from '@cashu-fault-lab/adapter-contract';
+import { currentAdapterContract, developmentIdentity } from '@cashu-fault-lab/adapter-contract';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -79,18 +79,17 @@ function templateContext(
   role: AdapterTemplateRole,
 ): TemplateContext {
   const contract = currentAdapterContract();
+  const runtime =
+    language === 'rust' ? 'rust-1.97' : language === 'python' ? 'python-3.12' : 'node-24';
   const capabilities = {
     schemaVersion: 2,
     contract,
-    implementation: {
+    implementation: developmentIdentity({
       id: name,
       version: '0.1.0',
       language,
-      runtime:
-        language === 'rust' ? 'rust-1.97' : language === 'python' ? 'python-3.12' : 'node-24',
-      sourceDigest: `sha256:${'00'.repeat(32)}`,
-      buildDigest: `sha256:${'00'.repeat(32)}`,
-    },
+      runtime,
+    }),
     roles: roleCapabilities(role),
     nuts: [18],
     encodings: ['creqA'],
@@ -252,12 +251,12 @@ export interface DeliveryReceiptView {
   readonly request_id: string;
   readonly delivery_id: string;
   readonly payload_hash: string;
-  readonly status: 'pending' | 'settled' | 'rejected';
+  readonly status: 'processing' | 'settled' | 'rejected';
   readonly status_version: number;
   readonly mint: string;
   readonly unit: string;
   readonly amount: number;
-  readonly detail_code?: string;
+  readonly detail_code: string;
 }
 
 export interface LedgerCreditView {
@@ -416,6 +415,8 @@ ${context.tokenEnv}=local-token pnpm start
 \`\`\`
 
 The scaffold exposes \`/healthz\`, \`/v1/capabilities\`, and six explicit \`501 N/A\` route stubs for the delivery contract.
+
+Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
 `,
     '.github/workflows/ci.yml': `name: Adapter CI
 
@@ -565,17 +566,25 @@ pub struct PaymentRequestView {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryReceiptStatus {
+    Processing,
+    Settled,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DeliveryReceiptView {
     pub profile: String,
     pub request_id: String,
     pub delivery_id: String,
     pub payload_hash: String,
-    pub status: String,
+    pub status: DeliveryReceiptStatus,
     pub status_version: u64,
     pub mint: String,
     pub unit: String,
     pub amount: u64,
-    pub detail_code: Option<String>,
+    pub detail_code: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -771,6 +780,8 @@ ${context.tokenEnv}=local-token cargo run
 \`\`\`
 
 The scaffold uses Rust 1.97, edition 2024, Axum, and Tokio. It exposes \`/healthz\`, \`/v1/capabilities\`, and six explicit \`501 N/A\` route stubs.
+
+Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
 `,
     '.github/workflows/ci.yml': `name: Adapter CI
 
@@ -906,12 +917,12 @@ class DeliveryReceiptView(BaseModel):
     request_id: str
     delivery_id: str
     payload_hash: str
-    status: Literal["pending", "settled", "rejected"]
+    status: Literal["processing", "settled", "rejected"]
     status_version: int
     mint: str
     unit: str
     amount: int
-    detail_code: str | None = None
+    detail_code: str
 
 
 class LedgerCreditView(BaseModel):
@@ -1053,6 +1064,8 @@ python -m pip install -e ".[test]"
 ${context.tokenEnv}=local-token pytest
 ${context.tokenEnv}=local-token uvicorn ${context.moduleName}.main:app --host 0.0.0.0 --port 4100
 \`\`\`
+
+Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
 
 The scaffold uses Python 3.12+, FastAPI, and Pydantic-ready type hints. It exposes \`/healthz\`, \`/v1/capabilities\`, and six explicit \`501 N/A\` route stubs.
 `,
