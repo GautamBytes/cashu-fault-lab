@@ -4,10 +4,16 @@ import { type ComponentPropsWithoutRef, useRef, useState } from 'react';
 import styles from './docs.module.css';
 
 interface CodeBlockProps extends ComponentPropsWithoutRef<'pre'> {
+  'data-language'?: string;
   node?: unknown;
 }
 
-export function CodeBlock({ children, node: _node, ...props }: CodeBlockProps) {
+export function CodeBlock({
+  children,
+  'data-language': language,
+  node: _node,
+  ...props
+}: CodeBlockProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -20,10 +26,19 @@ export function CodeBlock({ children, node: _node, ...props }: CodeBlockProps) {
 
   return (
     <div className={styles.codeBlock}>
-      <button className={styles.copyButton} onClick={copyCode} type="button">
-        {copied ? 'Copied' : 'Copy code'}
-      </button>
-      <pre {...props} ref={preRef}>
+      <div className={styles.codeUtility}>
+        {language ? <span className={styles.codeLanguage}>{language}</span> : <span />}
+        <button
+          aria-label="Copy code"
+          className={styles.copyButton}
+          onClick={copyCode}
+          type="button"
+        >
+          <span aria-hidden="true" className={styles.copyIcon} />
+          <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+      <pre {...props} data-language={language} ref={preRef}>
         {children}
       </pre>
     </div>

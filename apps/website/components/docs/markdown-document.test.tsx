@@ -80,11 +80,13 @@ describe('Markdown component props', () => {
     } as ComponentProps<typeof CodeBlock> & { node: unknown };
 
     render(
-      <CodeBlock {...props}>
+      <CodeBlock {...props} data-language="bash">
         <code>pnpm test</code>
       </CodeBlock>,
     );
 
     expect(screen.getByText('pnpm test').closest('pre')).not.toHaveAttribute('node');
+    expect(screen.getByText('bash')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Copy code' })).toBeVisible();
   });
 });

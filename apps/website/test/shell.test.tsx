@@ -7,7 +7,10 @@ import { SiteHeader } from '../components/site-header';
 const globalsCss = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8');
 const homeCss = readFileSync(resolve(process.cwd(), 'components/home/home.module.css'), 'utf8');
 const docsCss = readFileSync(resolve(process.cwd(), 'components/docs/docs.module.css'), 'utf8');
-const contentPagesCss = readFileSync(resolve(process.cwd(), 'app/content-pages.module.css'), 'utf8');
+const contentPagesCss = readFileSync(
+  resolve(process.cwd(), 'app/content-pages.module.css'),
+  'utf8',
+);
 
 describe('SiteHeader', () => {
   it('exposes the compact primary navigation', () => {
@@ -52,7 +55,7 @@ describe('dark shell contract', () => {
     );
   });
 
-  it('keeps mobile TOC hover and focus text readable on Sand', () => {
+  it('keeps mobile TOC hover and focus text readable on Elevated', () => {
     const interactionRules = [
       ...docsCss.matchAll(
         /^\.mobileToc a:hover,\s*\n\.mobileToc a:focus-visible\s*\{([\s\S]*?)^\}/gm,
@@ -60,6 +63,7 @@ describe('dark shell contract', () => {
     ];
     const winningRule = interactionRules.at(-1)?.[1];
 
-    expect(winningRule).toContain('color: var(--purple-950);');
+    expect(winningRule).toContain('background: var(--elevated-surface);');
+    expect(winningRule).toContain('color: var(--sand-100);');
   });
 });

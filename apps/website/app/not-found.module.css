@@ -1,9 +1,14 @@
 .notFound {
-  align-items: start;
+  align-items: center;
+  background: var(--control-surface);
+  border-bottom: 1px solid var(--hairline);
+  border-top: 1px solid var(--hairline);
   display: grid;
   gap: clamp(2.5rem, 7vw, 6rem);
   grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.42fr);
-  min-height: calc(100vh - 16rem);
+  max-width: none;
+  min-height: clamp(24rem, calc(100svh - 16rem), 30rem);
+  padding: clamp(2rem, 5vw, 4rem);
 }
 
 .eyebrow {
@@ -17,13 +22,16 @@
 }
 
 .notFound h1 {
-  font-size: clamp(3.5rem, 10vw, 7rem);
+  font-size: clamp(3.25rem, 8vw, 6rem);
+  letter-spacing: 0;
+  line-height: 0.94;
   margin: 0;
   max-width: 9ch;
+  overflow-wrap: anywhere;
 }
 
 .description {
-  color: var(--muted-text);
+  color: var(--sand-300);
   font-size: 1.1rem;
   line-height: 1.65;
   max-width: 38rem;
@@ -57,8 +65,8 @@
 
 .actions button,
 .actions a:first-of-type {
-  background: var(--purple-700);
-  border-color: var(--purple-500);
+  background: var(--purple-950);
+  border-color: var(--purple-electric);
   color: var(--sand-100);
 }
 
@@ -76,7 +84,10 @@
 .instrument {
   background: var(--elevated-surface);
   border: 1px solid var(--hairline);
-  box-shadow: inset 3px 0 0 var(--purple-electric);
+  border-radius: var(--radius-sm);
+  box-shadow:
+    inset 3px 0 0 var(--purple-electric),
+    0 1.25rem 3rem rgb(0 0 0 / 22%);
   color: var(--sand-100);
   font-family: 'IBM Plex Mono', monospace;
   padding: 1.25rem;
@@ -85,7 +96,7 @@
 .instrument strong {
   display: block;
   font-family: 'Archivo Black', sans-serif;
-  font-size: 5rem;
+  font-size: clamp(3.75rem, 8vw, 5rem);
   letter-spacing: 0;
 }
 
@@ -101,10 +112,16 @@
 @media (max-width: 700px) {
   .notFound {
     grid-template-columns: 1fr;
+    padding: 2rem 1rem;
   }
 
   .actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .actions a,
+  .actions button {
+    width: 100%;
   }
 }
