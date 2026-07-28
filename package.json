@@ -27,6 +27,10 @@
     "verify:generated-adapter": "node scripts/verify-generated-adapter.mjs",
     "openapi:validate": "node scripts/validate-openapi.mjs",
     "typecheck": "turbo run typecheck",
+    "website:dev": "pnpm --filter @cashu-fault-lab/website dev",
+    "website:build": "pnpm --filter @cashu-fault-lab/website build",
+    "website:test": "pnpm --filter @cashu-fault-lab/website test",
+    "website:test:e2e": "pnpm --filter @cashu-fault-lab/website test:e2e",
     "format:check": "prettier --check .",
     "audit": "pnpm audit --prod"
   },

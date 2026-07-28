@@ -1,0 +1,40 @@
+{
+  "name": "@cashu-fault-lab/website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource/archivo-black": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource-variable/ibm-plex-sans": "5.3.0",
+    "github-slugger": "2.0.0",
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-markdown": "10.1.0",
+    "rehype-pretty-code": "0.14.5",
+    "rehype-slug": "6.0.0",
+    "remark-gfm": "4.0.1",
+    "shiki": "4.3.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "1.62.0",
+    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "jsdom": "30.0.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

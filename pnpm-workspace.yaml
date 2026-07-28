@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   cpu-features: false
   protobufjs: false
+  sharp: true
   ssh2: false
 overrides:
   brace-expansion: 5.0.8
