@@ -117,6 +117,17 @@ describe('home components', () => {
     expect(textLinkRule).toMatch(/min-width:\s*(?:44px|2\.75rem)/);
   });
 
+  it('keeps invariant status counts in one four-column strip at every breakpoint', async () => {
+    const css = await readFile(homePath('home.module.css'), 'utf8');
+    const statusGridRules = cssRules(css, 'statusGrid');
+
+    expect(statusGridRules).toHaveLength(1);
+    expect(statusGridRules[0]).toMatch(
+      /grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/,
+    );
+    expect(css).not.toMatch(/\.statusGrid,\s*\.reportLinks\s*{[^}]*grid-template-columns:\s*1fr/s);
+  });
+
   it('lists every reviewed invariant with its current evidence state', async () => {
     const summary = await getDemoSummary();
     render(<EvidenceReport summary={summary} />);

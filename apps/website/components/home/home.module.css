@@ -1336,16 +1336,35 @@
     border-top: 1px solid var(--hairline);
   }
 
-  .statusGrid {
-    grid-template-columns: repeat(2, 1fr);
+  .statusCard {
+    align-content: start;
+    font-size: 0.58rem;
+    gap: 0.4rem;
+    grid-template-areas:
+      'icon count'
+      'label label';
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 5.25rem;
+    min-width: 0;
+    padding: 0.65rem 0.45rem;
   }
 
-  .statusCard:nth-child(even) {
-    border-right: 0;
+  .statusCard .statusIcon {
+    grid-area: icon;
   }
 
-  .statusCard:nth-child(n + 3) {
-    border-top: 1px solid var(--hairline);
+  .statusCard > span:nth-child(2) {
+    grid-area: label;
+    line-height: 1.2;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .statusCard strong {
+    font-size: 1.35rem;
+    grid-area: count;
+    justify-self: end;
+    line-height: 1;
   }
 
   .invariantList {
@@ -1481,7 +1500,6 @@
   }
 
   .reportFacts,
-  .statusGrid,
   .reportLinks {
     grid-template-columns: 1fr;
   }
@@ -1492,15 +1510,6 @@
 
   .reportLinks .reportLink + .reportLink {
     border-left: 0;
-  }
-
-  .statusCard,
-  .statusCard:nth-child(even) {
-    border-right: 0;
-  }
-
-  .statusCard + .statusCard {
-    border-top: 1px solid var(--hairline);
   }
 }
 
