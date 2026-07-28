@@ -147,8 +147,8 @@ describe('adapter manifest', () => {
       ],
     });
 
-    expect(() =>
-      resolveAdapterManifest(manifest, { WALLET_TOKEN: 'wallet-token' }),
-    ).toThrow(/LEDGER_TOKEN/);
+    expect(() => resolveAdapterManifest(manifest, { WALLET_TOKEN: 'wallet-token' })).toThrow(
+      /LEDGER_TOKEN/,
+    );
   });
 });

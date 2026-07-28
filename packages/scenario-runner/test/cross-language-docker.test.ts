@@ -11,6 +11,8 @@ import {
   runExternalDeliveryPair,
   type ExternalFaultController,
   type ExternalFaultEvidence,
+  type ExternalFaultRoute,
+  type ExternalFaultRuleHandle,
   type FaultRule,
   type ScenarioSpec,
 } from '../src/index.js';
@@ -70,6 +72,7 @@ class PaymentFaultProxy implements ExternalFaultController {
   #inbound = 0;
   #forwarded = 0;
   #appliedFaults = 0;
+  #ruleHandle: ExternalFaultRuleHandle | undefined;
   readonly #statuses: number[] = [];
   readonly #errorBodies: string[] = [];
 
@@ -98,17 +101,33 @@ class PaymentFaultProxy implements ExternalFaultController {
     this.#inbound = 0;
     this.#forwarded = 0;
     this.#appliedFaults = 0;
+    this.#ruleHandle = undefined;
     this.#statuses.splice(0);
     this.#errorBodies.splice(0);
   }
 
-  async configure(target: string, rule: FaultRule): Promise<void> {
+  async configure(
+    target: string,
+    rule: FaultRule,
+    route?: ExternalFaultRoute,
+  ): Promise<ExternalFaultRuleHandle> {
     if (target !== 'http') throw new Error('Test proxy only controls HTTP');
+    if (route === undefined) throw new Error('Test proxy requires an exact HTTP route');
     this.#rule = { ...rule };
+    this.#ruleHandle = {
+      id: 'cross-language-rule',
+      target,
+      method: route.method,
+      path: route.path,
+      phase: rule.kind === 'drop_response' ? 'after_downstream_response' : 'before_forward',
+      action: rule.kind === 'duplicate' ? 'duplicate' : 'drop',
+    };
+    return this.#ruleHandle;
   }
 
   async clear(): Promise<void> {
     this.#rule = undefined;
+    this.#ruleHandle = undefined;
   }
 
   async evidence(): Promise<ExternalFaultEvidence> {
@@ -118,6 +137,10 @@ class PaymentFaultProxy implements ExternalFaultController {
       controller: 'http-gateway',
       observedTarget: 'http',
       appliedFaults: this.#appliedFaults,
+      rules:
+        this.#ruleHandle === undefined
+          ? []
+          : [{ ...this.#ruleHandle, applied: this.#appliedFaults }],
     };
   }
 
@@ -343,8 +366,16 @@ describe.skipIf(!mintUrl)('real funded cross-language delivery', () => {
             ? `sender=${index} scenario=${scenario.name}: ${result.error.message}; proxy=${JSON.stringify(proxy.diagnostics())}`
             : '',
         ).toBe('passed');
-        expect(observations(result, 'redemption_started')).toBe(1);
+        expect(observations(result, 'redemption_started')).toBe(0);
         expect(observations(result, 'merchant_credited')).toBe(1);
+        expect(
+          result.artifact.invariants.find((item) => item.id === 'at-most-once-redemption-start'),
+        ).toMatchObject({ status: 'not_observable' });
+        expect(
+          result.artifact.invariants.find(
+            (item) => item.id === 'at-most-one-merchant-credit-per-delivery',
+          ),
+        ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
       }
     }
   }, 300_000);

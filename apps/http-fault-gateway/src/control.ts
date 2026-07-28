@@ -118,9 +118,7 @@ export class GatewayControl {
         id: rule.id,
         phase: rule.phase,
         action: rule.action,
-        ...(rule.match?.method === undefined
-          ? {}
-          : { method: rule.match.method.toUpperCase() }),
+        ...(rule.match?.method === undefined ? {} : { method: rule.match.method.toUpperCase() }),
         ...(rule.match?.path === undefined ? {} : { path: rule.match.path }),
         remaining,
         applied,

@@ -23,6 +23,7 @@
 ### Task 1: Source-specific oracle confidence
 
 **Files:**
+
 - Modify: `packages/oracle/src/evidence.ts`
 - Modify: `packages/oracle/src/index.ts`
 - Test: `packages/oracle/test/evidence.test.ts`
@@ -30,6 +31,7 @@
 - Test: `packages/scenario-runner/test/runner.test.ts`
 
 **Interfaces:**
+
 - Produces: `EvidenceSourceConfidence`
 - Produces: `EvaluateInvariantsInput.sourceConfidence`
 - Produces: `ScenarioDriver.sourceConfidence`
@@ -60,10 +62,7 @@ Add:
 ```ts
 export type EvidenceSourceConfidence = Readonly<
   Partial<
-    Record<
-      InvariantEvidenceSource,
-      Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>
-    >
+    Record<InvariantEvidenceSource, Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>>
   >
 >;
 ```
@@ -87,6 +86,7 @@ git commit -m "feat: track invariant confidence by evidence source"
 ### Task 2: Independent external evidence authorities
 
 **Files:**
+
 - Modify: `apps/lab-cli/src/adapter-manifest.ts`
 - Test: `apps/lab-cli/test/adapter-manifest.test.ts`
 - Modify: `apps/lab-cli/src/adapter-registry.ts`
@@ -100,6 +100,7 @@ git commit -m "feat: track invariant confidence by evidence source"
 - Modify: `README.md`
 
 **Interfaces:**
+
 - Produces: manifest schema version 2 with optional `evidence.ledger` and `evidence.mint`.
 - Produces: `ExternalEvidenceAuthorities` with read-only `ledger()` and `proofs()`.
 - Produces: `ExternalAdapterRegistry.evidence(adapterId)`.
@@ -164,6 +165,7 @@ git commit -m "feat: accept independent external evidence authorities"
 ### Task 3: Exact fault rule and route evidence
 
 **Files:**
+
 - Modify: `apps/http-fault-gateway/src/control.ts`
 - Test: `apps/http-fault-gateway/test/gateway.test.ts`
 - Modify: `packages/scenario-runner/src/external-adapter-driver.ts`
@@ -172,6 +174,7 @@ git commit -m "feat: accept independent external evidence authorities"
 - Test: `packages/scenario-runner/test/external-adapter-driver.test.ts`
 
 **Interfaces:**
+
 - Produces: `ExternalFaultRuleHandle`
 - Produces: `ExternalFaultRuleEvidence`
 - Changes: `ExternalFaultController.configure(target, rule, route)` returns the handle.
@@ -222,6 +225,7 @@ git commit -m "fix: bind external faults to exact rules and routes"
 ### Task 4: Cryptographic release-suite binding
 
 **Files:**
+
 - Modify: `apps/lab-cli/src/release-suite-loader.ts`
 - Test: `apps/lab-cli/test/release-suite-loader.test.ts`
 - Modify: `packages/scenario-runner/src/release-policy.ts`
@@ -236,6 +240,7 @@ git commit -m "fix: bind external faults to exact rules and routes"
 - Test: `packages/adapter-contract/test/contract.test.ts`
 
 **Interfaces:**
+
 - Produces: `LoadedReleaseSuite.digest`
 - Produces: policy schema v3 `releaseSuiteDigest`
 - Produces: `MatrixCaseResult.releaseSuiteDigest`
@@ -293,12 +298,14 @@ git commit -m "feat: bind release policy to the exact scenario suite"
 ### Task 5: Conservative suite invariant aggregation
 
 **Files:**
+
 - Modify: `apps/lab-cli/src/packaged-runtime.ts`
 - Test: `apps/lab-cli/test/packaged-runtime.test.ts`
 - Modify: `packages/scenario-runner/src/release-policy.ts`
 - Test: `packages/scenario-runner/test/release-policy.test.ts`
 
 **Interfaces:**
+
 - Produces: `aggregateReleaseSuiteInvariants(scenarios)`.
 - Replaces smoke invariants only when a release suite is active.
 
@@ -340,6 +347,7 @@ git commit -m "fix: aggregate release suite evidence conservatively"
 ### Task 6: Preview metadata, workflow semantics, and documentation
 
 **Files:**
+
 - Modify: `apps/lab-cli/src/index.ts`
 - Modify: `apps/lab-cli/src/packaged-runtime.ts`
 - Modify: `packages/scenario-runner/src/reference-capabilities.ts`
@@ -355,6 +363,7 @@ git commit -m "fix: aggregate release suite evidence conservatively"
 - Modify: `.github/workflows/release.yml`
 
 **Interfaces:**
+
 - Repository-owned component version: `0.1.0`.
 - Release workflow: manual qualification, never an automatic tag-push release.
 
@@ -397,9 +406,11 @@ git commit -m "docs: align preview artifacts and release qualification"
 ### Task 7: Full end-to-end verification and branch review
 
 **Files:**
+
 - Review all files changed from `origin/main`.
 
 **Interfaces:**
+
 - Consumes every prior task.
 - Produces a verified feature branch without publishing it.
 
@@ -464,4 +475,3 @@ escapes.
 
 Commit only necessary formatting, generated artifacts, or verification fixes.
 Do not push or create a PR unless the user asks.
-

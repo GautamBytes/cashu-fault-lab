@@ -105,10 +105,7 @@ function evidenceAuthorities(
   if (evidence.ledger === undefined && evidence.mint === undefined) {
     throw new Error('Adapter manifest evidence must configure ledger or mint authority');
   }
-  if (
-    evidence.ledger?.url === adapterOrigin ||
-    evidence.mint?.url === adapterOrigin
-  ) {
+  if (evidence.ledger?.url === adapterOrigin || evidence.mint?.url === adapterOrigin) {
     throw new Error('Adapter manifest evidence authority must be independent from the adapter');
   }
   return evidence;
@@ -128,9 +125,7 @@ function adapter(value: unknown, schemaVersion: 1 | 2): AdapterRegistration {
     id: input.id,
     url,
     tokenEnv: input.tokenEnv,
-    ...(input.evidence === undefined
-      ? {}
-      : { evidence: evidenceAuthorities(input.evidence, url) }),
+    ...(input.evidence === undefined ? {} : { evidence: evidenceAuthorities(input.evidence, url) }),
   };
 }
 
@@ -159,10 +154,7 @@ export function parseAdapterManifest(value: unknown): AdapterManifest {
   return { schemaVersion, adapters };
 }
 
-function token(
-  env: Readonly<Record<string, string | undefined>>,
-  tokenEnv: string,
-): string {
+function token(env: Readonly<Record<string, string | undefined>>, tokenEnv: string): string {
   const value = env[tokenEnv];
   if (value === undefined || value.trim().length === 0 || /[\r\n]/u.test(value)) {
     throw new Error(`Adapter control token ${tokenEnv} is missing or invalid`);

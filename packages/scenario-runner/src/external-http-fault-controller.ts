@@ -279,12 +279,10 @@ export class HttpExternalFaultController implements ExternalFaultController {
       path: route.path,
     });
     const response = await this.#request('POST', '/__faults/v1/rules', mapped);
-    return ruleHandle(
-      await boundedJson(response),
-      target,
-      mapped,
-      { method: route.method.toUpperCase(), path: route.path },
-    );
+    return ruleHandle(await boundedJson(response), target, mapped, {
+      method: route.method.toUpperCase(),
+      path: route.path,
+    });
   }
 
   async clear(target?: string): Promise<void> {
