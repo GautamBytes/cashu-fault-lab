@@ -2,6 +2,18 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('funded wallet workflow targets', () => {
+  it('validates every generated adapter through the built lab client', async () => {
+    const contents = await readFile(
+      new URL('../../../.github/workflows/ci.yml', import.meta.url),
+      'utf8',
+    );
+
+    expect(contents.match(/node scripts\/verify-generated-adapter\.mjs/gu)).toHaveLength(3);
+    expect(contents).toContain('template-ts');
+    expect(contents).toContain('template-rust');
+    expect(contents).toContain('template-python');
+  });
+
   it('runs the external funded wallet matrix as a fail-closed CI lane', async () => {
     const contents = await readFile(
       new URL('../../../.github/workflows/ci.yml', import.meta.url),

@@ -24,6 +24,7 @@
     "docs:cli:check": "node scripts/generate-cli-docs.mjs --check",
     "codegen": "node scripts/codegen.mjs",
     "codegen:check": "node scripts/codegen.mjs --check",
+    "verify:generated-adapter": "node scripts/verify-generated-adapter.mjs",
     "openapi:validate": "node scripts/validate-openapi.mjs",
     "typecheck": "turbo run typecheck",
     "format:check": "prettier --check .",

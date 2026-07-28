@@ -120,13 +120,22 @@ describe('adapter project scaffolding', () => {
         if (language === 'typescript') {
           expect(model).toContain("readonly status: 'processing' | 'settled' | 'rejected';");
           expect(model).toContain('readonly detail_code: string;');
+          expect(await readFile(join(output, 'src/server.ts'), 'utf8')).toContain(
+            "server.post('/v1/reset', async () => ({ ok: true }))",
+          );
         } else if (language === 'rust') {
           expect(model).toContain('pub enum DeliveryReceiptStatus');
           expect(model).toContain('pub status: DeliveryReceiptStatus');
           expect(model).toContain('pub detail_code: String');
+          expect(await readFile(join(output, 'src/main.rs'), 'utf8')).toContain(
+            '.route("/v1/reset", post(reset))',
+          );
         } else {
           expect(model).toContain('status: Literal["processing", "settled", "rejected"]');
           expect(model).toContain('detail_code: str');
+          expect(await readFile(join(output, 'src/my_wallet/main.py'), 'utf8')).toContain(
+            'def reset() -> dict[str, bool]:',
+          );
         }
 
         const capabilities = await generatedCapabilities(output, language);

@@ -315,9 +315,7 @@ export function buildServer(options: ServerOptions = {}) {
   });
 
   server.get('/v1/capabilities', async () => contract);
-  server.post('/v1/reset', async (_request, reply) =>
-    reply.code(501).send(unsupported('reset route is not implemented')),
-  );
+  server.post('/v1/reset', async () => ({ ok: true }));
   server.post('/v1/requests', async (_request, reply) =>
     reply.code(501).send(unsupported('request creation is not implemented')),
   );
@@ -362,8 +360,10 @@ describe('${context.name} adapter contract surface', () => {
       const capabilities = await server.inject({ method: 'GET', url: '/v1/capabilities', headers: auth });
       expect(capabilities.statusCode).toBe(200);
       expect(capabilities.json()).toMatchObject({ implementation: { id: '${context.name}' } });
+      const reset = await server.inject({ method: 'POST', url: '/v1/reset', headers: auth, payload: { seed: 'test' } });
+      expect(reset.statusCode).toBe(200);
+      expect(reset.json()).toEqual({ ok: true });
       for (const request of [
-        { method: 'POST', url: '/v1/reset', payload: { seed: 'test' } },
         { method: 'POST', url: '/v1/requests', payload: { amount: 1, unit: 'sat', transports: ['http'], singleUse: true, expiresIn: 60 } },
         { method: 'POST', url: '/v1/send', payload: { request: 'creqAexample' } },
         { method: 'GET', url: '/v1/deliveries/AAECAwQFBgcICQoLDA0ODw' },
@@ -414,7 +414,7 @@ ${context.tokenEnv}=local-token pnpm build
 ${context.tokenEnv}=local-token pnpm start
 \`\`\`
 
-The scaffold exposes \`/healthz\`, \`/v1/capabilities\`, and six explicit \`501 N/A\` route stubs for the delivery contract.
+The scaffold exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and five explicit \`501 N/A\` wallet-operation stubs.
 
 Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
 `,
@@ -666,6 +666,10 @@ async fn capabilities() -> Json<Value> {
     Json(serde_json::from_str(contract::CAPABILITIES).expect("valid capabilities"))
 }
 
+async fn reset() -> Json<Value> {
+    Json(json!({ "ok": true }))
+}
+
 async fn not_applicable() -> impl IntoResponse {
     (
         StatusCode::NOT_IMPLEMENTED,
@@ -677,7 +681,7 @@ fn app_with_token(token: String) -> Router {
     let state = AppState { token: Arc::new(token) };
     let contract_routes = Router::new()
         .route("/v1/capabilities", get(capabilities))
-        .route("/v1/reset", post(not_applicable))
+        .route("/v1/reset", post(reset))
         .route("/v1/requests", post(not_applicable))
         .route("/v1/send", post(not_applicable))
         .route("/v1/deliveries/{delivery_id}", get(not_applicable))
@@ -730,7 +734,7 @@ mod tests {
         let auth = "Bearer test-token";
         let routes = [
             (Method::GET, "/v1/capabilities", StatusCode::OK),
-            (Method::POST, "/v1/reset", StatusCode::NOT_IMPLEMENTED),
+            (Method::POST, "/v1/reset", StatusCode::OK),
             (Method::POST, "/v1/requests", StatusCode::NOT_IMPLEMENTED),
             (Method::POST, "/v1/send", StatusCode::NOT_IMPLEMENTED),
             (Method::GET, "/v1/deliveries/AAECAwQFBgcICQoLDA0ODw", StatusCode::NOT_IMPLEMENTED),
@@ -779,7 +783,7 @@ cargo test
 ${context.tokenEnv}=local-token cargo run
 \`\`\`
 
-The scaffold uses Rust 1.97, edition 2024, Axum, and Tokio. It exposes \`/healthz\`, \`/v1/capabilities\`, and six explicit \`501 N/A\` route stubs.
+The scaffold uses Rust 1.97, edition 2024, Axum, and Tokio. It exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and five explicit \`501 N/A\` wallet-operation stubs.
 
 Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
 `,
@@ -987,9 +991,9 @@ def capabilities() -> AdapterCapabilities:
     return CAPABILITIES
 
 
-@app.post("/v1/reset", status_code=501, dependencies=[Depends(require_auth)])
-def reset() -> UnsupportedResponse:
-    return unsupported("reset route is not implemented")
+@app.post("/v1/reset", dependencies=[Depends(require_auth)])
+def reset() -> dict[str, bool]:
+    return {"ok": True}
 
 
 @app.post("/v1/requests", status_code=501, dependencies=[Depends(require_auth)])
@@ -1031,9 +1035,11 @@ def test_health_and_contract_routes(monkeypatch):
     capabilities = client.get("/v1/capabilities", headers=auth)
     assert capabilities.status_code == 200
     assert capabilities.json()["implementation"]["id"] == "${context.name}"
+    reset = client.post("/v1/reset", headers=auth, json={"seed": "test"})
+    assert reset.status_code == 200
+    assert reset.json() == {"ok": True}
 
     routes = [
-        ("post", "/v1/reset"),
         ("post", "/v1/requests"),
         ("post", "/v1/send"),
         ("get", "/v1/deliveries/AAECAwQFBgcICQoLDA0ODw"),
@@ -1067,7 +1073,7 @@ ${context.tokenEnv}=local-token uvicorn ${context.moduleName}.main:app --host 0.
 
 Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
 
-The scaffold uses Python 3.12+, FastAPI, and Pydantic-ready type hints. It exposes \`/healthz\`, \`/v1/capabilities\`, and six explicit \`501 N/A\` route stubs.
+The scaffold uses Python 3.12+, FastAPI, and Pydantic-ready type hints. It exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and five explicit \`501 N/A\` wallet-operation stubs.
 `,
     '.github/workflows/ci.yml': `name: Adapter CI
 

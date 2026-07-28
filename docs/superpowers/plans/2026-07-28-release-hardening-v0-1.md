@@ -111,6 +111,8 @@ git commit -m "fix: generate contract-valid adapter templates"
 
 - Create: `scripts/verify-generated-adapter.mjs`
 - Modify: `.github/workflows/ci.yml`
+- Modify: `apps/lab-cli/src/adapter-init.ts`
+- Modify: `apps/lab-cli/test/adapter-init.test.ts`
 - Modify: `apps/lab-cli/test/funded-wallet-workflows.test.ts`
 - Modify: `package.json`
 
@@ -152,6 +154,9 @@ Then issue one unsupported operation and require
 `AdapterNotApplicableError`. It must also perform an unauthenticated request and
 require HTTP 401. Arguments are strict loopback origins, a non-empty token, and a
 bounded startup timeout. It must not print the token.
+
+Generated templates therefore implement authenticated reset as `{ "ok": true }`;
+the five wallet/payment operations remain explicit canonical `N/A` stubs.
 
 - [ ] **Step 4: Add generated server lifecycle to CI**
 
