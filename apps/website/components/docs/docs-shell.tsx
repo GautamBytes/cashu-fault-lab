@@ -81,7 +81,7 @@ export function DocsShell({
         </header>
 
         <TableOfContents className={styles.mobileToc} headings={document.headings} />
-        <MarkdownDocument markdown={document.markdown} />
+        <MarkdownDocument markdown={document.markdown} sourcePath={document.sourcePath} />
 
         <nav aria-label="Document pagination" className={styles.pagination}>
           {document.previous ? (

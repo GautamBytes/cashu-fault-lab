@@ -3,7 +3,11 @@
 import { type ComponentPropsWithoutRef, useRef, useState } from "react";
 import styles from "./docs.module.css";
 
-export function CodeBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
+interface CodeBlockProps extends ComponentPropsWithoutRef<"pre"> {
+  node?: unknown;
+}
+
+export function CodeBlock({ children, node: _node, ...props }: CodeBlockProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
 
