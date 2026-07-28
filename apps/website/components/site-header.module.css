@@ -1,16 +1,23 @@
 .header {
-  background: var(--purple-950);
-  border-bottom: 1px solid color-mix(in srgb, var(--sand-500) 38%, transparent);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  background: var(--ink);
+  background: rgb(9 7 13 / 88%);
+  border-bottom: 1px solid var(--hairline);
   color: var(--sand-100);
+  min-height: 68px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .inner {
   align-items: center;
   display: flex;
   gap: 1rem;
+  height: 67px;
   margin: 0 auto;
-  max-width: var(--content-width);
-  min-height: 4.5rem;
+  max-width: var(--shell-width);
   padding: 0 1.25rem;
 }
 
@@ -20,7 +27,7 @@
   display: flex;
   font-family: 'Archivo Black', sans-serif;
   font-size: 1rem;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
   min-height: 44px;
   min-width: 44px;
   text-decoration: none;
@@ -28,7 +35,7 @@
 }
 
 .brandMark {
-  border: 1px solid var(--sand-500);
+  border: 1px solid var(--hairline);
   height: 1.75rem;
   image-rendering: pixelated;
   margin-right: 0.55rem;
@@ -51,7 +58,7 @@
 
 .links a {
   align-items: center;
-  color: var(--sand-300);
+  color: var(--muted-text);
   display: flex;
   font-size: 0.825rem;
   min-height: 44px;
@@ -62,14 +69,12 @@
 .links a:hover,
 .links a:focus-visible {
   color: var(--sand-100);
-  text-decoration: underline;
-  text-underline-offset: 0.25rem;
 }
 
 .searchButton,
 .menuButton {
-  background: transparent;
-  border: 1px solid var(--sand-500);
+  background: var(--control-surface);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   color: var(--sand-100);
   cursor: pointer;
@@ -79,14 +84,34 @@
   padding: 0.45rem 0.7rem;
 }
 
+.searchButton:hover,
+.menuButton:hover {
+  background: var(--elevated-surface);
+  border-color: var(--purple-500);
+}
+
+.searchButton span {
+  color: var(--muted-text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  margin-left: 0.4rem;
+}
+
 .menuButton {
   display: none;
   margin-left: auto;
 }
 
 @media (max-width: 1040px) {
+  .header {
+    min-height: 60px;
+  }
+
   .inner {
     flex-wrap: wrap;
+    height: auto;
+    min-height: 59px;
+    padding: 0 1rem;
   }
 
   .menuButton {
@@ -94,10 +119,13 @@
   }
 
   .navigation {
+    background: var(--control-surface);
+    border-top: 1px solid var(--hairline);
     display: none;
     flex-basis: 100%;
     flex-direction: column;
-    padding-bottom: 1rem;
+    margin: 0 -1rem;
+    padding: 0.5rem 1rem 1rem;
   }
 
   .navigationOpen {

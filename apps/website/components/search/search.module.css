@@ -1,19 +1,20 @@
 .overlay {
   align-items: flex-start;
-  background: color-mix(in srgb, var(--purple-950) 72%, transparent);
+  background: rgb(9 7 13 / 82%);
   display: flex;
   inset: 0;
   justify-content: center;
   padding: min(12vh, 6rem) 1rem 1rem;
   position: fixed;
-  z-index: 10;
+  z-index: 100;
 }
 
 .dialog {
-  background: var(--sand-100);
-  border: 1px solid var(--sand-500);
+  background: var(--elevated-surface);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  box-shadow: 0 1.5rem 4rem color-mix(in srgb, var(--purple-950) 45%, transparent);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 48%);
+  color: var(--sand-100);
   max-height: min(42rem, calc(100vh - 7rem));
   max-width: 42rem;
   overflow: auto;
@@ -34,10 +35,10 @@
 }
 
 .dialogHeader button {
-  background: var(--sand-300);
-  border: 1px solid var(--sand-500);
+  background: var(--control-surface);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
-  color: var(--purple-950);
+  color: var(--sand-300);
   cursor: pointer;
   font: inherit;
   min-height: 44px;
@@ -46,10 +47,11 @@
 }
 
 .dialog input {
-  background: var(--sand-100);
-  border: 2px solid var(--purple-700);
+  background: var(--control-surface);
+  border: 1px solid var(--purple-700);
   border-radius: var(--radius-sm);
-  color: var(--purple-950);
+  caret-color: var(--purple-electric);
+  color: var(--sand-100);
   font: inherit;
   min-height: 3rem;
   padding: 0.65rem 0.8rem;
@@ -57,7 +59,7 @@
 }
 
 .dialog input::placeholder {
-  color: var(--purple-700);
+  color: var(--muted-text);
 }
 
 .results {
@@ -67,11 +69,11 @@
 }
 
 .results li + li {
-  border-top: 1px solid var(--sand-500);
+  border-top: 1px solid var(--hairline);
 }
 
 .results a {
-  color: var(--purple-950);
+  color: var(--sand-100);
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -82,13 +84,13 @@
 
 .results a:hover,
 .results a:focus-visible {
-  background: var(--sand-300);
-  outline: 2px solid var(--purple-500);
+  background: var(--control-surface);
+  outline: 2px solid var(--purple-electric);
   outline-offset: -2px;
 }
 
 .results span {
-  color: var(--purple-700);
+  color: var(--muted-text);
   font-size: 0.85rem;
 }
 
@@ -110,7 +112,7 @@
 }
 
 .emptyState a {
-  color: var(--purple-700);
+  color: var(--purple-electric);
   font-weight: 700;
   text-underline-offset: 0.2rem;
 }
@@ -123,6 +125,8 @@
   .dialog {
     border-radius: 0;
     max-height: 100vh;
+    max-height: 100dvh;
     min-height: 100vh;
+    min-height: 100dvh;
   }
 }

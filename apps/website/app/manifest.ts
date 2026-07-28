@@ -8,7 +8,7 @@ export default function manifest(): MetadataRoute.Manifest {
       'An experimental developer preview for Cashu delivery fault injection and recovery evidence.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#f6ebd6',
+    background_color: '#09070d',
     theme_color: '#2b0c4a',
     icons: [
       {

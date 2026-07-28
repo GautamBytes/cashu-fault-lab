@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import manifest from './manifest';
 import { resolveSiteUrl, serializeJsonLd } from './site-metadata';
+
+describe('manifest', () => {
+  it('uses the dark application shell colors', () => {
+    expect(manifest()).toMatchObject({
+      background_color: '#09070d',
+      theme_color: '#2b0c4a',
+    });
+  });
+});
 
 describe('resolveSiteUrl', () => {
   it('prefers the sanitized production host and adds HTTPS', () => {

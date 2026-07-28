@@ -52,7 +52,9 @@ export function PortalShell({ children, records }: PortalShellProps) {
       <SiteHeader onOpenSearch={() => setOpen(true)} />
       <SearchDialog onOpenChange={setOpen} open={open} records={records} />
       <main id="main-content">{children}</main>
-      <footer>Experimental developer preview.</footer>
+      <footer>
+        <div className="footer-inner">Experimental developer preview.</div>
+      </footer>
     </>
   );
 }
