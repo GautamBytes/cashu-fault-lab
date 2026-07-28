@@ -270,9 +270,10 @@ test('reduced motion is exposed as a timeline data signal', async ({ page }, tes
   );
 });
 
-test('every public route fits desktop and mobile viewports', async ({ page }) => {
+test('every public route is accessible and fits desktop and mobile viewports', async ({ page }) => {
   for (const route of publicRoutes) {
     await page.goto(route);
+    await expectNoSeriousAccessibilityViolations(page);
     await expectNoPageOverflow(page);
   }
 });

@@ -102,6 +102,18 @@ export function MarkdownDocument({
         ]}
         skipHtml
         components={{
+          input: ({ checked, node: _node, type, ...props }) => (
+            <input
+              {...props}
+              aria-label={
+                type === 'checkbox'
+                  ? `${checked ? 'Completed' : 'Incomplete'} checklist item`
+                  : undefined
+              }
+              checked={checked}
+              type={type}
+            />
+          ),
           pre: CodeBlock,
           table: ({ node: _node, ...props }) => (
             <table aria-label="Scrollable data table" tabIndex={0} {...props} />

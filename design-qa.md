@@ -55,11 +55,12 @@ conditions, follows Docs, opens Browse documentation, and verifies 44px controls
 
 ## Verification
 
-- Website unit tests: 10 files and 52 tests passed.
+- Website unit tests: 11 files and 53 tests passed.
 - Type generation and `tsc --noEmit`: passed.
 - Production build: passed and generated 20 static or SSG routes.
 - Playwright: 13 passed and 7 project-specific cases skipped across desktop and mobile projects.
-- Axe found no serious or critical violations on the tested home and docs routes.
+- Axe scanned all 12 listed public routes in both projects, for 24 route/viewport scans. The final
+  run found no serious or critical violations.
 - Every public route passed horizontal-overflow checks in both projects.
 - Reduced motion, canonical metadata, discovery endpoints, search focus containment, docs heading
   navigation, compact navigation, local code scrolling, touch targets, and screenshot capture
@@ -74,6 +75,9 @@ conditions, follows Docs, opens Browse documentation, and verifies 44px controls
    1905 x 781 fold.
 5. Added permanent browser coverage for docs heading stability, phone security-heading fit, and
    the exact user viewport.
+6. Extended Axe coverage from Home and Getting started to every listed public route in both
+   projects. The first expanded run exposed unlabeled GFM task-list checkboxes on Release
+   checklist; the shared Markdown renderer now gives checked and unchecked items accessible names.
 
 ## Residual risks
 
