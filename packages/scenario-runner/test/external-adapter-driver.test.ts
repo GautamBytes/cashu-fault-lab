@@ -554,6 +554,44 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(waits).toEqual([25, 25, 25]);
   });
 
+  it('allows repeated container restart backoff to exceed twenty readiness probes', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const faults = new Faults();
+    const waits: number[] = [];
+    faults.onRestart = (component) => {
+      if (component === 'receiver') sender.availabilityFailures = 20;
+    };
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults,
+        amount: 8,
+        unit: 'sat',
+        restartReadinessDelayMs: 25,
+        sleep: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).run(
+      {
+        name: 'external-repeated-container-restart-backoff',
+        commands: [
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'restart', component: 'receiver' },
+          { type: 'send', sender: 'sender-wallet', requestId },
+          { type: 'assert_quiescent' },
+        ],
+      },
+      'external-repeated-container-restart-backoff',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(faults.restarts).toEqual(['receiver']);
+    expect(waits).toHaveLength(20);
+  });
+
   it('reports the exact sender readiness probe failure after exhausting restart attempts', async () => {
     const receiver = new Receiver();
     const sender = new Sender(receiver);

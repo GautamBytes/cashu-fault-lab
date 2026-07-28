@@ -194,7 +194,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#maxAttempts = positiveSafeInteger(options.maxAttempts ?? 3, 'maxAttempts');
     this.#retryDelayMs = positiveSafeInteger(options.retryDelayMs ?? 100, 'retryDelayMs');
     this.#restartReadinessAttempts = positiveSafeInteger(
-      options.restartReadinessAttempts ?? 20,
+      options.restartReadinessAttempts ?? 120,
       'restartReadinessAttempts',
     );
     this.#restartReadinessDelayMs = positiveSafeInteger(
