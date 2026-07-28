@@ -1,11 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cashu-fault-lab.dev/schema/release-policy-v2.json",
+  "$id": "https://cashu-fault-lab.dev/schema/release-policy-v3.json",
   "title": "Cashu Fault Lab Release Policy",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
+    "releaseSuiteDigest",
     "profile",
     "minimumQualifyingPairs",
     "requireCrossImplementation",
@@ -18,7 +19,11 @@
     "acceptedConfidence"
   ],
   "properties": {
-    "schemaVersion": { "const": 2 },
+    "schemaVersion": { "const": 3 },
+    "releaseSuiteDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
     "profile": {
       "type": "string",
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"

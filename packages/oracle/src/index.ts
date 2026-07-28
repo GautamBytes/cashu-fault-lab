@@ -9,6 +9,7 @@ export {
 export type {
   EvaluateInvariantsInput,
   EvidenceConfidence,
+  EvidenceSourceConfidence,
   InvariantCommand,
   InvariantDefinition,
   InvariantEvidenceReference,

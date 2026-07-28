@@ -20,7 +20,7 @@ export function referenceCapabilities(
     contract: currentAdapterContract(),
     implementation: developmentIdentity({
       id: 'reference-ts',
-      version: '0.0.0',
+      version: '0.1.0',
       language: 'typescript',
       runtime: 'node-24',
     }),
@@ -33,6 +33,6 @@ export function referenceCapabilities(
   };
   return {
     ...capabilities,
-    componentVersions: { 'reference-ts': '0.0.0' },
+    componentVersions: { 'reference-ts': '0.1.0' },
   };
 }

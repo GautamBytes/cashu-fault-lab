@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { validateReleasePolicy } from '@cashu-fault-lab/scenario-runner';
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { loadReleaseSuite } from '../src/release-suite-loader.js';
@@ -49,6 +51,45 @@ describe('release suite loader', () => {
     });
 
     expect(loaded.scenarios).toEqual([{ ...entry, spec: scenario }]);
+    expect(loaded.digest).toBe(
+      'sha256:63fde51d9355ba7e19568750ee6ceb9b0164bea2fd581ef7109331f155f4639f',
+    );
+  });
+
+  it('changes the bundle digest when scenario bytes change', async () => {
+    const files = (scenarioText: string) => ({
+      [resolve(root, 'spec/release-suite.json')]: suite(),
+      [resolve(root, entry.scenario)]: scenarioText,
+    });
+    const first = await loadReleaseSuite({
+      repositoryRoot: root,
+      path: 'spec/release-suite.json',
+      realPath: identityRealPath,
+      readText: reader(files(JSON.stringify(scenario))),
+    });
+    const second = await loadReleaseSuite({
+      repositoryRoot: root,
+      path: 'spec/release-suite.json',
+      realPath: identityRealPath,
+      readText: reader(files(`${JSON.stringify(scenario)}\n`)),
+    });
+
+    expect(first.digest).not.toBe(second.digest);
+  });
+
+  it('binds the checked-in release policy to the real loaded scenario suite', async () => {
+    const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
+    const loaded = await loadReleaseSuite({
+      repositoryRoot,
+      path: 'spec/release-suite.json',
+      readText: async (path) => readFile(path, 'utf8'),
+      realPath: realpath,
+    });
+    const policy = validateReleasePolicy(
+      JSON.parse(await readFile(resolve(repositoryRoot, 'spec/release-policy.json'), 'utf8')),
+    );
+
+    expect(policy.releaseSuiteDigest).toBe(loaded.digest);
   });
 
   it.each(['/tmp/release-suite.json', '../release-suite.json'])(

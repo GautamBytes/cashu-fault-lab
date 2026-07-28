@@ -14,6 +14,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ExternalAdapterScenarioDriver,
   type ExternalFaultController,
+  type ExternalFaultRoute,
+  type ExternalFaultRuleHandle,
 } from '../src/external-adapter-driver.js';
 import { ScenarioRunner, type FaultRule, type ScenarioSpec } from '../src/runner.js';
 
@@ -43,7 +45,12 @@ function capability(id: string, role: 'sender' | 'receiver'): AdapterCapabilitie
 }
 
 class Faults implements ExternalFaultController {
-  readonly applied: Array<{ target: string; rule: FaultRule }> = [];
+  readonly applied: Array<{
+    target: string;
+    rule: FaultRule;
+    route?: ExternalFaultRoute;
+    handle: ExternalFaultRuleHandle;
+  }> = [];
   readonly restarts: string[] = [];
   forwards = 1;
   inbound = 1;
@@ -56,13 +63,27 @@ class Faults implements ExternalFaultController {
     this.inbound = 1;
   }
 
-  async configure(target: string, rule: FaultRule): Promise<void> {
-    this.applied.push({ target, rule });
+  async configure(
+    target: string,
+    rule: FaultRule,
+    route?: ExternalFaultRoute,
+  ): Promise<ExternalFaultRuleHandle> {
+    if (route === undefined) throw new Error('route required');
+    const handle = {
+      id: `rule-${this.applied.length + 1}`,
+      target,
+      phase: rule.kind === 'drop_response' ? 'after_downstream_response' : 'before_forward',
+      action: rule.kind === 'duplicate' ? 'duplicate' : 'drop',
+      method: route.method,
+      path: route.path,
+    };
+    this.applied.push({ target, rule, route, handle });
     if (rule.kind === 'duplicate') this.forwards = 1 + (rule.duplicateCount ?? 1);
     if (rule.kind === 'drop_response') {
       this.inbound = 2;
       this.forwards = 2;
     }
+    return handle;
   }
 
   async clear(): Promise<void> {}
@@ -72,14 +93,14 @@ class Faults implements ExternalFaultController {
     readonly forwarded: number;
     readonly controller: 'http-gateway';
     readonly observedTarget: 'http';
-    readonly appliedFaults: number;
+    readonly rules: readonly (ExternalFaultRuleHandle & { readonly applied: number })[];
   }> {
     return {
       inbound: this.inbound,
       forwarded: this.forwards,
       controller: 'http-gateway',
       observedTarget: 'http',
-      appliedFaults: this.applied.length,
+      rules: this.applied.map(({ handle }) => ({ ...handle, applied: 1 })),
     };
   }
 
@@ -96,8 +117,15 @@ class ZeroTrafficFaults extends Faults {
     this.forwards = 0;
   }
 
-  async configure(target: string, rule: FaultRule): Promise<void> {
-    this.applied.push({ target, rule });
+  async configure(
+    target: string,
+    rule: FaultRule,
+    route?: ExternalFaultRoute,
+  ): Promise<ExternalFaultRuleHandle> {
+    const handle = await super.configure(target, rule, route);
+    this.inbound = 0;
+    this.forwards = 0;
+    return handle;
   }
 }
 
@@ -107,14 +135,35 @@ class UnappliedGatewayFaults extends Faults {
     readonly forwarded: number;
     readonly controller: 'http-gateway';
     readonly observedTarget: 'http';
-    readonly appliedFaults: 0;
+    readonly rules: readonly (ExternalFaultRuleHandle & { readonly applied: 0 })[];
   }> {
     return {
       inbound: 2,
       forwarded: 2,
       controller: 'http-gateway',
       observedTarget: 'http',
-      appliedFaults: 0,
+      rules: this.applied.map(({ handle }) => ({ ...handle, applied: 0 as const })),
+    };
+  }
+}
+
+class UnrelatedAppliedGatewayFaults extends Faults {
+  async evidence() {
+    const configured = this.applied[0]!.handle;
+    return {
+      inbound: 2,
+      forwarded: 2,
+      controller: 'http-gateway' as const,
+      observedTarget: 'http' as const,
+      rules: [
+        { ...configured, applied: 0 },
+        {
+          ...configured,
+          id: 'unrelated-rule',
+          path: '/unrelated',
+          applied: 1,
+        },
+      ],
     };
   }
 }
@@ -335,6 +384,25 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(result.error.message).toBe('External configured fault was not exercised');
   });
 
+  it('does not accept an unrelated applied rule as configured fault evidence', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new UnrelatedAppliedGatewayFaults(),
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(scenario('drop_response'), 'external-unrelated-fault');
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { message: 'External configured fault was not exercised' },
+    });
+  });
+
   it('reuses one logical delivery after a lost response and produces one credit', async () => {
     const receiver = new Receiver();
     const sender = new Sender(receiver);
@@ -351,6 +419,15 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(faults.applied).toContainEqual({
       target: 'http',
       rule: { kind: 'drop_response', occurrence: 1 },
+      route: { method: 'POST', path: '/pay' },
+      handle: {
+        id: 'rule-1',
+        target: 'http',
+        phase: 'after_downstream_response',
+        action: 'drop',
+        method: 'POST',
+        path: '/pay',
+      },
     });
     const attempts = result.artifact.history.filter(
       (event) => event.phase === 'observation' && event.event === 'delivery_attempted',
@@ -362,6 +439,81 @@ describe('ExternalAdapterScenarioDriver', () => {
         (item) => item.id === 'at-most-one-merchant-credit-per-delivery',
       ),
     ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+    expect(
+      result.artifact.invariants.find((item) => item.id === 'at-most-once-redemption-start'),
+    ).toMatchObject({ status: 'not_observable' });
+  });
+
+  it('qualifies mint and ledger observations only through independent authorities', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    sender.failures = 1;
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new Faults(),
+        evidence: {
+          ledger: { ledger: () => receiver.ledger() },
+          mint: {
+            proofs: () => receiver.proofs(),
+            redemptions: async () => [
+              {
+                deliveryId: receiver.deliveryId,
+                proofSetHash: 'b'.repeat(64),
+                starts: 1,
+              },
+            ],
+          },
+        },
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(scenario('drop_response'), 'external-independent-evidence');
+
+    expect(
+      result.artifact.invariants.find((item) => item.id === 'independent-ledger-evidence'),
+    ).toMatchObject({ status: 'passed', confidence: 'observed' });
+    expect(
+      result.artifact.invariants.find((item) => item.id === 'independent-mint-evidence'),
+    ).toMatchObject({ status: 'passed', confidence: 'observed' });
+    expect(
+      result.artifact.invariants.find((item) => item.id === 'at-most-once-redemption-start'),
+    ).toMatchObject({ status: 'passed', confidence: 'observed' });
+    expect(
+      result.artifact.invariants.find((item) => item.id === 'retry-convergence'),
+    ).toMatchObject({ status: 'passed', confidence: 'derived' });
+  });
+
+  it('fails when independent mint evidence reports duplicate redemption starts', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new Faults(),
+        evidence: {
+          mint: {
+            proofs: () => receiver.proofs(),
+            redemptions: async () => [
+              {
+                deliveryId: receiver.deliveryId,
+                proofSetHash: 'b'.repeat(64),
+                starts: 2,
+              },
+            ],
+          },
+        },
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(scenario('drop_response'), 'external-duplicate-redemption');
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { message: expect.stringMatching(/redemption .* at most once/i) },
+    });
   });
 
   it('backs off deterministically between transient delivery failures', async () => {
@@ -406,7 +558,7 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(result.status).toBe('passed');
     const observations = result.artifact.history.filter((event) => event.phase === 'observation');
     expect(observations.filter((event) => event.event === 'delivery_attempted')).toHaveLength(4);
-    expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(1);
+    expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(0);
     expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(1);
   });
 
@@ -418,6 +570,18 @@ describe('ExternalAdapterScenarioDriver', () => {
         sender,
         receiver,
         faults: new Faults(),
+        evidence: {
+          mint: {
+            proofs: () => receiver.proofs(),
+            redemptions: async () => [
+              {
+                deliveryId: receiver.deliveryId,
+                proofSetHash: 'b'.repeat(64),
+                starts: 1,
+              },
+            ],
+          },
+        },
         amount: 8,
         unit: 'sat',
       }),

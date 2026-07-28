@@ -145,6 +145,7 @@ class FakeRuntime implements LabRuntime {
         receiverCapabilities: matrixCapability,
         invariants: [gateInvariant],
         mints: [{ id: 'test-mint', implementation: 'test-mint' }],
+        ...(releaseSuite === undefined ? {} : { releaseSuiteDigest: releaseSuite.digest }),
         scenarios:
           releaseSuite?.scenarios.map(({ id, requiredInvariants }) => ({
             id,
@@ -184,6 +185,8 @@ function fixture(files: Readonly<Record<string, string>> = {}) {
 }
 
 describe('lab CLI', () => {
+  const releaseSuiteDigest =
+    'sha256:469e14369679643e4243e78888f5451eddb47603a1a9fa7fdd0729d0037ada7c';
   const releaseSuiteFiles = {
     'spec/release-suite.json': JSON.stringify({
       schemaVersion: 1,
@@ -639,7 +642,8 @@ describe('lab CLI', () => {
 
   it('evaluates a release policy and prints every rejection reason', async () => {
     const selectedPolicy = {
-      schemaVersion: 2,
+      schemaVersion: 3,
+      releaseSuiteDigest,
       profile: 'delivery-v1',
       minimumQualifyingPairs: 2,
       requireCrossImplementation: true,
@@ -679,7 +683,8 @@ describe('lab CLI', () => {
 
   it('exits zero for a satisfied release policy', async () => {
     const selectedPolicy = {
-      schemaVersion: 2,
+      schemaVersion: 3,
+      releaseSuiteDigest,
       profile: 'delivery-v1',
       minimumQualifyingPairs: 1,
       requireCrossImplementation: false,
@@ -703,6 +708,37 @@ describe('lab CLI', () => {
 
     expect(outcome.exitCode).toBe(0);
     expect(setup.stdout()).toContain('release gate: passed');
+  });
+
+  it('rejects a release suite digest mismatch before starting the matrix', async () => {
+    const selectedPolicy = {
+      schemaVersion: 3,
+      releaseSuiteDigest: `sha256:${'00'.repeat(32)}`,
+      profile: 'delivery-v1',
+      minimumQualifyingPairs: 1,
+      requireCrossImplementation: false,
+      requireCrossLanguage: false,
+      requireDistinctBuilds: false,
+      minimumDistinctMints: 0,
+      minimumEvidence: { sender: 'T0', receiver: 'T0' },
+      requiredInvariants: ['independent-ledger-evidence'],
+      requiredScenarios: ['test-scenario'],
+      acceptedConfidence: ['observed'],
+    };
+    const setup = fixture({
+      'policy.json': JSON.stringify(selectedPolicy),
+      ...releaseSuiteFiles,
+    });
+    const runtime = new FakeRuntime();
+
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'matrix', '--release-policy', 'policy.json'],
+      { runtime, io: setup.io },
+    );
+
+    expect(outcome.exitCode).toBe(2);
+    expect(runtime.matrices).toBe(0);
+    expect(setup.stderr()).toMatch(/release suite digest .* does not match policy/i);
   });
 
   it('writes a JSON matrix report when --format json is given', async () => {

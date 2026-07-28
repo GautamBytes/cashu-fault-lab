@@ -1,5 +1,11 @@
 import { AdapterNotApplicableError } from '@cashu-fault-lab/adapter-contract';
-import type { ExternalFaultController, ExternalFaultEvidence } from './external-adapter-driver.js';
+import type {
+  ExternalFaultController,
+  ExternalFaultEvidence,
+  ExternalFaultRoute,
+  ExternalFaultRuleHandle,
+  ExternalFaultRuleEvidence,
+} from './external-adapter-driver.js';
 import type { FaultRule } from './runner.js';
 
 const MAX_EVIDENCE_BYTES = 64 * 1_024;
@@ -39,13 +45,23 @@ function positiveInteger(value: number, name: string): number {
   return value;
 }
 
-function gatewayRule(rule: FaultRule): Readonly<Record<string, unknown>> {
+function gatewayRule(
+  rule: FaultRule,
+  route?: ExternalFaultRoute,
+): Readonly<Record<string, unknown>> {
   const occurrence = rule.occurrence ?? 1;
+  const match = route === undefined ? {} : { match: route };
   if (rule.kind === 'drop_request') {
-    return { phase: 'before_forward', action: 'drop', occurrence, count: 1 };
+    return { phase: 'before_forward', action: 'drop', occurrence, count: 1, ...match };
   }
   if (rule.kind === 'drop_response') {
-    return { phase: 'after_downstream_response', action: 'drop', occurrence, count: 1 };
+    return {
+      phase: 'after_downstream_response',
+      action: 'drop',
+      occurrence,
+      count: 1,
+      ...match,
+    };
   }
   if (rule.kind === 'duplicate') {
     return {
@@ -54,6 +70,7 @@ function gatewayRule(rule: FaultRule): Readonly<Record<string, unknown>> {
       occurrence,
       count: 1,
       duplicateCount: rule.duplicateCount ?? 1,
+      ...match,
     };
   }
   if (rule.kind === 'delay') {
@@ -63,6 +80,7 @@ function gatewayRule(rule: FaultRule): Readonly<Record<string, unknown>> {
       occurrence,
       count: 1,
       delayMs: rule.delayMs ?? 1,
+      ...match,
     };
   }
   if (rule.kind === 'status') {
@@ -72,9 +90,34 @@ function gatewayRule(rule: FaultRule): Readonly<Record<string, unknown>> {
       occurrence,
       count: 1,
       statusCode: rule.statusCode ?? 503,
+      ...match,
     };
   }
   throw new AdapterNotApplicableError(`Unsupported external HTTP fault kind: ${rule.kind}`);
+}
+
+function ruleHandle(
+  value: unknown,
+  target: string,
+  mapped: Readonly<Record<string, unknown>>,
+  route: ExternalFaultRoute,
+): ExternalFaultRuleHandle {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    typeof (value as Readonly<Record<string, unknown>>).id !== 'string'
+  ) {
+    throw new Error('External fault rule response is invalid');
+  }
+  return {
+    id: (value as Readonly<Record<string, string>>).id!,
+    target,
+    phase: String(mapped.phase),
+    action: String(mapped.action),
+    method: route.method.toUpperCase(),
+    path: route.path,
+  };
 }
 
 async function boundedJson(response: Response): Promise<unknown> {
@@ -127,26 +170,41 @@ function evidence(value: unknown): ExternalFaultEvidence {
   if (!Array.isArray(record.rules)) {
     throw new Error('External fault evidence is invalid');
   }
-  let appliedFaults = 0;
+  const rules: ExternalFaultRuleEvidence[] = [];
   for (const rule of record.rules) {
     if (typeof rule !== 'object' || rule === null || Array.isArray(rule)) {
       throw new Error('External fault evidence is invalid');
     }
-    const applied = (rule as Readonly<Record<string, unknown>>).applied;
-    if (typeof applied !== 'number' || !Number.isSafeInteger(applied) || applied < 0) {
+    const selected = rule as Readonly<Record<string, unknown>>;
+    const applied = selected.applied;
+    if (
+      typeof selected.id !== 'string' ||
+      typeof selected.phase !== 'string' ||
+      typeof selected.action !== 'string' ||
+      typeof selected.method !== 'string' ||
+      typeof selected.path !== 'string' ||
+      typeof applied !== 'number' ||
+      !Number.isSafeInteger(applied) ||
+      applied < 0
+    ) {
       throw new Error('External fault evidence is invalid');
     }
-    appliedFaults += applied;
-    if (!Number.isSafeInteger(appliedFaults)) {
-      throw new Error('External fault evidence is invalid');
-    }
+    rules.push({
+      id: selected.id,
+      target: 'http',
+      phase: selected.phase,
+      action: selected.action,
+      method: selected.method.toUpperCase(),
+      path: selected.path,
+      applied,
+    });
   }
   return {
     inbound: record.inbound,
     forwarded: record.forwarded,
     controller: 'http-gateway',
     observedTarget: 'http',
-    appliedFaults,
+    rules,
   };
 }
 
@@ -205,12 +263,26 @@ export class HttpExternalFaultController implements ExternalFaultController {
     await response.body?.cancel();
   }
 
-  async configure(target: string, rule: FaultRule): Promise<void> {
+  async configure(
+    target: string,
+    rule: FaultRule,
+    route?: ExternalFaultRoute,
+  ): Promise<ExternalFaultRuleHandle> {
     if (target !== 'http') {
       throw new AdapterNotApplicableError('External fault controller only supports HTTP');
     }
-    const response = await this.#request('POST', '/__faults/v1/rules', gatewayRule(rule));
-    await response.body?.cancel();
+    if (route === undefined || route.method.length === 0 || !route.path.startsWith('/')) {
+      throw new Error('External HTTP fault route is required');
+    }
+    const mapped = gatewayRule(rule, {
+      method: route.method.toUpperCase(),
+      path: route.path,
+    });
+    const response = await this.#request('POST', '/__faults/v1/rules', mapped);
+    return ruleHandle(await boundedJson(response), target, mapped, {
+      method: route.method.toUpperCase(),
+      path: route.path,
+    });
   }
 
   async clear(target?: string): Promise<void> {

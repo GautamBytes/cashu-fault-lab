@@ -6,6 +6,7 @@ import {
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
 import { Buffer } from 'node:buffer';
+import { createHash, type Hash } from 'node:crypto';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
 const MAX_RELEASE_SUITE_BYTES = 256 * 1024;
@@ -16,6 +17,7 @@ export interface LoadedReleaseSuiteScenario extends ReleaseSuiteEntry {
 }
 
 export interface LoadedReleaseSuite extends Omit<ReleaseSuite, 'scenarios'> {
+  readonly digest: string;
   readonly scenarios: readonly LoadedReleaseSuiteScenario[];
 }
 
@@ -94,6 +96,14 @@ function parsedJson(contents: string, subject: string): unknown {
   }
 }
 
+function hashField(hash: Hash, value: string): void {
+  const bytes = Buffer.from(value, 'utf8');
+  const length = Buffer.alloc(8);
+  length.writeBigUInt64BE(BigInt(bytes.byteLength));
+  hash.update(length);
+  hash.update(bytes);
+}
+
 function scenarioSpec(value: unknown, path: string): ScenarioSpec {
   const validation = validateScenarioSpec(value);
   if (!validation.ok) {
@@ -120,6 +130,8 @@ export async function loadReleaseSuite(
     'Release suite',
   );
   const suite = validateReleaseSuite(parsedJson(suiteText, 'Release suite'));
+  const hash = createHash('sha256').update('cashu-fault-lab/release-suite-bundle-v1\0');
+  hashField(hash, suiteText);
   const scenarios: LoadedReleaseSuiteScenario[] = [];
   for (const entry of suite.scenarios) {
     const path = await canonicalConfinedPath(
@@ -134,6 +146,8 @@ export async function loadReleaseSuite(
       MAX_SCENARIO_BYTES,
       `Release suite scenario ${entry.id}`,
     );
+    hashField(hash, entry.scenario);
+    hashField(hash, contents);
     scenarios.push({
       ...entry,
       spec: scenarioSpec(
@@ -142,5 +156,5 @@ export async function loadReleaseSuite(
       ),
     });
   }
-  return { ...suite, scenarios };
+  return { ...suite, digest: `sha256:${hash.digest('hex')}`, scenarios };
 }

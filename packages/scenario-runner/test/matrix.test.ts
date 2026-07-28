@@ -91,7 +91,11 @@ describe('CompatibilityMatrix', () => {
         ],
       },
     ];
-    const execution = { ok: true, scenarios } as unknown as MatrixExecutionResult;
+    const execution = {
+      ok: true,
+      scenarios,
+      releaseSuiteDigest: `sha256:${'ab'.repeat(32)}`,
+    } as unknown as MatrixExecutionResult;
     const result = await new CompatibilityMatrix(async () => execution).run(
       'delivery-v1',
       [participant('sender-a', 'sender')],
@@ -119,7 +123,42 @@ describe('CompatibilityMatrix', () => {
         ],
       },
     ]);
+    expect(selected.releaseSuiteDigest).toBe(`sha256:${'ab'.repeat(32)}`);
   });
+
+  it.each(['failed', 'not_applicable'] as const)(
+    'fails a suite-backed matrix pair when a required scenario is %s and retains its diagnostics',
+    async (scenarioStatus) => {
+      const scenario = {
+        id: 'retry-response-lost',
+        seed: 'pair-seed',
+        status: scenarioStatus,
+        requiredInvariants: ['retry-convergence' as const],
+        invariants: [],
+        code: 'SCENARIO_EXECUTION_FAILED',
+        reason: 'Required release scenario did not pass',
+      };
+      const result = await new CompatibilityMatrix(async () => ({
+        ok: true,
+        scenarios: [scenario],
+        releaseSuiteDigest: `sha256:${'ab'.repeat(32)}`,
+      })).run(
+        'delivery-v1',
+        [participant('sender-a', 'sender')],
+        [participant('receiver-a', 'receiver')],
+      );
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          status: 'failed',
+          code: 'RELEASE_SUITE_NOT_PASSED',
+          reason: expect.stringContaining('retry-response-lost'),
+          scenarios: [scenario],
+          releaseSuiteDigest: `sha256:${'ab'.repeat(32)}`,
+        }),
+      ]);
+    },
+  );
 
   it('reports unsupported capabilities as not applicable without executing them', async () => {
     const execute: MatrixExecutor = async () => {

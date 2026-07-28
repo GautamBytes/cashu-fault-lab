@@ -8,6 +8,7 @@ import {
   type AdapterTransport,
   type AdapterClient,
   type LedgerCreditView,
+  type MintRedemptionEvidenceView,
   type PaymentRequestView,
   type ProofEvidenceView,
 } from '@cashu-fault-lab/adapter-contract';
@@ -17,6 +18,7 @@ import {
   type DeliveryReceipt,
 } from '@cashu-fault-lab/delivery-core';
 import type { Observation } from '@cashu-fault-lab/oracle';
+import type { EvidenceSourceConfidence } from '@cashu-fault-lab/oracle';
 import { createHash } from 'node:crypto';
 import type { DriverSendResult, FaultRule, ScenarioDriver } from './runner.js';
 import { seededProtocolId } from './seeded-fixture.js';
@@ -27,11 +29,32 @@ export interface ExternalFaultEvidence {
   readonly controller: 'direct' | 'http-gateway';
   readonly observedTarget?: string;
   readonly appliedFaults?: number;
+  readonly rules?: readonly ExternalFaultRuleEvidence[];
+}
+
+export interface ExternalFaultRoute {
+  readonly method: string;
+  readonly path: string;
+}
+
+export interface ExternalFaultRuleHandle extends ExternalFaultRoute {
+  readonly id: string;
+  readonly target: string;
+  readonly phase: string;
+  readonly action: string;
+}
+
+export interface ExternalFaultRuleEvidence extends ExternalFaultRuleHandle {
+  readonly applied: number;
 }
 
 export interface ExternalFaultController {
   reset(): Promise<void>;
-  configure(target: string, rule: FaultRule): Promise<void>;
+  configure(
+    target: string,
+    rule: FaultRule,
+    route?: ExternalFaultRoute,
+  ): Promise<ExternalFaultRuleHandle | undefined | void>;
   clear(target?: string): Promise<void>;
   evidence(): Promise<ExternalFaultEvidence>;
   restart?(component: string): Promise<void>;
@@ -43,6 +66,7 @@ export interface ExternalAdapterScenarioDriverOptions {
   readonly sender: AdapterClient;
   readonly receiver: AdapterClient;
   readonly faults: ExternalFaultController;
+  readonly evidence?: ExternalEvidenceAuthorities;
   readonly amount: number;
   readonly unit: string;
   readonly maxAttempts?: number;
@@ -53,6 +77,14 @@ export interface ExternalAdapterScenarioDriverOptions {
   readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly senderAlias?: string;
   readonly requestAlias?: string;
+}
+
+export interface ExternalEvidenceAuthorities {
+  readonly ledger?: Pick<AdapterClient, 'ledger'>;
+  readonly mint?: {
+    proofs(): Promise<readonly ProofEvidenceView[]>;
+    redemptions(): Promise<readonly MintRedemptionEvidenceView[]>;
+  };
 }
 
 export class DirectExternalFaultController implements ExternalFaultController {
@@ -102,6 +134,18 @@ function transportViewTypes(request: PaymentRequestView): ReadonlySet<AdapterTra
   );
 }
 
+function httpFaultRoute(request: PaymentRequestView): ExternalFaultRoute | undefined {
+  const target = request.transports.find((transport) => transport.type === 'post')?.target;
+  if (target === undefined) return undefined;
+  let url: URL;
+  try {
+    url = new URL(target);
+  } catch {
+    throw new Error('External receiver HTTP transport target is invalid');
+  }
+  return { method: 'POST', path: `${url.pathname}${url.search}` };
+}
+
 function exactCredit(
   values: readonly LedgerCreditView[],
   receipt: DeliveryReceipt,
@@ -138,6 +182,29 @@ function exactProof(values: readonly ProofEvidenceView[], deliveryId: string): P
   return proof;
 }
 
+function exactRedemption(
+  values: readonly MintRedemptionEvidenceView[],
+  deliveryId: string,
+  proofSetHash: string,
+): MintRedemptionEvidenceView {
+  const related = values.filter(
+    (value) => value.deliveryId === deliveryId || value.proofSetHash === proofSetHash,
+  );
+  const redemption = related[0];
+  if (
+    related.length !== 1 ||
+    redemption === undefined ||
+    redemption.deliveryId !== deliveryId ||
+    redemption.proofSetHash !== proofSetHash ||
+    !Number.isSafeInteger(redemption.starts) ||
+    redemption.starts < 1 ||
+    redemption.starts > 1_000
+  ) {
+    throw new Error('Independent mint did not report an exact redemption-start count');
+  }
+  return redemption;
+}
+
 async function adapterCall<T>(label: string, operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
@@ -155,10 +222,10 @@ function adapterErrorHint(error: unknown): string {
 }
 
 export class ExternalAdapterScenarioDriver implements ScenarioDriver {
-  readonly observationConfidence = 'adapter_claimed' as const;
   readonly #sender: AdapterClient;
   readonly #receiver: AdapterClient;
   readonly #faults: ExternalFaultController;
+  readonly #evidence: ExternalEvidenceAuthorities;
   readonly #amount: number;
   readonly #unit: string;
   readonly #transports: readonly AdapterTransport[];
@@ -173,14 +240,28 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   #request: PaymentRequestView | undefined;
   #senderCapabilities: AdapterCapabilities | undefined;
   #receiverCapabilities: AdapterCapabilities | undefined;
-  readonly #redeemedDeliveries = new Set<string>();
+  readonly #observedRedemptionStarts = new Map<string, number>();
+  readonly #settledDeliveries = new Set<string>();
   readonly #configuredTransportFaults = new Set<string>();
+  readonly #configuredFaultRules: ExternalFaultRuleHandle[] = [];
   readonly #armedCrashes: CrashArmInput[] = [];
+  #transportObserved = false;
+
+  get sourceConfidence(): EvidenceSourceConfidence {
+    return {
+      timeline: 'observed',
+      receipt: this.#transportObserved ? 'observed' : 'adapter_claimed',
+      ledger: this.#evidence.ledger === undefined ? 'adapter_claimed' : 'observed',
+      proofs: this.#evidence.mint === undefined ? 'adapter_claimed' : 'observed',
+      capabilities: 'observed',
+    };
+  }
 
   constructor(options: ExternalAdapterScenarioDriverOptions) {
     this.#sender = options.sender;
     this.#receiver = options.receiver;
     this.#faults = options.faults;
+    this.#evidence = options.evidence ?? {};
     this.#amount = positiveSafeInteger(options.amount, 'amount');
     if (options.unit.length === 0) throw new Error('unit is required');
     this.#unit = options.unit;
@@ -213,9 +294,12 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#request = undefined;
     this.#senderCapabilities = undefined;
     this.#receiverCapabilities = undefined;
-    this.#redeemedDeliveries.clear();
+    this.#observedRedemptionStarts.clear();
+    this.#settledDeliveries.clear();
     this.#configuredTransportFaults.clear();
+    this.#configuredFaultRules.length = 0;
     this.#armedCrashes.length = 0;
+    this.#transportObserved = false;
     this.#senderCapabilities = await adapterCall('sender capability discovery', () =>
       this.#sender.capabilities(),
     );
@@ -275,11 +359,26 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
 
   async configureFault(target: string, rule: FaultRule): Promise<void> {
     try {
-      await this.#faults.configure(target, rule);
+      const route =
+        target === 'http' && this.#request !== undefined
+          ? httpFaultRoute(this.#request)
+          : undefined;
+      const handle = await this.#faults.configure(target, rule, route);
       if (target === 'http' || target === 'nostr') {
+        if (handle === undefined) {
+          throw new Error('External fault controller did not return a rule handle');
+        }
         this.#configuredTransportFaults.add(target);
+        this.#configuredFaultRules.push(handle);
       }
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message === 'External HTTP fault route is required' ||
+          error.message === 'External fault controller did not return a rule handle')
+      ) {
+        throw error;
+      }
       throw new Error('External fault configuration failed');
     }
   }
@@ -374,13 +473,32 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     }
 
     const credit = exactCredit(
-      await adapterCall('receiver ledger evidence', () => this.#receiver.ledger()),
+      await adapterCall(
+        this.#evidence.ledger === undefined
+          ? 'receiver ledger evidence'
+          : 'independent ledger evidence',
+        () => (this.#evidence.ledger ?? this.#receiver).ledger(),
+      ),
       observed,
     );
     const proof = exactProof(
-      await adapterCall('receiver proof evidence', () => this.#receiver.proofs()),
+      await adapterCall(
+        this.#evidence.mint === undefined ? 'receiver proof evidence' : 'independent mint evidence',
+        () => (this.#evidence.mint ?? this.#receiver).proofs(),
+      ),
       observed.deliveryId,
     );
+    const mintAuthority = this.#evidence.mint;
+    const redemption =
+      mintAuthority === undefined
+        ? undefined
+        : exactRedemption(
+            await adapterCall('independent mint redemption evidence', () =>
+              mintAuthority.redemptions(),
+            ),
+            observed.deliveryId,
+            proof.proofSetHash,
+          );
     let faultEvidence: ExternalFaultEvidence;
     try {
       faultEvidence = await this.#faults.evidence();
@@ -388,17 +506,26 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       throw new Error('External fault evidence collection failed');
     }
     const controllerAttempts = Math.max(faultEvidence.inbound, faultEvidence.forwarded);
-    if (
-      faultEvidence.appliedFaults !== undefined &&
-      (!Number.isSafeInteger(faultEvidence.appliedFaults) || faultEvidence.appliedFaults < 0)
-    ) {
-      throw new Error('External fault evidence collection failed');
-    }
+    this.#transportObserved = faultEvidence.controller === 'http-gateway' && controllerAttempts > 0;
+    const exactRulesObserved = this.#configuredFaultRules.every((configured) =>
+      faultEvidence.rules?.some(
+        (observed) =>
+          observed.id === configured.id &&
+          observed.target === configured.target &&
+          observed.phase === configured.phase &&
+          observed.action === configured.action &&
+          observed.method === configured.method &&
+          observed.path === configured.path &&
+          Number.isSafeInteger(observed.applied) &&
+          observed.applied > 0,
+      ),
+    );
     const configuredFaultWasObserved =
       faultEvidence.controller === 'http-gateway' &&
       faultEvidence.observedTarget !== undefined &&
       this.#configuredTransportFaults.has(faultEvidence.observedTarget) &&
-      (faultEvidence.appliedFaults ?? 0) > 0;
+      this.#configuredFaultRules.length > 0 &&
+      exactRulesObserved;
     if (
       this.#configuredTransportFaults.size > 0 &&
       (controllerAttempts === 0 || !configuredFaultWasObserved)
@@ -433,16 +560,22 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       creditId,
       proof.proofSetHash,
     ]);
-    const redemptionObservations: Observation[] = this.#redeemedDeliveries.has(observed.deliveryId)
-      ? []
-      : [
-          {
-            type: 'redemption_started',
-            deliveryId: observed.deliveryId,
-            proofSetHash: proof.proofSetHash,
-          },
-        ];
-    this.#redeemedDeliveries.add(observed.deliveryId);
+    const previousRedemptionStarts = this.#observedRedemptionStarts.get(observed.deliveryId) ?? 0;
+    if (redemption !== undefined && redemption.starts < previousRedemptionStarts) {
+      throw new Error('Independent mint redemption evidence regressed');
+    }
+    const redemptionObservations: Observation[] = Array.from(
+      { length: (redemption?.starts ?? 0) - previousRedemptionStarts },
+      () => ({
+        type: 'redemption_started',
+        deliveryId: observed.deliveryId,
+        proofSetHash: proof.proofSetHash,
+      }),
+    );
+    if (redemption !== undefined) {
+      this.#observedRedemptionStarts.set(observed.deliveryId, redemption.starts);
+    }
+    this.#settledDeliveries.add(observed.deliveryId);
     const observations: Observation[] = [
       { type: 'request_observed', requestId: request.id, singleUse: request.singleUse },
       ...deliveryObservations,
@@ -502,8 +635,11 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       await this.#faults.clear(target);
       if (target === undefined) {
         this.#configuredTransportFaults.clear();
+        this.#configuredFaultRules.length = 0;
       } else {
         this.#configuredTransportFaults.delete(target);
+        const retained = this.#configuredFaultRules.filter((rule) => rule.target !== target);
+        this.#configuredFaultRules.splice(0, this.#configuredFaultRules.length, ...retained);
       }
     } catch {
       throw new Error('External fault cleanup failed');
@@ -517,7 +653,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       await adapterCall('sender capability discovery', () => this.#sender.capabilities());
       await adapterCall('receiver capability discovery', () => this.#receiver.capabilities());
       if (component !== 'receiver') return;
-      for (const deliveryId of this.#redeemedDeliveries) {
+      for (const deliveryId of this.#settledDeliveries) {
         const receiptView = await adapterCall('receiver delivery lookup', () =>
           this.#receiver.delivery(deliveryId),
         );

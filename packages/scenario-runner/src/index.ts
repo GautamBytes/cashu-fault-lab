@@ -20,8 +20,12 @@ export {
   DirectExternalFaultController,
   ExternalAdapterScenarioDriver,
   type ExternalAdapterScenarioDriverOptions,
+  type ExternalEvidenceAuthorities,
   type ExternalFaultController,
   type ExternalFaultEvidence,
+  type ExternalFaultRoute,
+  type ExternalFaultRuleEvidence,
+  type ExternalFaultRuleHandle,
 } from './external-adapter-driver.js';
 export {
   HttpExternalFaultController,
@@ -29,6 +33,7 @@ export {
 } from './external-http-fault-controller.js';
 export {
   CompatibilityMatrix,
+  releaseSuiteFailure,
   type MatrixCaseResult,
   type MatrixExecutionResult,
   type MatrixExecutor,

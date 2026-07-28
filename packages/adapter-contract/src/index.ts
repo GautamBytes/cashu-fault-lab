@@ -57,6 +57,7 @@ export type {
   EvidenceSource,
   EvidenceTier,
   LedgerCreditView,
+  MintRedemptionEvidenceView,
   PaymentRequestView,
   ProofEvidenceView,
   ResetInput,

@@ -4,7 +4,10 @@ import {
   type AdapterTestControlClient,
   type HttpAdapterClientOptions,
 } from '@cashu-fault-lab/adapter-contract';
-import type { MatrixParticipant } from '@cashu-fault-lab/scenario-runner';
+import type {
+  ExternalEvidenceAuthorities,
+  MatrixParticipant,
+} from '@cashu-fault-lab/scenario-runner';
 import {
   resolveAdapterManifest,
   type AdapterManifest,
@@ -18,15 +21,18 @@ export interface ExternalAdapterRegistryDependencies {
 export class ExternalAdapterRegistry {
   readonly #orderedIds: readonly string[];
   readonly #clients: ReadonlyMap<string, AdapterClient & AdapterTestControlClient>;
+  readonly #evidence: ReadonlyMap<string, ExternalEvidenceAuthorities>;
   readonly #participants: readonly MatrixParticipant[];
 
   private constructor(
     registrations: readonly ResolvedAdapterRegistration[],
     clients: ReadonlyMap<string, AdapterClient & AdapterTestControlClient>,
+    evidence: ReadonlyMap<string, ExternalEvidenceAuthorities>,
     participants: readonly MatrixParticipant[],
   ) {
     this.#orderedIds = registrations.map((registration) => registration.id);
     this.#clients = clients;
+    this.#evidence = evidence;
     this.#participants = participants;
   }
 
@@ -37,6 +43,7 @@ export class ExternalAdapterRegistry {
   ): Promise<ExternalAdapterRegistry> {
     const registrations = resolveAdapterManifest(manifest, env);
     const clients = new Map<string, AdapterClient & AdapterTestControlClient>();
+    const evidence = new Map<string, ExternalEvidenceAuthorities>();
     const participants: MatrixParticipant[] = [];
     for (const registration of registrations) {
       const options: HttpAdapterClientOptions = {
@@ -52,9 +59,31 @@ export class ExternalAdapterRegistry {
         );
       }
       clients.set(registration.id, client);
+      if (registration.evidence !== undefined) {
+        evidence.set(registration.id, {
+          ...(registration.evidence.ledger === undefined
+            ? {}
+            : {
+                ledger: new HttpAdapterClient({
+                  baseUrl: registration.evidence.ledger.url,
+                  token: registration.evidence.ledger.token,
+                  ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
+                }),
+              }),
+          ...(registration.evidence.mint === undefined
+            ? {}
+            : {
+                mint: new HttpAdapterClient({
+                  baseUrl: registration.evidence.mint.url,
+                  token: registration.evidence.mint.token,
+                  ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
+                }),
+              }),
+        });
+      }
       participants.push({ id: registration.id, capabilities });
     }
-    return new ExternalAdapterRegistry(registrations, clients, participants);
+    return new ExternalAdapterRegistry(registrations, clients, evidence, participants);
   }
 
   ids(): readonly string[] {
@@ -63,6 +92,10 @@ export class ExternalAdapterRegistry {
 
   client(id: string): (AdapterClient & AdapterTestControlClient) | undefined {
     return this.#clients.get(id);
+  }
+
+  evidence(id: string): ExternalEvidenceAuthorities | undefined {
+    return this.#evidence.get(id);
   }
 
   participants(): readonly MatrixParticipant[] {

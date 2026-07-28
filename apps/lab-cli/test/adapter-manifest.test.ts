@@ -4,23 +4,47 @@ import { parseAdapterManifest, resolveAdapterManifest } from '../src/adapter-man
 describe('adapter manifest', () => {
   it('parses loopback adapters and resolves control tokens from the environment', () => {
     const manifest = parseAdapterManifest({
-      schemaVersion: 1,
+      schemaVersion: 2,
       adapters: [
         {
           id: 'cashu-ts',
           url: 'http://127.0.0.1:4101',
           tokenEnv: 'CFL_CASHU_TS_TOKEN',
+          evidence: {
+            ledger: {
+              url: 'http://127.0.0.1:5101',
+              tokenEnv: 'CFL_LEDGER_EVIDENCE_TOKEN',
+            },
+            mint: {
+              url: 'http://127.0.0.1:5102',
+              tokenEnv: 'CFL_MINT_EVIDENCE_TOKEN',
+            },
+          },
         },
       ],
     });
 
-    expect(resolveAdapterManifest(manifest, { CFL_CASHU_TS_TOKEN: 'token-a' })).toEqual([
-      { id: 'cashu-ts', url: 'http://127.0.0.1:4101', token: 'token-a' },
+    expect(
+      resolveAdapterManifest(manifest, {
+        CFL_CASHU_TS_TOKEN: 'token-a',
+        CFL_LEDGER_EVIDENCE_TOKEN: 'ledger-token',
+        CFL_MINT_EVIDENCE_TOKEN: 'mint-token',
+      }),
+    ).toEqual([
+      {
+        id: 'cashu-ts',
+        url: 'http://127.0.0.1:4101',
+        token: 'token-a',
+        evidence: {
+          ledger: { url: 'http://127.0.0.1:5101', token: 'ledger-token' },
+          mint: { url: 'http://127.0.0.1:5102', token: 'mint-token' },
+        },
+      },
     ]);
   });
 
   it.each([
-    { schemaVersion: 2, adapters: [] },
+    { schemaVersion: 3, adapters: [] },
     { schemaVersion: 1, adapters: [] },
     {
       schemaVersion: 1,
@@ -88,5 +112,43 @@ describe('adapter manifest', () => {
     });
     expect(() => resolveAdapterManifest(manifest, {})).toThrow(/WALLET_TOKEN/);
     expect(() => resolveAdapterManifest(manifest, { WALLET_TOKEN: '' })).toThrow(/WALLET_TOKEN/);
+  });
+
+  it('rejects evidence authorities that alias the adapter control origin', () => {
+    expect(() =>
+      parseAdapterManifest({
+        schemaVersion: 2,
+        adapters: [
+          {
+            id: 'wallet',
+            url: 'http://127.0.0.1:4101',
+            tokenEnv: 'WALLET_TOKEN',
+            evidence: {
+              ledger: { url: 'http://127.0.0.1:4101', tokenEnv: 'LEDGER_TOKEN' },
+            },
+          },
+        ],
+      }),
+    ).toThrow(/independent/i);
+  });
+
+  it('requires every configured evidence authority token', () => {
+    const manifest = parseAdapterManifest({
+      schemaVersion: 2,
+      adapters: [
+        {
+          id: 'wallet',
+          url: 'http://127.0.0.1:4101',
+          tokenEnv: 'WALLET_TOKEN',
+          evidence: {
+            ledger: { url: 'http://127.0.0.1:5101', tokenEnv: 'LEDGER_TOKEN' },
+          },
+        },
+      ],
+    });
+
+    expect(() => resolveAdapterManifest(manifest, { WALLET_TOKEN: 'wallet-token' })).toThrow(
+      /LEDGER_TOKEN/,
+    );
   });
 });

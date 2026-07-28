@@ -242,7 +242,7 @@ export async function runCli(
   const program = new Command()
     .name('cashu-fault-lab')
     .description('Deterministic Cashu payment delivery fault laboratory')
-    .version('0.0.0')
+    .version('0.1.0')
     .exitOverride()
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr });
 
@@ -497,6 +497,15 @@ export async function runCli(
         if (releaseSuite !== undefined && releaseSuite.profile !== options.profile) {
           throw new Error(
             `Release suite profile ${releaseSuite.profile} does not match matrix profile ${options.profile}`,
+          );
+        }
+        if (
+          releasePolicy !== undefined &&
+          releaseSuite !== undefined &&
+          releaseSuite.digest !== releasePolicy.releaseSuiteDigest
+        ) {
+          throw new Error(
+            `Release suite digest ${releaseSuite.digest} does not match policy ${releasePolicy.releaseSuiteDigest}`,
           );
         }
         const results = await runtime.matrix(

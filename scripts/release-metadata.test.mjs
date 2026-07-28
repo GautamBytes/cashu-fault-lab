@@ -63,6 +63,11 @@ test('checked-in demo artifacts are valid, deterministic, and secret-free', asyn
 
   assert.equal(artifact.seed, demoSeed);
   assert.equal(artifact.status, 'passed');
+  assert.ok(!json.includes('"0.0.0"'), 'JSON demo contains placeholder component versions');
+  assert.ok(
+    !html.includes('&quot;0.0.0&quot;'),
+    'HTML demo contains placeholder component versions',
+  );
   assert.match(html, new RegExp(demoSeed, 'u'));
   for (const secret of [
     'lab-only-cashu-ts-token',
@@ -74,4 +79,20 @@ test('checked-in demo artifacts are valid, deterministic, and secret-free', asyn
     assert.ok(!json.includes(secret), `JSON demo leaks ${secret}`);
     assert.ok(!html.includes(secret), `HTML demo leaks ${secret}`);
   }
+});
+
+test('runtime metadata and coverage claims match the v0.1 preview', async () => {
+  for (const path of [
+    'apps/lab-cli/src/index.ts',
+    'apps/lab-cli/src/packaged-runtime.ts',
+    'apps/reference-receiver/src/funded-adapter.ts',
+    'packages/scenario-runner/src/reference-capabilities.ts',
+    'packages/scenario-runner/src/reference-probe.ts',
+  ]) {
+    assert.ok(!(await text(path)).includes("'0.0.0'"), `${path} contains a placeholder version`);
+  }
+  assert.doesNotMatch(
+    await text('README.md'),
+    /Receiver persistence and recovery[^\n]*Every named process-crash boundary/iu,
+  );
 });

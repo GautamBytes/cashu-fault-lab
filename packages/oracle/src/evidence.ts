@@ -30,6 +30,11 @@ export type InvariantId =
 export type InvariantStatus = 'passed' | 'failed' | 'not_applicable' | 'not_observable';
 export type EvidenceConfidence = 'observed' | 'derived' | 'adapter_claimed';
 export type InvariantEvidenceSource = 'timeline' | 'receipt' | 'ledger' | 'proofs' | 'capabilities';
+export type EvidenceSourceConfidence = Readonly<
+  Partial<
+    Record<InvariantEvidenceSource, Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>>
+  >
+>;
 
 export interface InvariantEvidenceReference {
   readonly source: InvariantEvidenceSource;
@@ -172,6 +177,7 @@ export interface EvaluateInvariantsInput {
   readonly metadata?: InvariantRunMetadata;
   readonly profile?: string;
   readonly observationConfidence?: Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>;
+  readonly sourceConfidence?: EvidenceSourceConfidence;
 }
 
 function evidence(
@@ -323,6 +329,14 @@ function receiptReference(model: OracleModel): InvariantEvidenceReference {
   );
 }
 
+function proofReference(model: OracleModel): InvariantEvidenceReference {
+  return evidence(
+    'proofs',
+    'Mint evidence binds the delivery to its input proof-set identity and state.',
+    firstObservationIndex(model, 'mint_proofs_state'),
+  );
+}
+
 function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly InvariantResult[] {
   const { model, commands } = input;
   const observationConfidence = input.observationConfidence ?? 'observed';
@@ -349,12 +363,12 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
     results.push(
       violation
         ? failed(redemptionId, 'A delivery started mint redemption more than once.', [
-            evidence('timeline', 'Redemption-start observations contain a duplicate delivery.'),
+            evidence('proofs', 'Mint redemption evidence contains a duplicate delivery start.'),
           ])
         : passed(redemptionId, observationConfidence, [
             evidence(
-              'timeline',
-              'Redemption-start observations contain one start per delivery.',
+              'proofs',
+              'Mint redemption evidence contains one start per delivery.',
               firstObservationIndex(model, 'redemption_started'),
             ),
           ]),
@@ -419,6 +433,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
       violation
         ? failed(proofId, 'A proof set was bound to more than one delivery.', [
             evidence('timeline', 'Delivery-attempt observations expose conflicting proof owners.'),
+            proofReference(model),
           ])
         : passed(proofId, 'derived', [
             evidence(
@@ -426,6 +441,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
               'Delivery-attempt identities derive a unique owner for every proof set.',
               firstObservationIndex(model, 'delivery_attempted'),
             ),
+            proofReference(model),
           ]),
     );
   }
@@ -443,9 +459,13 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
               'Ordered delivery-attempt observations retain one identity per delivery.',
               firstObservationIndex(model, 'delivery_attempted'),
             ),
+            receiptReference(model),
+            proofReference(model),
           ])
         : failed(identityId, violation, [
             evidence('timeline', 'Delivery-attempt observations contain an identity conflict.'),
+            receiptReference(model),
+            proofReference(model),
           ]),
     );
   }
@@ -492,10 +512,13 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
       violation
         ? failed(prematureId, 'Settlement lacks recovered-output or durable-credit evidence.', [
             receiptReference(model),
+            ledgerReference(model),
+            proofReference(model),
           ])
         : passed(prematureId, observationConfidence, [
             receiptReference(model),
             ledgerReference(model),
+            proofReference(model),
             evidence(
               'timeline',
               'Receiver settlement observation binds recovered replacement outputs.',
@@ -564,8 +587,14 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
               firstObservationIndex(model, 'delivery_attempted'),
             ),
             receiptReference(model),
+            ledgerReference(model),
+            proofReference(model),
           ])
-        : failed(duplicateId, violation, [receiptReference(model)]),
+        : failed(duplicateId, violation, [
+            receiptReference(model),
+            ledgerReference(model),
+            proofReference(model),
+          ]),
     );
   }
 
@@ -649,8 +678,9 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
               firstObservationIndex(model, 'delivery_attempted'),
             ),
             receiptReference(model),
+            proofReference(model),
           ])
-        : failed(transportId, safety, [receiptReference(model)]),
+        : failed(transportId, safety, [receiptReference(model), proofReference(model)]),
     );
   }
 
@@ -756,9 +786,12 @@ export function evaluateInvariants(input: EvaluateInvariantsInput): readonly Inv
     if (result === undefined) {
       throw new Error(`Invariant evaluator omitted ${definition.id}`);
     }
-    return input.observationConfidence === 'adapter_claimed' && result.confidence === 'observed'
-      ? { ...result, confidence: 'adapter_claimed' }
-      : result;
+    const adapterClaimed =
+      (input.observationConfidence === 'adapter_claimed' && result.confidence === 'observed') ||
+      result.evidence.some(
+        (reference) => input.sourceConfidence?.[reference.source] === 'adapter_claimed',
+      );
+    return adapterClaimed ? { ...result, confidence: 'adapter_claimed' } : result;
   });
 }
 

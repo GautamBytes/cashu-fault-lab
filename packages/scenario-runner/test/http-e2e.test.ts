@@ -293,7 +293,7 @@ describe('real HTTP payment fault scenarios', () => {
 
     const result = await runner.run(scenario, `seed:${file}`);
 
-    expect(result.status).toBe('passed');
+    expect(result, JSON.stringify(result)).toMatchObject({ status: 'passed' });
     expect(await driver.store.credits()).toHaveLength(1);
     expect(driver.mint.swapCalls).toBe(1);
     expect(driver.wallet.reserveCalls).toBe(1);

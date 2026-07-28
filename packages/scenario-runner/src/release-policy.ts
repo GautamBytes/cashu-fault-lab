@@ -7,7 +7,8 @@ import {
 import type { MatrixCaseResult } from './matrix.js';
 
 export interface ReleasePolicy {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
+  readonly releaseSuiteDigest: string;
   readonly profile: string;
   readonly minimumQualifyingPairs: number;
   readonly requireCrossImplementation: boolean;
@@ -38,7 +39,8 @@ export type ReleaseGateReasonCode =
   | 'DEVELOPMENT_IDENTITY_NOT_RELEASE_ELIGIBLE'
   | 'DUPLICATE_PROVENANCE'
   | 'MINIMUM_QUALIFYING_PAIRS'
-  | 'MINIMUM_DISTINCT_MINTS';
+  | 'MINIMUM_DISTINCT_MINTS'
+  | 'RELEASE_SUITE_DIGEST_MISMATCH';
 
 export interface ReleaseGateReason {
   readonly code: ReleaseGateReasonCode;
@@ -55,6 +57,7 @@ export interface ReleaseGateResult {
 
 const POLICY_KEYS = new Set([
   'schemaVersion',
+  'releaseSuiteDigest',
   'profile',
   'minimumQualifyingPairs',
   'requireCrossImplementation',
@@ -71,6 +74,7 @@ const TIERS = new Set<EvidenceTier>(['T0', 'T1', 'T2', 'T3']);
 const CONFIDENCE = new Set<EvidenceConfidence>(['observed', 'derived']);
 const INVARIANT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const INVARIANTS = new Set(INVARIANT_REGISTRY.map(({ id }) => id));
+const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 
 function record(value: unknown, message: string): Readonly<Record<string, unknown>> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -109,7 +113,10 @@ function tier(value: unknown, name: string): EvidenceTier {
 export function validateReleasePolicy(value: unknown): ReleasePolicy {
   const input = record(value, 'Release policy must be an object');
   exactKeys(input, POLICY_KEYS, 'Release policy contains an unknown field');
-  if (input.schemaVersion !== 2) throw new Error('Release policy schemaVersion must be 2');
+  if (input.schemaVersion !== 3) throw new Error('Release policy schemaVersion must be 3');
+  if (typeof input.releaseSuiteDigest !== 'string' || !DIGEST.test(input.releaseSuiteDigest)) {
+    throw new Error('Release policy releaseSuiteDigest is invalid');
+  }
   if (typeof input.profile !== 'string' || !INVARIANT_ID.test(input.profile)) {
     throw new Error('Release policy profile is invalid');
   }
@@ -148,7 +155,8 @@ export function validateReleasePolicy(value: unknown): ReleasePolicy {
     throw new Error('Release policy acceptedConfidence is invalid');
   }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    releaseSuiteDigest: input.releaseSuiteDigest,
     profile: input.profile,
     minimumQualifyingPairs: nonnegativeInteger(
       input.minimumQualifyingPairs,
@@ -265,6 +273,12 @@ function pairReasons(
   }
   if (selected.mints.length === 0) {
     add('MINT_IDENTITY_REQUIRED', 'A configured mint identity is required.');
+  }
+  if (selected.releaseSuiteDigest !== policy.releaseSuiteDigest) {
+    add(
+      'RELEASE_SUITE_DIGEST_MISMATCH',
+      'Matrix evidence was not produced by the release suite bound to this policy.',
+    );
   }
 
   const addScenarioInvariantReason = (

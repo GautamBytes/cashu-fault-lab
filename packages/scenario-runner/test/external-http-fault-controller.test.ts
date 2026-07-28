@@ -16,8 +16,20 @@ describe('HttpExternalFaultController', () => {
         return Response.json({
           inbound: 2,
           forwarded: 2,
-          rules: [{ id: 'http-rule-1', applied: 1 }],
+          rules: [
+            {
+              id: 'http-rule-17',
+              phase: 'after_downstream_response',
+              action: 'drop',
+              method: 'POST',
+              path: '/pay',
+              applied: 1,
+            },
+          ],
         });
+      }
+      if (url.endsWith('/rules') && init?.method === 'POST') {
+        return Response.json({ id: 'http-rule-17' }, { status: 201 });
       }
       return Response.json({ ok: true });
     };
@@ -28,13 +40,36 @@ describe('HttpExternalFaultController', () => {
     });
 
     await controller.reset();
-    await controller.configure('http', { kind: 'drop_response', occurrence: 2 });
+    await expect(
+      controller.configure(
+        'http',
+        { kind: 'drop_response', occurrence: 2 },
+        { method: 'POST', path: '/pay' },
+      ),
+    ).resolves.toEqual({
+      id: 'http-rule-17',
+      target: 'http',
+      phase: 'after_downstream_response',
+      action: 'drop',
+      method: 'POST',
+      path: '/pay',
+    });
     await expect(controller.evidence()).resolves.toEqual({
       inbound: 2,
       forwarded: 2,
       controller: 'http-gateway',
       observedTarget: 'http',
-      appliedFaults: 1,
+      rules: [
+        {
+          id: 'http-rule-17',
+          target: 'http',
+          phase: 'after_downstream_response',
+          action: 'drop',
+          method: 'POST',
+          path: '/pay',
+          applied: 1,
+        },
+      ],
     });
     await controller.clear('http');
 
@@ -53,6 +88,7 @@ describe('HttpExternalFaultController', () => {
           action: 'drop',
           occurrence: 2,
           count: 1,
+          match: { method: 'POST', path: '/pay' },
         },
       },
       {

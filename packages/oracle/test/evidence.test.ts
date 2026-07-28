@@ -112,6 +112,69 @@ describe('invariant evidence', () => {
     expect(selected).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
   });
 
+  it('downgrades a derived invariant when one referenced source is adapter-claimed', () => {
+    const selected = evaluateInvariants({
+      model: model([...observations, observations[1]!]),
+      commands: [{ type: 'configure_fault', target: 'http' }, { type: 'send' }, { type: 'send' }],
+      history: observations.map((observation, index) => ({
+        sequence: index,
+        phase: 'observation',
+        event: observation.type,
+        data: observation,
+      })),
+      sourceConfidence: {
+        timeline: 'observed',
+        receipt: 'adapter_claimed',
+        ledger: 'observed',
+      },
+    }).find((candidate) => candidate.id === 'retry-convergence');
+
+    expect(selected).toMatchObject({
+      status: 'passed',
+      confidence: 'adapter_claimed',
+      evidence: [expect.objectContaining({ source: 'receipt' })],
+    });
+  });
+
+  it('preserves derived confidence when every referenced source is observed', () => {
+    const selected = evaluateInvariants({
+      model: model([...observations, observations[1]!]),
+      commands: [{ type: 'configure_fault', target: 'http' }, { type: 'send' }, { type: 'send' }],
+      history: observations.map((observation, index) => ({
+        sequence: index,
+        phase: 'observation',
+        event: observation.type,
+        data: observation,
+      })),
+      sourceConfidence: {
+        timeline: 'observed',
+        receipt: 'observed',
+        ledger: 'observed',
+      },
+    }).find((candidate) => candidate.id === 'retry-convergence');
+
+    expect(selected).toMatchObject({ status: 'passed', confidence: 'derived' });
+  });
+
+  it('does not derive proof-set exclusivity from adapter-claimed proof identities', () => {
+    const selected = evaluateInvariants({
+      model: model(observations),
+      commands: [{ type: 'send' }],
+      history: observations.map((observation, index) => ({
+        sequence: index,
+        phase: 'observation',
+        event: observation.type,
+        data: observation,
+      })),
+      sourceConfidence: {
+        timeline: 'observed',
+        proofs: 'adapter_claimed',
+      },
+    }).find((candidate) => candidate.id === 'proof-set-exclusivity');
+
+    expect(selected).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+  });
+
   it('requires at least one ordered history entry for reproducibility', () => {
     const selected = evaluateInvariants({
       model: model([]),

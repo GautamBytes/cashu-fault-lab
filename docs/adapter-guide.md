@@ -70,7 +70,8 @@ pnpm lab matrix --profile legacy-nut18
 pnpm lab matrix --profile delivery-v1
 pnpm lab matrix --profile nut26-nostr
 pnpm lab matrix --profile delivery-v1 \
-  --release-policy spec/release-policy.json
+  --release-policy spec/release-policy.json \
+  --release-suite spec/release-suite.json
 ```
 
 Rust adapters also run:
@@ -98,6 +99,43 @@ CFL_REAL_MINT_URL=http://127.0.0.1:8085 \
   test/cross-language-docker.test.ts
 ```
 
-For an external adapter process, register only its loopback origin and token environment-variable name in a schema-version 1 manifest. `spec/examples/adapters.local.json` is the runnable example; bearer values stay in the environment and out of manifests and reports.
+For smoke testing, register each adapter's loopback origin and token environment-variable name in a
+schema-version 2 manifest. `spec/examples/adapters.local.json` is the runnable example; bearer values
+stay in the environment and out of manifests and reports.
+
+Strict qualification also needs independent read-only evidence authorities. Configure them on a
+receiver registration with origins and tokens distinct from the adapter control process:
+
+```json
+{
+  "schemaVersion": 2,
+  "adapters": [
+    {
+      "id": "wallet-receiver",
+      "url": "http://127.0.0.1:4102",
+      "tokenEnv": "WALLET_RECEIVER_TOKEN",
+      "evidence": {
+        "ledger": {
+          "url": "http://127.0.0.1:5101",
+          "tokenEnv": "LEDGER_EVIDENCE_TOKEN"
+        },
+        "mint": {
+          "url": "http://127.0.0.1:5102",
+          "tokenEnv": "MINT_EVIDENCE_TOKEN"
+        }
+      }
+    }
+  ]
+}
+```
+
+The lab uses the ledger authority only for `/v1/ledger` and the mint authority only for
+`/v1/proofs` plus `/v1/redemptions`. The redemption response is an array of
+`{ deliveryId, proofSetHash, starts }` records; `starts` is a cumulative count capped at 1,000.
+This count is required for at-most-once redemption because a final `spent` state cannot reveal how
+many mint requests started. Without these authorities, wallet-reported observations remain
+`adapter_claimed`: useful for developer diagnostics, but rejected by the checked-in release policy.
+HTTP fault qualification similarly requires the runner-controlled gateway to return the exact
+configured rule ID, method, path, phase, action, and a positive application count.
 
 Start new standalone adapters with `pnpm lab adapter init --language typescript --name my-wallet --output ./my-wallet`, choosing `typescript`, `rust`, or `python` as needed. The generated project includes contract route tests, a manifest, Dockerfile, health check, and CI example without importing private monorepo packages.

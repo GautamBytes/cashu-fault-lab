@@ -162,6 +162,21 @@ const proofResponseSchema = {
   },
 } as const;
 
+const mintRedemptionResponseSchema = {
+  type: 'array',
+  maxItems: 1_000,
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['deliveryId', 'proofSetHash', 'starts'],
+    properties: {
+      deliveryId: { type: 'string', pattern: PROTOCOL_ID_PATTERN },
+      proofSetHash: { type: 'string', pattern: HASH_PATTERN },
+      starts: { type: 'integer', minimum: 0, maximum: 1_000 },
+    },
+  },
+} as const;
+
 const crashControlProperties = crashControlSchema.properties as Readonly<Record<string, unknown>>;
 const crashStatusResponseSchema = {
   type: 'array',
@@ -193,6 +208,7 @@ const responseValidators: Readonly<Record<AdapterResponseOperation, ValidateFunc
   delivery: validators.deliveryReceipt,
   ledger: ajv.compile(ledgerResponseSchema),
   proofs: ajv.compile(proofResponseSchema),
+  redemptions: ajv.compile(mintRedemptionResponseSchema),
   armCrash: ajv.compile(resetResponseSchema),
   crashStatus: ajv.compile(crashStatusResponseSchema),
 };

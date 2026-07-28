@@ -10,6 +10,7 @@ import type {
   CrashArmStatus,
   DeliveryReceiptView,
   LedgerCreditView,
+  MintRedemptionEvidenceView,
   PaymentRequestView,
   ProofEvidenceView,
   SendPaymentInput,
@@ -256,6 +257,10 @@ export class HttpAdapterClient implements AdapterClient, AdapterTestControlClien
 
   proofs(): Promise<readonly ProofEvidenceView[]> {
     return this.#request('proofs', 'GET', '/v1/proofs');
+  }
+
+  redemptions(): Promise<readonly MintRedemptionEvidenceView[]> {
+    return this.#request('redemptions', 'GET', '/v1/redemptions');
   }
 
   async armCrash(input: CrashArmInput): Promise<void> {
