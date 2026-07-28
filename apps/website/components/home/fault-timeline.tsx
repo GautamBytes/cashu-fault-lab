@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import styles from './home.module.css';
 
 const stages = [
@@ -19,6 +22,17 @@ const stageStyles = {
 } satisfies Record<(typeof stages)[number]['kind'], string>;
 
 export function FaultTimeline() {
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => setReducedMotion(preference.matches);
+
+    updatePreference();
+    preference.addEventListener('change', updatePreference);
+    return () => preference.removeEventListener('change', updatePreference);
+  }, []);
+
   return (
     <section
       aria-labelledby="fault-timeline-title"
@@ -37,7 +51,11 @@ export function FaultTimeline() {
         <div aria-hidden="true" className={styles.timelineRail}>
           <span className={styles.deliverySignal}>◆</span>
         </div>
-        <ol aria-label="Six-stage response-loss recovery flow" className={styles.timeline}>
+        <ol
+          aria-label="Six-stage response-loss recovery flow"
+          className={styles.timeline}
+          data-motion={reducedMotion ? 'reduced' : 'full'}
+        >
           {stages.map((stage, index) => (
             <li className={`${styles.timelineStage} ${stageStyles[stage.kind]}`} key={stage.label}>
               <span aria-hidden="true" className={styles.stageIcon}>

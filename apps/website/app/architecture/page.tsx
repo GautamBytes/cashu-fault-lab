@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import styles from '../content-pages.module.css';
 
 export const metadata: Metadata = {
-  title: 'Architecture | Cashu Fault Lab',
+  title: 'Architecture',
   description: 'How Cashu Fault Lab separates delivery faults from independent recovery evidence.',
 };
 

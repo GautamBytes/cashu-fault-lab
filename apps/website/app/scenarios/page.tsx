@@ -3,7 +3,7 @@ import { getScenarioGroups } from '../../lib/scenarios';
 import styles from '../content-pages.module.css';
 
 export const metadata: Metadata = {
-  title: 'Scenarios | Cashu Fault Lab',
+  title: 'Scenarios',
   description: 'Every checked-in Cashu delivery fault scenario, generated from repository JSON.',
 };
 

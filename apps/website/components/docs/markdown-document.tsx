@@ -99,6 +99,9 @@ export function MarkdownDocument({
         skipHtml
         components={{
           pre: CodeBlock,
+          table: ({ node: _node, ...props }) => (
+            <table aria-label="Scrollable data table" tabIndex={0} {...props} />
+          ),
           a: (props) => <SafeMarkdownLink {...props} sourcePath={sourcePath} />,
         }}
       >

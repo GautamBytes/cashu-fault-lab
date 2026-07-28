@@ -32,8 +32,16 @@ export function PortalShell({ children, records }: PortalShellProps) {
       }
     }
 
+    function openWithAction() {
+      setOpen(true);
+    }
+
     window.addEventListener("keydown", openWithKeyboard);
-    return () => window.removeEventListener("keydown", openWithKeyboard);
+    window.addEventListener("cashu-fault-lab:open-search", openWithAction);
+    return () => {
+      window.removeEventListener("keydown", openWithKeyboard);
+      window.removeEventListener("cashu-fault-lab:open-search", openWithAction);
+    };
   }, []);
 
   return (

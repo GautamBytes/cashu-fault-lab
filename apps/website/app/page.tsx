@@ -4,6 +4,21 @@ import { FaultTimeline } from '../components/home/fault-timeline';
 import styles from '../components/home/home.module.css';
 import { getDemoSummary } from '../lib/demo';
 import { getReleaseStatus } from '../lib/release-status';
+import { serializeJsonLd } from './site-metadata';
+
+const softwareApplication = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Cashu Fault Lab',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Linux, macOS, Windows with Docker',
+  description:
+    'An experimental developer preview for Cashu delivery fault injection, recovery, and independent evidence.',
+  license: 'https://opensource.org/license/mit',
+  codeRepository: 'https://github.com/GautamBytes/cashu-fault-lab',
+} as const;
+
+const safeSoftwareApplicationJson = serializeJsonLd(softwareApplication);
 
 const testedFaults = [
   {
@@ -40,6 +55,10 @@ export default async function HomePage() {
 
   return (
     <div className={styles.home}>
+      <script
+        dangerouslySetInnerHTML={{ __html: safeSoftwareApplicationJson }}
+        type="application/ld+json"
+      />
       <section aria-labelledby="home-title" className={styles.hero}>
         <div className={styles.heroCopy}>
           <p className={styles.eyebrow}>Cashu delivery fault injection and recovery evidence</p>

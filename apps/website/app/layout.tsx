@@ -6,10 +6,28 @@ import type { ReactNode } from "react";
 import { PortalShell } from "../components/portal-shell";
 import { getSearchRecords } from "../lib/markdown";
 import "./globals.css";
+import { siteUrl } from "./site-metadata";
 
 export const metadata: Metadata = {
-  title: "Cashu Fault Lab",
-  description: "Cashu delivery fault injection and recovery evidence",
+  metadataBase: siteUrl,
+  title: {
+    default: "Cashu Fault Lab",
+    template: "%s | Cashu Fault Lab",
+  },
+  description:
+    "An experimental developer preview for Cashu delivery fault injection, recovery, and independent evidence.",
+  alternates: {
+    canonical: "./",
+  },
+  manifest: "/manifest.webmanifest",
+  openGraph: {
+    description:
+      "An experimental developer preview for Cashu delivery fault injection, recovery, and independent evidence.",
+    images: ["/opengraph-image"],
+    siteName: "Cashu Fault Lab",
+    title: "Cashu Fault Lab",
+    type: "website",
+  },
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

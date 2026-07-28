@@ -1,0 +1,108 @@
+.notFound {
+  align-items: start;
+  display: grid;
+  gap: clamp(2.5rem, 7vw, 6rem);
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.42fr);
+  min-height: calc(100vh - 16rem);
+}
+
+.eyebrow {
+  color: var(--purple-700);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 1rem;
+  text-transform: uppercase;
+}
+
+.notFound h1 {
+  font-size: clamp(3.5rem, 10vw, 7rem);
+  margin: 0;
+  max-width: 9ch;
+}
+
+.description {
+  font-size: 1.1rem;
+  line-height: 1.65;
+  max-width: 38rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.actions a,
+.actions button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--purple-700);
+  border-radius: var(--radius-sm);
+  color: var(--purple-950);
+  cursor: pointer;
+  display: inline-flex;
+  font:
+    700 0.82rem 'IBM Plex Mono',
+    monospace;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+}
+
+.actions button,
+.actions a:first-of-type {
+  background: var(--purple-950);
+  border-color: var(--purple-950);
+  color: var(--sand-100);
+}
+
+.actions a:hover,
+.actions a:focus-visible,
+.actions button:hover,
+.actions button:focus-visible {
+  background: var(--purple-700);
+  color: var(--sand-100);
+  outline: 3px solid var(--purple-500);
+  outline-offset: 3px;
+}
+
+.instrument {
+  background: var(--purple-950);
+  border: 1px solid var(--purple-950);
+  box-shadow: 0.75rem 0.75rem 0 var(--sand-500);
+  color: var(--sand-100);
+  font-family: 'IBM Plex Mono', monospace;
+  padding: 1.25rem;
+}
+
+.instrument strong {
+  display: block;
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 5rem;
+  letter-spacing: -0.08em;
+}
+
+.instrument span {
+  border-top: 1px dashed var(--sand-500);
+  color: var(--sand-300);
+  display: block;
+  font-size: 0.72rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+@media (max-width: 700px) {
+  .notFound {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -43,10 +43,13 @@
 .navigationGroup a,
 .desktopToc a,
 .mobileToc a {
+  align-items: center;
   color: var(--purple-700);
-  display: block;
+  display: flex;
   font-size: 0.875rem;
   line-height: 1.35;
+  min-height: 44px;
+  min-width: 44px;
   padding: 0.35rem 0;
   text-decoration: none;
 }
@@ -110,10 +113,14 @@
 
 .sourceActions a,
 .pagination a {
+  align-items: center;
   border: 1px solid var(--purple-700);
   border-radius: var(--radius-sm);
   color: var(--purple-950);
+  display: inline-flex;
   font-size: 0.875rem;
+  min-height: 44px;
+  min-width: 44px;
   padding: 0.6rem 0.8rem;
   text-decoration: none;
 }
@@ -238,6 +245,8 @@
 
 .codeBlock {
   margin: 1.5rem 0;
+  max-width: 100%;
+  min-width: 0;
   position: relative;
 }
 
@@ -247,6 +256,7 @@
   border-radius: var(--radius-md);
   color: var(--sand-100);
   margin: 0;
+  max-width: 100%;
   overflow-x: auto;
   padding: 3rem 1.25rem 1.25rem;
 }
@@ -265,7 +275,8 @@
   cursor: pointer;
   font: inherit;
   font-size: 0.75rem;
-  min-height: 2rem;
+  min-height: 44px;
+  min-width: 44px;
   padding: 0.35rem 0.6rem;
   position: absolute;
   right: 0.75rem;

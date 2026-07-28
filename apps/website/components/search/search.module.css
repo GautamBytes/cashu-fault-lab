@@ -40,7 +40,8 @@
   color: var(--purple-950);
   cursor: pointer;
   font: inherit;
-  min-height: 2.25rem;
+  min-height: 44px;
+  min-width: 44px;
   padding: 0.35rem 0.6rem;
 }
 
@@ -74,6 +75,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  min-height: 44px;
   padding: 0.8rem;
   text-decoration: none;
 }

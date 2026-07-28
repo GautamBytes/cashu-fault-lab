@@ -4,7 +4,7 @@ import { sourceUrl } from '../../lib/repository';
 import styles from '../content-pages.module.css';
 
 export const metadata: Metadata = {
-  title: 'Release status | Cashu Fault Lab',
+  title: 'Release status',
   description:
     'The checked-in Cashu Fault Lab release policy, current evidence, and open blockers.',
 };
