@@ -21,7 +21,8 @@ const required = [
 ] as const;
 
 const policy: ReleasePolicy = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  releaseSuiteDigest: `sha256:${'ab'.repeat(32)}`,
   profile: 'delivery-v1',
   minimumQualifyingPairs: 2,
   requireCrossImplementation: true,
@@ -138,6 +139,7 @@ function passingCase(
         requiredInvariants: required,
         invariants: required.map((invariantId) => invariant(invariantId)),
       })),
+    releaseSuiteDigest: policy.releaseSuiteDigest,
   };
 }
 
@@ -186,6 +188,22 @@ describe('release policy', () => {
       qualifyingPairs: ['sender-rs->receiver-ts', 'sender-ts->receiver-rs'],
       reasons: [],
     });
+  });
+
+  it('rejects matrix evidence from a different release-suite bundle', () => {
+    const result = evaluateReleasePolicy(policy, [
+      {
+        ...passingCase(),
+        releaseSuiteDigest: `sha256:${'cd'.repeat(32)}`,
+      },
+    ]);
+
+    expect(result.reasons).toContainEqual(
+      expect.objectContaining({
+        code: 'RELEASE_SUITE_DIGEST_MISMATCH',
+        pair: 'sender-ts->receiver-rs',
+      }),
+    );
   });
 
   it('rejects same implementation, same language, and non-distinct builds', () => {

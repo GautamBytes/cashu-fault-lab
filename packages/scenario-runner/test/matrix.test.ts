@@ -91,7 +91,11 @@ describe('CompatibilityMatrix', () => {
         ],
       },
     ];
-    const execution = { ok: true, scenarios } as unknown as MatrixExecutionResult;
+    const execution = {
+      ok: true,
+      scenarios,
+      releaseSuiteDigest: `sha256:${'ab'.repeat(32)}`,
+    } as unknown as MatrixExecutionResult;
     const result = await new CompatibilityMatrix(async () => execution).run(
       'delivery-v1',
       [participant('sender-a', 'sender')],
@@ -119,6 +123,7 @@ describe('CompatibilityMatrix', () => {
         ],
       },
     ]);
+    expect(selected.releaseSuiteDigest).toBe(`sha256:${'ab'.repeat(32)}`);
   });
 
   it('reports unsupported capabilities as not applicable without executing them', async () => {

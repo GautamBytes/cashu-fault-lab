@@ -14,6 +14,7 @@ import {
   DirectExternalFaultController,
   ExternalAdapterScenarioDriver,
   HttpExternalFaultController,
+  INVARIANT_REGISTRY,
   ScenarioRunner,
   minimizeFailingCommands,
   seededProtocolId,
@@ -28,7 +29,12 @@ import {
   runReferenceNut19Scenario,
   unobservableInvariantResults,
   type FailureArtifact,
+  type EvidenceConfidence,
   type ExternalFaultController,
+  type InvariantEvidenceReference,
+  type InvariantId,
+  type InvariantResult,
+  type InvariantStatus,
   type MatrixCaseResult,
   type MatrixExecutionResult,
   type MatrixParticipant,
@@ -412,6 +418,93 @@ function suiteEvidence(
         ? 'Release scenario execution failed'
         : `Required invariant was not accepted: ${rejectedRequiredInvariant}`,
   };
+}
+
+const INVARIANT_STATUS_RANK: Readonly<Record<InvariantStatus, number>> = {
+  passed: 0,
+  not_applicable: 1,
+  not_observable: 2,
+  failed: 3,
+};
+
+const EVIDENCE_CONFIDENCE_RANK: Readonly<Record<EvidenceConfidence, number>> = {
+  observed: 0,
+  derived: 1,
+  adapter_claimed: 2,
+};
+
+function evidenceKey(reference: InvariantEvidenceReference): string {
+  return JSON.stringify([
+    reference.source,
+    reference.index ?? null,
+    reference.field ?? null,
+    reference.description,
+  ]);
+}
+
+export function aggregateReleaseSuiteInvariants(
+  scenarios: readonly MatrixScenarioEvidence[],
+): readonly InvariantResult[] {
+  const occurrences = new Map<
+    InvariantId,
+    Array<{ readonly scenario: string; readonly result: InvariantResult }>
+  >();
+  for (const scenario of scenarios) {
+    const byId = new Map(scenario.invariants.map((invariant) => [invariant.id, invariant]));
+    for (const id of scenario.requiredInvariants) {
+      const result =
+        byId.get(id) ??
+        ({
+          id,
+          status: 'not_observable',
+          confidence: 'derived',
+          evidence: [],
+          reason: `Required invariant evidence is missing from scenario ${scenario.id}.`,
+        } satisfies InvariantResult);
+      occurrences.set(id, [...(occurrences.get(id) ?? []), { scenario: scenario.id, result }]);
+    }
+  }
+
+  return INVARIANT_REGISTRY.flatMap(({ id }) => {
+    const selected = occurrences.get(id);
+    if (selected === undefined || selected.length === 0) return [];
+    const status = selected.reduce<InvariantStatus>(
+      (weakest, occurrence) =>
+        INVARIANT_STATUS_RANK[occurrence.result.status] > INVARIANT_STATUS_RANK[weakest]
+          ? occurrence.result.status
+          : weakest,
+      'passed',
+    );
+    const confidence = selected.reduce<EvidenceConfidence>(
+      (weakest, occurrence) =>
+        EVIDENCE_CONFIDENCE_RANK[occurrence.result.confidence] > EVIDENCE_CONFIDENCE_RANK[weakest]
+          ? occurrence.result.confidence
+          : weakest,
+      'observed',
+    );
+    const evidence = [
+      ...new Map(
+        selected
+          .flatMap(({ result }) => result.evidence)
+          .map((reference) => [evidenceKey(reference), reference]),
+      ).values(),
+    ].sort((left, right) => evidenceKey(left).localeCompare(evidenceKey(right)));
+    const reasons = selected
+      .filter(({ result }) => result.status !== 'passed')
+      .map(
+        ({ scenario, result }) =>
+          `${scenario}: ${result.reason ?? `invariant status is ${result.status}`}`,
+      );
+    return [
+      {
+        id,
+        status,
+        confidence,
+        evidence,
+        ...(reasons.length === 0 ? {} : { reason: reasons.join(' | ') }),
+      },
+    ];
+  });
 }
 
 class RestartableExternalFaultController implements ExternalFaultController {
@@ -850,7 +943,12 @@ export class PackagedLabRuntime implements LabRuntime {
           );
           scenarios.push(suiteEvidence(entry, scenarioSeed, result));
         }
-        return { ...smoke, scenarios } satisfies MatrixExecutionResult;
+        return {
+          ...smoke,
+          invariants: aggregateReleaseSuiteInvariants(scenarios),
+          scenarios,
+          releaseSuiteDigest: releaseSuite.digest,
+        } satisfies MatrixExecutionResult;
       });
       const externalParticipants = registry.participants();
       return externalMatrix.run(profileName, externalParticipants, externalParticipants);
@@ -887,6 +985,21 @@ export class PackagedLabRuntime implements LabRuntime {
       if (result.status !== 'passed') return result;
       return {
         ...result,
+        invariants: aggregateReleaseSuiteInvariants(
+          releaseSuite.scenarios.map((entry) =>
+            suiteNotApplicable(
+              entry,
+              String(
+                seededProtocolId(
+                  seed,
+                  `release-suite:${result.sender}:${result.receiver}:${entry.id}`,
+                ),
+              ),
+              'Release suites require configured external adapters',
+            ),
+          ),
+        ),
+        releaseSuiteDigest: releaseSuite.digest,
         scenarios: releaseSuite.scenarios.map((entry) =>
           suiteNotApplicable(
             entry,

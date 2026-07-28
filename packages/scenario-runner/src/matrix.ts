@@ -37,6 +37,7 @@ export type MatrixExecutionResult =
       readonly invariants?: readonly InvariantResult[];
       readonly mints?: readonly AdapterMintIdentity[];
       readonly scenarios?: readonly MatrixScenarioEvidence[];
+      readonly releaseSuiteDigest?: string;
     }
   | { readonly ok: null; readonly reason: string }
   | { readonly ok: false; readonly code: string; readonly reason: string };
@@ -62,6 +63,7 @@ export type MatrixCaseResult =
       readonly invariants: readonly InvariantResult[];
       readonly mints: readonly AdapterMintIdentity[];
       readonly scenarios: readonly MatrixScenarioEvidence[];
+      readonly releaseSuiteDigest?: string;
       readonly evidence?: Readonly<Record<string, unknown>>;
     })
   | (MatrixCaseIdentity & {
@@ -162,6 +164,9 @@ export class CompatibilityMatrix {
             invariants: structuredClone(execution.invariants ?? []),
             mints: structuredClone(execution.mints ?? []),
             scenarios: structuredClone(execution.scenarios ?? []),
+            ...(execution.releaseSuiteDigest === undefined
+              ? {}
+              : { releaseSuiteDigest: execution.releaseSuiteDigest }),
             ...(execution.evidence === undefined ? {} : { evidence: execution.evidence }),
           });
           continue;

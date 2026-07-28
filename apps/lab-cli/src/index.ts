@@ -499,6 +499,15 @@ export async function runCli(
             `Release suite profile ${releaseSuite.profile} does not match matrix profile ${options.profile}`,
           );
         }
+        if (
+          releasePolicy !== undefined &&
+          releaseSuite !== undefined &&
+          releaseSuite.digest !== releasePolicy.releaseSuiteDigest
+        ) {
+          throw new Error(
+            `Release suite digest ${releaseSuite.digest} does not match policy ${releasePolicy.releaseSuiteDigest}`,
+          );
+        }
         const results = await runtime.matrix(
           options.profile,
           options.seed,

@@ -49,6 +49,30 @@ describe('release suite loader', () => {
     });
 
     expect(loaded.scenarios).toEqual([{ ...entry, spec: scenario }]);
+    expect(loaded.digest).toBe(
+      'sha256:63fde51d9355ba7e19568750ee6ceb9b0164bea2fd581ef7109331f155f4639f',
+    );
+  });
+
+  it('changes the bundle digest when scenario bytes change', async () => {
+    const files = (scenarioText: string) => ({
+      [resolve(root, 'spec/release-suite.json')]: suite(),
+      [resolve(root, entry.scenario)]: scenarioText,
+    });
+    const first = await loadReleaseSuite({
+      repositoryRoot: root,
+      path: 'spec/release-suite.json',
+      realPath: identityRealPath,
+      readText: reader(files(JSON.stringify(scenario))),
+    });
+    const second = await loadReleaseSuite({
+      repositoryRoot: root,
+      path: 'spec/release-suite.json',
+      realPath: identityRealPath,
+      readText: reader(files(`${JSON.stringify(scenario)}\n`)),
+    });
+
+    expect(first.digest).not.toBe(second.digest);
   });
 
   it.each(['/tmp/release-suite.json', '../release-suite.json'])(

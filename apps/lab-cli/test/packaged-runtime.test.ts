@@ -3,13 +3,21 @@ import {
   developmentIdentity,
   type AdapterCapabilities,
 } from '@cashu-fault-lab/adapter-contract';
-import type { ScenarioRunResult, ScenarioSpec } from '@cashu-fault-lab/scenario-runner';
+import type {
+  MatrixScenarioEvidence,
+  ScenarioRunResult,
+  ScenarioSpec,
+} from '@cashu-fault-lab/scenario-runner';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
-import { DockerComposeServiceController, PackagedLabRuntime } from '../src/packaged-runtime.js';
+import {
+  aggregateReleaseSuiteInvariants,
+  DockerComposeServiceController,
+  PackagedLabRuntime,
+} from '../src/packaged-runtime.js';
 import type { LoadedReleaseSuite } from '../src/release-suite-loader.js';
 import { REFERENCE_RUNTIME_ENV_PATH } from '../src/runtime-env.js';
 
@@ -42,6 +50,103 @@ function externalCapability(sender: boolean): AdapterCapabilities {
     mints: [],
   };
 }
+
+function matrixScenario(
+  id: string,
+  status: MatrixScenarioEvidence['status'],
+  invariant: MatrixScenarioEvidence['invariants'][number] | undefined,
+): MatrixScenarioEvidence {
+  return {
+    id,
+    seed: `seed-${id}`,
+    status,
+    requiredInvariants: ['retry-convergence'],
+    invariants: invariant === undefined ? [] : [invariant],
+  };
+}
+
+describe('aggregateReleaseSuiteInvariants', () => {
+  it('uses suite evidence instead of stale smoke invariants', () => {
+    expect(
+      aggregateReleaseSuiteInvariants([
+        matrixScenario('retry-one', 'passed', {
+          id: 'retry-convergence',
+          status: 'passed',
+          confidence: 'observed',
+          evidence: [{ source: 'receipt', description: 'suite receipt' }],
+        }),
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        id: 'retry-convergence',
+        status: 'passed',
+        confidence: 'observed',
+      }),
+    ]);
+  });
+
+  it('conservatively keeps the weakest confidence across required scenarios', () => {
+    const result = aggregateReleaseSuiteInvariants([
+      matrixScenario('retry-observed', 'passed', {
+        id: 'retry-convergence',
+        status: 'passed',
+        confidence: 'observed',
+        evidence: [{ source: 'receipt', description: 'observed receipt' }],
+      }),
+      matrixScenario('retry-claimed', 'passed', {
+        id: 'retry-convergence',
+        status: 'passed',
+        confidence: 'adapter_claimed',
+        evidence: [{ source: 'receipt', description: 'claimed receipt' }],
+      }),
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'retry-convergence',
+        status: 'passed',
+        confidence: 'adapter_claimed',
+      }),
+    ]);
+  });
+
+  it('conservatively keeps a non-passing required invariant', () => {
+    const result = aggregateReleaseSuiteInvariants([
+      matrixScenario('retry-pass', 'passed', {
+        id: 'retry-convergence',
+        status: 'passed',
+        confidence: 'observed',
+        evidence: [{ source: 'receipt', description: 'pass' }],
+      }),
+      matrixScenario('retry-fail', 'failed', {
+        id: 'retry-convergence',
+        status: 'failed',
+        confidence: 'observed',
+        evidence: [{ source: 'receipt', description: 'failure' }],
+        reason: 'retry did not converge',
+      }),
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'retry-convergence',
+        status: 'failed',
+        reason: expect.stringContaining('retry-fail'),
+      }),
+    ]);
+  });
+
+  it('marks missing required scenario evidence not observable', () => {
+    expect(
+      aggregateReleaseSuiteInvariants([matrixScenario('retry-missing', 'failed', undefined)]),
+    ).toEqual([
+      expect.objectContaining({
+        id: 'retry-convergence',
+        status: 'not_observable',
+      }),
+    ]);
+  });
+});
 
 function demoCapability(id: 'cashu-ts' | 'reference-receiver'): AdapterCapabilities {
   const sender = id === 'cashu-ts';
@@ -136,9 +241,9 @@ function externalDemoFetch(
         });
       }
       return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     }
     const body = (() => {
       if (url.pathname === '/v1/capabilities') {
@@ -644,6 +749,7 @@ describe('PackagedLabRuntime', () => {
     const releaseSuite: LoadedReleaseSuite = {
       schemaVersion: 1,
       profile: 'delivery-v1',
+      digest: `sha256:${'ab'.repeat(32)}`,
       scenarios: [
         {
           id: 'first-delivery',
@@ -701,14 +807,10 @@ describe('PackagedLabRuntime', () => {
         }),
         invariants: expect.arrayContaining([
           expect.objectContaining({
-            id: 'at-most-one-merchant-credit-per-delivery',
+            id: 'reproducibility',
             status: 'passed',
-            confidence: 'adapter_claimed',
           }),
-          expect.objectContaining({
-            id: 'at-most-once-redemption-start',
-            status: 'not_observable',
-          }),
+          expect.objectContaining({ id: 'no-unsupported-pass', status: 'passed' }),
         ]),
         evidence: expect.objectContaining({ credits: 1, seed: 'external-seed' }),
         scenarios: [
@@ -723,6 +825,7 @@ describe('PackagedLabRuntime', () => {
             seed: expect.any(String),
           }),
         ],
+        releaseSuiteDigest: `sha256:${'ab'.repeat(32)}`,
       }),
     );
     const passedPair = results.find(
@@ -733,6 +836,10 @@ describe('PackagedLabRuntime', () => {
     );
     expect(passedPair?.status).toBe('passed');
     if (passedPair?.status === 'passed') {
+      expect(passedPair.invariants.map(({ id }) => id)).toEqual([
+        'reproducibility',
+        'no-unsupported-pass',
+      ]);
       expect(passedPair.scenarios[0]?.seed).not.toBe(passedPair.scenarios[1]?.seed);
       expect(passedPair.scenarios.map(({ id }) => id)).toEqual([
         'first-delivery',

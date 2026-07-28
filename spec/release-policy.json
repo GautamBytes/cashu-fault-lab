@@ -1,5 +1,6 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
+  "releaseSuiteDigest": "sha256:530f9d69e3eb13f3a1f386ada52e40cd57cf34cfd8f548c08a916ced34ef5ba3",
   "profile": "delivery-v1",
   "minimumQualifyingPairs": 2,
   "requireCrossImplementation": true,
