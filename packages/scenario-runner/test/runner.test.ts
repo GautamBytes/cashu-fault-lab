@@ -102,6 +102,12 @@ class FailureSignatureDriver extends FakeDriver {
   }
 }
 
+class SourceConfidenceDriver extends FakeDriver {
+  readonly sourceConfidence = {
+    ledger: 'adapter_claimed',
+  } as const;
+}
+
 class DeferredSendDriver extends FakeDriver {
   private resolver: (() => void) | undefined;
 
@@ -213,6 +219,25 @@ describe('ScenarioRunner', () => {
         ),
       ).toBe(true);
     }
+  });
+
+  it('forwards source-specific evidence confidence to the oracle', async () => {
+    const result = await new ScenarioRunner(new SourceConfidenceDriver()).run(
+      {
+        name: 'source-confidence',
+        commands: [{ type: 'send', sender: 'sender-a', requestId: 'request-1' }],
+      },
+      'source-confidence',
+    );
+
+    expect(
+      result.artifact.invariants.find(
+        (item) => item.id === 'at-most-one-merchant-credit-per-delivery',
+      ),
+    ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+    expect(
+      result.artifact.invariants.find((item) => item.id === 'monotonic-receipts'),
+    ).toMatchObject({ status: 'passed', confidence: 'derived' });
   });
 
   it('turns oracle violations into reproducible failure artifacts', async () => {

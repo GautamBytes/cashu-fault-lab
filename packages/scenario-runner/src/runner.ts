@@ -4,8 +4,9 @@ import {
   assertSafety,
   emptyOracleModel,
   evaluateInvariants,
-  type InvariantResult,
   type EvidenceConfidence,
+  type EvidenceSourceConfidence,
+  type InvariantResult,
   type Observation,
   type OracleModel,
 } from '@cashu-fault-lab/oracle';
@@ -61,6 +62,7 @@ export interface DriverSendResult {
 
 export interface ScenarioDriver {
   readonly observationConfidence?: Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>;
+  readonly sourceConfidence?: EvidenceSourceConfidence;
   reset(seed: string): Promise<void>;
   capabilities(): Promise<Readonly<Record<string, unknown>>>;
   configureFault(target: string, rule: FaultRule): Promise<void>;
@@ -302,6 +304,9 @@ export class ScenarioRunner {
         ...(this.#driver.observationConfidence === undefined
           ? {}
           : { observationConfidence: this.#driver.observationConfidence }),
+        ...(this.#driver.sourceConfidence === undefined
+          ? {}
+          : { sourceConfidence: this.#driver.sourceConfidence }),
       }),
       componentVersions,
       imageDigests: imageDigestsFromCapabilities(capabilities),

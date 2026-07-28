@@ -30,6 +30,14 @@ export type InvariantId =
 export type InvariantStatus = 'passed' | 'failed' | 'not_applicable' | 'not_observable';
 export type EvidenceConfidence = 'observed' | 'derived' | 'adapter_claimed';
 export type InvariantEvidenceSource = 'timeline' | 'receipt' | 'ledger' | 'proofs' | 'capabilities';
+export type EvidenceSourceConfidence = Readonly<
+  Partial<
+    Record<
+      InvariantEvidenceSource,
+      Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>
+    >
+  >
+>;
 
 export interface InvariantEvidenceReference {
   readonly source: InvariantEvidenceSource;
@@ -172,6 +180,7 @@ export interface EvaluateInvariantsInput {
   readonly metadata?: InvariantRunMetadata;
   readonly profile?: string;
   readonly observationConfidence?: Extract<EvidenceConfidence, 'observed' | 'adapter_claimed'>;
+  readonly sourceConfidence?: EvidenceSourceConfidence;
 }
 
 function evidence(
@@ -756,9 +765,13 @@ export function evaluateInvariants(input: EvaluateInvariantsInput): readonly Inv
     if (result === undefined) {
       throw new Error(`Invariant evaluator omitted ${definition.id}`);
     }
-    return input.observationConfidence === 'adapter_claimed' && result.confidence === 'observed'
-      ? { ...result, confidence: 'adapter_claimed' }
-      : result;
+    if (result.status !== 'passed') return result;
+    const adapterClaimed =
+      input.observationConfidence === 'adapter_claimed' ||
+      result.evidence.some(
+        (reference) => input.sourceConfidence?.[reference.source] === 'adapter_claimed',
+      );
+    return adapterClaimed ? { ...result, confidence: 'adapter_claimed' } : result;
   });
 }
 
