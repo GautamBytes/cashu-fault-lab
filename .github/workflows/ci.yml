@@ -42,6 +42,8 @@ jobs:
       - run: pnpm openapi:validate
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Positive strict-policy engine fixture
+        run: pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/release-policy.test.ts -t "accepts two independent cross-language pairs backed by two mints"
       - run: pnpm test:integration
       - run: pnpm build
       - run: pnpm test:consumer
@@ -58,6 +60,15 @@ jobs:
       - run: node apps/lab-cli/dist/bin.js run scenarios/security/redirect-leak.json --seed pr-security
       - run: node apps/lab-cli/dist/bin.js run scenarios/security/malformed-input.json --seed pr-security
       - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1
+      - name: Bundled qualification remains blocked without independent adapters
+        run: |
+          if node apps/lab-cli/dist/bin.js matrix --profile delivery-v1 --release-policy spec/release-policy.json > /tmp/release-gate.txt 2>&1; then
+            cat /tmp/release-gate.txt
+            echo "repository-only qualification unexpectedly passed"
+            exit 1
+          fi
+          cat /tmp/release-gate.txt
+          grep -q "MINIMUM_QUALIFYING_PAIRS" /tmp/release-gate.txt
 
   generated-adapter-templates:
     name: Generated adapter templates

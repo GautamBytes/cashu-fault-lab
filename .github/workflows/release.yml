@@ -1,8 +1,6 @@
 name: Release gate
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -100,7 +98,15 @@ jobs:
       - run: cargo fmt --manifest-path adapters/cdk/Cargo.toml --check
       - run: cargo clippy --manifest-path adapters/cdk/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path adapters/cdk/Cargo.toml
-      - run: node apps/lab-cli/dist/bin.js matrix --profile delivery-v1 --release-policy spec/release-policy.json
+      - name: Confirm repository-only qualification remains blocked
+        run: |
+          if node apps/lab-cli/dist/bin.js matrix --profile delivery-v1 --release-policy spec/release-policy.json > /tmp/release-gate.txt 2>&1; then
+            cat /tmp/release-gate.txt
+            echo "repository-only qualification unexpectedly passed"
+            exit 1
+          fi
+          cat /tmp/release-gate.txt
+          grep -q "MINIMUM_QUALIFYING_PAIRS" /tmp/release-gate.txt
       - run: node apps/lab-cli/dist/bin.js matrix --profile legacy-nut18
       - run: node apps/lab-cli/dist/bin.js matrix --profile nut26-nostr
       - run: node apps/lab-cli/dist/bin.js run scenarios/crash-recovery/mint-response-lost.json --seed release

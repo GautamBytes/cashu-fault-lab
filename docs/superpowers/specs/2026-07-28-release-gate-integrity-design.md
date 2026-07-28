@@ -74,9 +74,12 @@ interface AdapterRegistration {
 
 Evidence authority origins must be loopback HTTP origins for local execution
 and must differ from the adapter control origin. The runner calls only the
-read-only ledger and proof routes on these clients. Version-2 manifests without
-authorities remain valid for developer smoke matrices, but their evidence stays
-`adapter_claimed` and cannot qualify under the strict policy.
+read-only ledger, proof-state, and cumulative redemption-start routes on these
+clients. A final spent state is insufficient to establish how many redemption
+requests began, so the mint authority's `/v1/redemptions` count is the sole
+external source of `redemption_started` observations. Version-2 manifests
+without authorities remain valid for developer smoke matrices, but their
+evidence stays `adapter_claimed` and cannot qualify under the strict policy.
 
 ## Exact fault attribution
 
@@ -181,4 +184,3 @@ Every behavioral change uses red-green-refactor. Final verification includes:
 6. a positive trusted release-gate fixture;
 7. the real bundled certification command, which must fail with documented
    external-evidence blockers rather than accidentally pass.
-

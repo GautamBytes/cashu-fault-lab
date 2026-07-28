@@ -129,6 +129,12 @@ export interface ProofEvidenceView {
   readonly state: 'unspent' | 'pending' | 'spent' | 'unknown';
 }
 
+export interface MintRedemptionEvidenceView {
+  readonly deliveryId: string;
+  readonly proofSetHash: string;
+  readonly starts: number;
+}
+
 export interface AdapterClient {
   capabilities(): Promise<AdapterCapabilities>;
   reset(seed: string): Promise<void>;
@@ -148,6 +154,7 @@ export type AdapterResponseOperation =
   | 'delivery'
   | 'ledger'
   | 'proofs'
+  | 'redemptions'
   | 'armCrash'
   | 'crashStatus';
 

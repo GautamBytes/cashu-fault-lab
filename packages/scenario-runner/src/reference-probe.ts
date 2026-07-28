@@ -236,7 +236,7 @@ export async function runReferenceDeliveryProbe(seed: string): Promise<MatrixExe
     metadata: {
       scenarioId: 'matrix:delivery-v1',
       seed,
-      componentVersions: { 'reference-ts': '0.0.0' },
+      componentVersions: { 'reference-ts': '0.1.0' },
     },
     profile: 'delivery-v1',
   });

@@ -439,6 +439,9 @@ describe('ExternalAdapterScenarioDriver', () => {
         (item) => item.id === 'at-most-one-merchant-credit-per-delivery',
       ),
     ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
+    expect(
+      result.artifact.invariants.find((item) => item.id === 'at-most-once-redemption-start'),
+    ).toMatchObject({ status: 'not_observable' });
   });
 
   it('qualifies mint and ledger observations only through independent authorities', async () => {
@@ -452,7 +455,16 @@ describe('ExternalAdapterScenarioDriver', () => {
         faults: new Faults(),
         evidence: {
           ledger: { ledger: () => receiver.ledger() },
-          mint: { proofs: () => receiver.proofs() },
+          mint: {
+            proofs: () => receiver.proofs(),
+            redemptions: async () => [
+              {
+                deliveryId: receiver.deliveryId,
+                proofSetHash: 'b'.repeat(64),
+                starts: 1,
+              },
+            ],
+          },
         },
         amount: 8,
         unit: 'sat',
@@ -466,8 +478,42 @@ describe('ExternalAdapterScenarioDriver', () => {
       result.artifact.invariants.find((item) => item.id === 'independent-mint-evidence'),
     ).toMatchObject({ status: 'passed', confidence: 'observed' });
     expect(
+      result.artifact.invariants.find((item) => item.id === 'at-most-once-redemption-start'),
+    ).toMatchObject({ status: 'passed', confidence: 'observed' });
+    expect(
       result.artifact.invariants.find((item) => item.id === 'retry-convergence'),
     ).toMatchObject({ status: 'passed', confidence: 'derived' });
+  });
+
+  it('fails when independent mint evidence reports duplicate redemption starts', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const result = await new ScenarioRunner(
+      new ExternalAdapterScenarioDriver({
+        sender,
+        receiver,
+        faults: new Faults(),
+        evidence: {
+          mint: {
+            proofs: () => receiver.proofs(),
+            redemptions: async () => [
+              {
+                deliveryId: receiver.deliveryId,
+                proofSetHash: 'b'.repeat(64),
+                starts: 2,
+              },
+            ],
+          },
+        },
+        amount: 8,
+        unit: 'sat',
+      }),
+    ).run(scenario('drop_response'), 'external-duplicate-redemption');
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { message: expect.stringMatching(/redemption .* at most once/i) },
+    });
   });
 
   it('backs off deterministically between transient delivery failures', async () => {
@@ -512,7 +558,7 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(result.status).toBe('passed');
     const observations = result.artifact.history.filter((event) => event.phase === 'observation');
     expect(observations.filter((event) => event.event === 'delivery_attempted')).toHaveLength(4);
-    expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(1);
+    expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(0);
     expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(1);
   });
 
@@ -524,6 +570,18 @@ describe('ExternalAdapterScenarioDriver', () => {
         sender,
         receiver,
         faults: new Faults(),
+        evidence: {
+          mint: {
+            proofs: () => receiver.proofs(),
+            redemptions: async () => [
+              {
+                deliveryId: receiver.deliveryId,
+                proofSetHash: 'b'.repeat(64),
+                starts: 1,
+              },
+            ],
+          },
+        },
         amount: 8,
         unit: 'sat',
       }),

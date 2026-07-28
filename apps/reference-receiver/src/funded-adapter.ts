@@ -85,7 +85,7 @@ export class FundedReceiverAdapterControl implements ReceiverAdapterControl {
       contract: currentAdapterContract(),
       implementation: developmentIdentity({
         id: 'reference-receiver',
-        version: '0.0.0',
+        version: '0.1.0',
         language: 'typescript',
         runtime: 'node-24',
       }),

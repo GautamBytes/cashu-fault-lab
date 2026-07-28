@@ -242,7 +242,7 @@ export async function runCli(
   const program = new Command()
     .name('cashu-fault-lab')
     .description('Deterministic Cashu payment delivery fault laboratory')
-    .version('0.0.0')
+    .version('0.1.0')
     .exitOverride()
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr });
 

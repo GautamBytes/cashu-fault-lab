@@ -4,7 +4,10 @@ import {
   type AdapterTestControlClient,
   type HttpAdapterClientOptions,
 } from '@cashu-fault-lab/adapter-contract';
-import type { MatrixParticipant } from '@cashu-fault-lab/scenario-runner';
+import type {
+  ExternalEvidenceAuthorities,
+  MatrixParticipant,
+} from '@cashu-fault-lab/scenario-runner';
 import {
   resolveAdapterManifest,
   type AdapterManifest,
@@ -13,11 +16,6 @@ import {
 
 export interface ExternalAdapterRegistryDependencies {
   readonly fetch?: typeof fetch;
-}
-
-export interface ExternalEvidenceAuthorities {
-  readonly ledger?: Pick<AdapterClient, 'ledger'>;
-  readonly mint?: Pick<AdapterClient, 'proofs'>;
 }
 
 export class ExternalAdapterRegistry {

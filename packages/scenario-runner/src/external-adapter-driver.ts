@@ -8,6 +8,7 @@ import {
   type AdapterTransport,
   type AdapterClient,
   type LedgerCreditView,
+  type MintRedemptionEvidenceView,
   type PaymentRequestView,
   type ProofEvidenceView,
 } from '@cashu-fault-lab/adapter-contract';
@@ -80,7 +81,10 @@ export interface ExternalAdapterScenarioDriverOptions {
 
 export interface ExternalEvidenceAuthorities {
   readonly ledger?: Pick<AdapterClient, 'ledger'>;
-  readonly mint?: Pick<AdapterClient, 'proofs'>;
+  readonly mint?: {
+    proofs(): Promise<readonly ProofEvidenceView[]>;
+    redemptions(): Promise<readonly MintRedemptionEvidenceView[]>;
+  };
 }
 
 export class DirectExternalFaultController implements ExternalFaultController {
@@ -178,6 +182,29 @@ function exactProof(values: readonly ProofEvidenceView[], deliveryId: string): P
   return proof;
 }
 
+function exactRedemption(
+  values: readonly MintRedemptionEvidenceView[],
+  deliveryId: string,
+  proofSetHash: string,
+): MintRedemptionEvidenceView {
+  const related = values.filter(
+    (value) => value.deliveryId === deliveryId || value.proofSetHash === proofSetHash,
+  );
+  const redemption = related[0];
+  if (
+    related.length !== 1 ||
+    redemption === undefined ||
+    redemption.deliveryId !== deliveryId ||
+    redemption.proofSetHash !== proofSetHash ||
+    !Number.isSafeInteger(redemption.starts) ||
+    redemption.starts < 1 ||
+    redemption.starts > 1_000
+  ) {
+    throw new Error('Independent mint did not report an exact redemption-start count');
+  }
+  return redemption;
+}
+
 async function adapterCall<T>(label: string, operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
@@ -213,7 +240,8 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   #request: PaymentRequestView | undefined;
   #senderCapabilities: AdapterCapabilities | undefined;
   #receiverCapabilities: AdapterCapabilities | undefined;
-  readonly #redeemedDeliveries = new Set<string>();
+  readonly #observedRedemptionStarts = new Map<string, number>();
+  readonly #settledDeliveries = new Set<string>();
   readonly #configuredTransportFaults = new Set<string>();
   readonly #configuredFaultRules: ExternalFaultRuleHandle[] = [];
   readonly #armedCrashes: CrashArmInput[] = [];
@@ -266,7 +294,8 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#request = undefined;
     this.#senderCapabilities = undefined;
     this.#receiverCapabilities = undefined;
-    this.#redeemedDeliveries.clear();
+    this.#observedRedemptionStarts.clear();
+    this.#settledDeliveries.clear();
     this.#configuredTransportFaults.clear();
     this.#configuredFaultRules.length = 0;
     this.#armedCrashes.length = 0;
@@ -454,13 +483,22 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     );
     const proof = exactProof(
       await adapterCall(
-        this.#evidence.mint === undefined
-          ? 'receiver proof evidence'
-          : 'independent mint evidence',
+        this.#evidence.mint === undefined ? 'receiver proof evidence' : 'independent mint evidence',
         () => (this.#evidence.mint ?? this.#receiver).proofs(),
       ),
       observed.deliveryId,
     );
+    const mintAuthority = this.#evidence.mint;
+    const redemption =
+      mintAuthority === undefined
+        ? undefined
+        : exactRedemption(
+            await adapterCall('independent mint redemption evidence', () =>
+              mintAuthority.redemptions(),
+            ),
+            observed.deliveryId,
+            proof.proofSetHash,
+          );
     let faultEvidence: ExternalFaultEvidence;
     try {
       faultEvidence = await this.#faults.evidence();
@@ -468,8 +506,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       throw new Error('External fault evidence collection failed');
     }
     const controllerAttempts = Math.max(faultEvidence.inbound, faultEvidence.forwarded);
-    this.#transportObserved =
-      faultEvidence.controller === 'http-gateway' && controllerAttempts > 0;
+    this.#transportObserved = faultEvidence.controller === 'http-gateway' && controllerAttempts > 0;
     const exactRulesObserved = this.#configuredFaultRules.every((configured) =>
       faultEvidence.rules?.some(
         (observed) =>
@@ -523,16 +560,22 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       creditId,
       proof.proofSetHash,
     ]);
-    const redemptionObservations: Observation[] = this.#redeemedDeliveries.has(observed.deliveryId)
-      ? []
-      : [
-          {
-            type: 'redemption_started',
-            deliveryId: observed.deliveryId,
-            proofSetHash: proof.proofSetHash,
-          },
-        ];
-    this.#redeemedDeliveries.add(observed.deliveryId);
+    const previousRedemptionStarts = this.#observedRedemptionStarts.get(observed.deliveryId) ?? 0;
+    if (redemption !== undefined && redemption.starts < previousRedemptionStarts) {
+      throw new Error('Independent mint redemption evidence regressed');
+    }
+    const redemptionObservations: Observation[] = Array.from(
+      { length: (redemption?.starts ?? 0) - previousRedemptionStarts },
+      () => ({
+        type: 'redemption_started',
+        deliveryId: observed.deliveryId,
+        proofSetHash: proof.proofSetHash,
+      }),
+    );
+    if (redemption !== undefined) {
+      this.#observedRedemptionStarts.set(observed.deliveryId, redemption.starts);
+    }
+    this.#settledDeliveries.add(observed.deliveryId);
     const observations: Observation[] = [
       { type: 'request_observed', requestId: request.id, singleUse: request.singleUse },
       ...deliveryObservations,
@@ -610,7 +653,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       await adapterCall('sender capability discovery', () => this.#sender.capabilities());
       await adapterCall('receiver capability discovery', () => this.#receiver.capabilities());
       if (component !== 'receiver') return;
-      for (const deliveryId of this.#redeemedDeliveries) {
+      for (const deliveryId of this.#settledDeliveries) {
         const receiptView = await adapterCall('receiver delivery lookup', () =>
           this.#receiver.delivery(deliveryId),
         );

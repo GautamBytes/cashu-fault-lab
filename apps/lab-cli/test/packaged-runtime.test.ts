@@ -1129,8 +1129,8 @@ describe('PackagedLabRuntime', () => {
 
     expect(result.status).toBe('passed');
     expect(result.artifact.componentVersions).toMatchObject({
-      'lab-cli': '0.0.0',
-      'scenario-runner': '0.0.0',
+      'lab-cli': '0.1.0',
+      'scenario-runner': '0.1.0',
     });
     expect(
       result.artifact.history.filter(

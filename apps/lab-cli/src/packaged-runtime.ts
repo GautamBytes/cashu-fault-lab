@@ -189,7 +189,7 @@ const referenceCapabilities: AdapterCapabilities = {
   contract: currentAdapterContract(),
   implementation: developmentIdentity({
     id: 'reference-ts',
-    version: '0.0.0',
+    version: '0.1.0',
     language: 'typescript',
     runtime: 'node-24',
   }),
@@ -232,12 +232,12 @@ const participants: readonly MatrixParticipant[] = [
 ];
 
 const packagedComponentVersions: Readonly<Record<string, string>> = {
-  'adapter-contract': '0.0.0',
-  'delivery-core': '0.0.0',
-  'lab-cli': '0.0.0',
-  oracle: '0.0.0',
-  report: '0.0.0',
-  'scenario-runner': '0.0.0',
+  'adapter-contract': '0.1.0',
+  'delivery-core': '0.1.0',
+  'lab-cli': '0.1.0',
+  oracle: '0.1.0',
+  report: '0.1.0',
+  'scenario-runner': '0.1.0',
 };
 
 const referenceServices = [

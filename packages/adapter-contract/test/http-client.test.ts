@@ -106,6 +106,15 @@ describe('HttpAdapterClient', () => {
           ]);
         }
         if (request.url === '/v1/send') return json(response, 200, receipt);
+        if (request.url === '/v1/redemptions') {
+          return json(response, 200, [
+            {
+              deliveryId: 'EBESExQVFhcYGRobHB0eHw',
+              proofSetHash: 'ab'.repeat(32),
+              starts: 1,
+            },
+          ]);
+        }
         response.writeHead(404).end();
       });
     });
@@ -119,6 +128,13 @@ describe('HttpAdapterClient', () => {
         delivery_id: 'EBESExQVFhcYGRobHB0eHw',
       }),
     );
+    await expect(client.redemptions()).resolves.toEqual([
+      {
+        deliveryId: 'EBESExQVFhcYGRobHB0eHw',
+        proofSetHash: 'ab'.repeat(32),
+        starts: 1,
+      },
+    ]);
     await expect(
       client.armCrash({
         runId: 'run-a',
@@ -156,6 +172,12 @@ describe('HttpAdapterClient', () => {
         url: '/v1/send',
         authorization: 'Bearer control-token',
         body: '{"request":"creqAexample"}',
+      },
+      {
+        method: 'GET',
+        url: '/v1/redemptions',
+        authorization: 'Bearer control-token',
+        body: '',
       },
       {
         method: 'POST',

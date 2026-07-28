@@ -127,6 +127,7 @@ describe('ExternalAdapterRegistry', () => {
           }
           if (url.endsWith('/v1/ledger')) return Response.json([]);
           if (url.endsWith('/v1/proofs')) return Response.json([]);
+          if (url.endsWith('/v1/redemptions')) return Response.json([]);
           return new Response(null, { status: 404 });
         },
       },
@@ -134,10 +135,12 @@ describe('ExternalAdapterRegistry', () => {
 
     await expect(registry.evidence('cashu-ts')?.ledger?.ledger()).resolves.toEqual([]);
     await expect(registry.evidence('cashu-ts')?.mint?.proofs()).resolves.toEqual([]);
+    await expect(registry.evidence('cashu-ts')?.mint?.redemptions()).resolves.toEqual([]);
     expect(seen).toEqual([
       'http://127.0.0.1:4101/v1/capabilities',
       'http://127.0.0.1:5101/v1/ledger',
       'http://127.0.0.1:5102/v1/proofs',
+      'http://127.0.0.1:5102/v1/redemptions',
     ]);
   });
 });

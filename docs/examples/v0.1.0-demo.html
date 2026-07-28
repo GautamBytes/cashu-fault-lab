@@ -21,15 +21,10 @@
   &quot;invariants&quot;: [
     {
       &quot;id&quot;: &quot;at-most-once-redemption-start&quot;,
-      &quot;status&quot;: &quot;passed&quot;,
-      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
-      &quot;evidence&quot;: [
-        {
-          &quot;source&quot;: &quot;timeline&quot;,
-          &quot;index&quot;: 3,
-          &quot;description&quot;: &quot;Redemption-start observations contain one start per delivery.&quot;
-        }
-      ]
+      &quot;status&quot;: &quot;not_observable&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [],
+      &quot;reason&quot;: &quot;Mint redemption-start evidence is unavailable.&quot;
     },
     {
       &quot;id&quot;: &quot;at-most-one-merchant-credit-per-request&quot;,
@@ -38,7 +33,7 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;ledger&quot;,
-          &quot;index&quot;: 6,
+          &quot;index&quot;: 5,
           &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
         }
       ]
@@ -50,7 +45,7 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;ledger&quot;,
-          &quot;index&quot;: 6,
+          &quot;index&quot;: 5,
           &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
         }
       ]
@@ -58,24 +53,39 @@
     {
       &quot;id&quot;: &quot;proof-set-exclusivity&quot;,
       &quot;status&quot;: &quot;passed&quot;,
-      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;timeline&quot;,
           &quot;index&quot;: 1,
           &quot;description&quot;: &quot;Delivery-attempt identities derive a unique owner for every proof set.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 3,
+          &quot;description&quot;: &quot;Mint evidence binds the delivery to its input proof-set identity and state.&quot;
         }
       ]
     },
     {
       &quot;id&quot;: &quot;delivery-identity-immutability&quot;,
       &quot;status&quot;: &quot;passed&quot;,
-      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;timeline&quot;,
           &quot;index&quot;: 1,
           &quot;description&quot;: &quot;Ordered delivery-attempt observations retain one identity per delivery.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;receipt&quot;,
+          &quot;index&quot;: 6,
+          &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 3,
+          &quot;description&quot;: &quot;Mint evidence binds the delivery to its input proof-set identity and state.&quot;
         }
       ]
     },
@@ -86,12 +96,12 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;receipt&quot;,
-          &quot;index&quot;: 7,
+          &quot;index&quot;: 6,
           &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
         },
         {
           &quot;source&quot;: &quot;ledger&quot;,
-          &quot;index&quot;: 6,
+          &quot;index&quot;: 5,
           &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
         }
       ]
@@ -103,17 +113,22 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;receipt&quot;,
-          &quot;index&quot;: 7,
+          &quot;index&quot;: 6,
           &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
         },
         {
           &quot;source&quot;: &quot;ledger&quot;,
-          &quot;index&quot;: 6,
+          &quot;index&quot;: 5,
           &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
         },
         {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 3,
+          &quot;description&quot;: &quot;Mint evidence binds the delivery to its input proof-set identity and state.&quot;
+        },
+        {
           &quot;source&quot;: &quot;timeline&quot;,
-          &quot;index&quot;: 5,
+          &quot;index&quot;: 4,
           &quot;description&quot;: &quot;Receiver settlement observation binds recovered replacement outputs.&quot;
         }
       ]
@@ -132,7 +147,7 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;receipt&quot;,
-          &quot;index&quot;: 7,
+          &quot;index&quot;: 6,
           &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
         }
       ]
@@ -140,7 +155,7 @@
     {
       &quot;id&quot;: &quot;stable-duplicate-response&quot;,
       &quot;status&quot;: &quot;passed&quot;,
-      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;timeline&quot;,
@@ -149,8 +164,18 @@
         },
         {
           &quot;source&quot;: &quot;receipt&quot;,
-          &quot;index&quot;: 7,
+          &quot;index&quot;: 6,
           &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;ledger&quot;,
+          &quot;index&quot;: 5,
+          &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 3,
+          &quot;description&quot;: &quot;Mint evidence binds the delivery to its input proof-set identity and state.&quot;
         }
       ]
     },
@@ -161,7 +186,7 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;receipt&quot;,
-          &quot;index&quot;: 7,
+          &quot;index&quot;: 6,
           &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
         }
       ]
@@ -180,7 +205,7 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;receipt&quot;,
-          &quot;index&quot;: 7,
+          &quot;index&quot;: 6,
           &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
         }
       ]
@@ -199,7 +224,7 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;proofs&quot;,
-          &quot;index&quot;: 4,
+          &quot;index&quot;: 3,
           &quot;description&quot;: &quot;Mint proof-state endpoint observation records the input state.&quot;
         }
       ]
@@ -211,7 +236,7 @@
       &quot;evidence&quot;: [
         {
           &quot;source&quot;: &quot;ledger&quot;,
-          &quot;index&quot;: 6,
+          &quot;index&quot;: 5,
           &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
         }
       ]
@@ -303,8 +328,8 @@
       &quot;data&quot;: {
         &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
         &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
-        &quot;payloadHash&quot;: &quot;37c6d8f630cab2079a3d2ec993a95c50d512688cf554bf9d38e10c86d9d63d3d&quot;,
-        &quot;proofSetHash&quot;: &quot;8b01ed824df29f44ec15317ced60ee1d0b5997cbabd34f1725583059ba823473&quot;,
+        &quot;payloadHash&quot;: &quot;7fcc3dff378ce592762d294cab58712966acc7d113093a24688743d5367220e1&quot;,
+        &quot;proofSetHash&quot;: &quot;6d6d76ed1a5f1a6fb1751ffc27ec914b5ccc9f4664f418bc9b4f9ac189301088&quot;,
         &quot;transport&quot;: &quot;http&quot;
       }
     },
@@ -318,8 +343,8 @@
       &quot;data&quot;: {
         &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
         &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
-        &quot;payloadHash&quot;: &quot;37c6d8f630cab2079a3d2ec993a95c50d512688cf554bf9d38e10c86d9d63d3d&quot;,
-        &quot;proofSetHash&quot;: &quot;8b01ed824df29f44ec15317ced60ee1d0b5997cbabd34f1725583059ba823473&quot;,
+        &quot;payloadHash&quot;: &quot;7fcc3dff378ce592762d294cab58712966acc7d113093a24688743d5367220e1&quot;,
+        &quot;proofSetHash&quot;: &quot;6d6d76ed1a5f1a6fb1751ffc27ec914b5ccc9f4664f418bc9b4f9ac189301088&quot;,
         &quot;transport&quot;: &quot;http&quot;
       }
     },
@@ -328,11 +353,11 @@
       &quot;at&quot;: 0,
       &quot;phase&quot;: &quot;observation&quot;,
       &quot;actor&quot;: &quot;oracle&quot;,
-      &quot;event&quot;: &quot;redemption_started&quot;,
+      &quot;event&quot;: &quot;mint_proofs_state&quot;,
       &quot;commandIndex&quot;: 1,
       &quot;data&quot;: {
-        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
-        &quot;proofSetHash&quot;: &quot;8b01ed824df29f44ec15317ced60ee1d0b5997cbabd34f1725583059ba823473&quot;
+        &quot;proofSetHash&quot;: &quot;6d6d76ed1a5f1a6fb1751ffc27ec914b5ccc9f4664f418bc9b4f9ac189301088&quot;,
+        &quot;state&quot;: &quot;SPENT&quot;
       }
     },
     {
@@ -340,11 +365,11 @@
       &quot;at&quot;: 0,
       &quot;phase&quot;: &quot;observation&quot;,
       &quot;actor&quot;: &quot;oracle&quot;,
-      &quot;event&quot;: &quot;mint_proofs_state&quot;,
+      &quot;event&quot;: &quot;receiver_settled&quot;,
       &quot;commandIndex&quot;: 1,
       &quot;data&quot;: {
-        &quot;proofSetHash&quot;: &quot;8b01ed824df29f44ec15317ced60ee1d0b5997cbabd34f1725583059ba823473&quot;,
-        &quot;state&quot;: &quot;SPENT&quot;
+        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
+        &quot;replacementPlanHash&quot;: &quot;00cb0098964ea7743f31707e409c9bc212400f2d926315fcad9a33d9f34a11bc&quot;
       }
     },
     {
@@ -352,22 +377,10 @@
       &quot;at&quot;: 0,
       &quot;phase&quot;: &quot;observation&quot;,
       &quot;actor&quot;: &quot;oracle&quot;,
-      &quot;event&quot;: &quot;receiver_settled&quot;,
-      &quot;commandIndex&quot;: 1,
-      &quot;data&quot;: {
-        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
-        &quot;replacementPlanHash&quot;: &quot;bcaef1c743bcaf2cb7e6c56e1fdcd318d0775a4c54f219e7c4dcd7a8e2c9676a&quot;
-      }
-    },
-    {
-      &quot;sequence&quot;: 9,
-      &quot;at&quot;: 0,
-      &quot;phase&quot;: &quot;observation&quot;,
-      &quot;actor&quot;: &quot;oracle&quot;,
       &quot;event&quot;: &quot;merchant_credited&quot;,
       &quot;commandIndex&quot;: 1,
       &quot;data&quot;: {
-        &quot;creditId&quot;: &quot;b8d2330644e867f0025bf56d780078876ba5bf9df5794ea8366754e1e9d04111&quot;,
+        &quot;creditId&quot;: &quot;31c54309bc45e18c27080d8ffdfcf369798d5bcc6a7d55545c3d0e390bc15334&quot;,
         &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
         &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
         &quot;amount&quot;: 8,
@@ -375,7 +388,7 @@
       }
     },
     {
-      &quot;sequence&quot;: 10,
+      &quot;sequence&quot;: 9,
       &quot;at&quot;: 0,
       &quot;phase&quot;: &quot;observation&quot;,
       &quot;actor&quot;: &quot;oracle&quot;,
@@ -384,7 +397,7 @@
       &quot;data&quot;: {
         &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
         &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
-        &quot;payloadHash&quot;: &quot;37c6d8f630cab2079a3d2ec993a95c50d512688cf554bf9d38e10c86d9d63d3d&quot;,
+        &quot;payloadHash&quot;: &quot;7fcc3dff378ce592762d294cab58712966acc7d113093a24688743d5367220e1&quot;,
         &quot;status&quot;: &quot;settled&quot;,
         &quot;detailCode&quot;: &quot;settled&quot;,
         &quot;version&quot;: 3,
@@ -393,7 +406,7 @@
       }
     },
     {
-      &quot;sequence&quot;: 11,
+      &quot;sequence&quot;: 10,
       &quot;at&quot;: 0,
       &quot;phase&quot;: &quot;completed&quot;,
       &quot;actor&quot;: &quot;reference&quot;,
@@ -402,7 +415,7 @@
       &quot;outcome&quot;: &quot;passed&quot;
     },
     {
-      &quot;sequence&quot;: 12,
+      &quot;sequence&quot;: 11,
       &quot;at&quot;: 0,
       &quot;phase&quot;: &quot;invoked&quot;,
       &quot;actor&quot;: &quot;runner&quot;,
@@ -410,7 +423,7 @@
       &quot;commandIndex&quot;: 2
     },
     {
-      &quot;sequence&quot;: 13,
+      &quot;sequence&quot;: 12,
       &quot;at&quot;: 0,
       &quot;phase&quot;: &quot;completed&quot;,
       &quot;actor&quot;: &quot;runner&quot;,
@@ -452,11 +465,11 @@
     &quot;receiver&quot;: {
       &quot;implementation&quot;: {
         &quot;id&quot;: &quot;reference-receiver&quot;,
-        &quot;version&quot;: &quot;0.0.0&quot;,
+        &quot;version&quot;: &quot;0.1.0&quot;,
         &quot;language&quot;: &quot;typescript&quot;,
         &quot;runtime&quot;: &quot;node-24&quot;,
-        &quot;sourceDigest&quot;: &quot;sha256:5a3144656cbedabe6dde36322f8e4668f1f52784414db6500eec277eb3199457&quot;,
-        &quot;buildDigest&quot;: &quot;sha256:5d58ea0c51a9dcd94b3f9ac5ac2cbfc79e668b11d60e5b54f0f602f49c016eda&quot;
+        &quot;sourceDigest&quot;: &quot;sha256:bcb2734a98e43548e4bb0ac71f9897af134274ef6338386b6d4ab336aac0fb31&quot;,
+        &quot;buildDigest&quot;: &quot;sha256:ff5befa0b846dbe733271ad2d5171f494da2c347e1c5a5748940474d2904e90f&quot;
       },
       &quot;role&quot;: {
         &quot;transports&quot;: [
@@ -479,13 +492,13 @@
     }
   },
   &quot;componentVersions&quot;: {
-    &quot;adapter-contract&quot;: &quot;0.0.0&quot;,
-    &quot;delivery-core&quot;: &quot;0.0.0&quot;,
-    &quot;lab-cli&quot;: &quot;0.0.0&quot;,
-    &quot;oracle&quot;: &quot;0.0.0&quot;,
-    &quot;receiver/reference-receiver&quot;: &quot;0.0.0&quot;,
-    &quot;report&quot;: &quot;0.0.0&quot;,
-    &quot;scenario-runner&quot;: &quot;0.0.0&quot;,
+    &quot;adapter-contract&quot;: &quot;0.1.0&quot;,
+    &quot;delivery-core&quot;: &quot;0.1.0&quot;,
+    &quot;lab-cli&quot;: &quot;0.1.0&quot;,
+    &quot;oracle&quot;: &quot;0.1.0&quot;,
+    &quot;receiver/reference-receiver&quot;: &quot;0.1.0&quot;,
+    &quot;report&quot;: &quot;0.1.0&quot;,
+    &quot;scenario-runner&quot;: &quot;0.1.0&quot;,
     &quot;sender/cashu-ts&quot;: &quot;4.7.2&quot;
   },
   &quot;imageDigests&quot;: {}
