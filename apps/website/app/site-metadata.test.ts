@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import manifest from './manifest';
 import { resolveSiteUrl, serializeJsonLd } from './site-metadata';
+
+const openGraphSource = readFileSync(resolve(process.cwd(), 'app/opengraph-image.tsx'), 'utf8');
 
 describe('manifest', () => {
   it('uses the dark application shell colors', () => {
@@ -8,6 +12,11 @@ describe('manifest', () => {
       background_color: '#09070d',
       theme_color: '#2b0c4a',
     });
+  });
+
+  it('uses the dark application shell in the OpenGraph route', () => {
+    expect(openGraphSource).toContain("background: '#09070d'");
+    expect(openGraphSource).toContain("color: '#f6ebd6'");
   });
 });
 

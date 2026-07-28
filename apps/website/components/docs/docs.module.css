@@ -1,4 +1,5 @@
 .docsShell {
+  color: var(--sand-100);
   display: grid;
   gap: clamp(1.5rem, 3vw, 3.5rem);
   grid-template-columns: minmax(11rem, 15rem) minmax(0, 48rem) minmax(10rem, 13rem);
@@ -28,7 +29,7 @@
 .navigationGroup h2,
 .desktopToc > p,
 .mobileToc > p {
-  color: var(--purple-700);
+  color: var(--purple-electric);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -48,7 +49,7 @@
 .desktopToc a,
 .mobileToc a {
   align-items: center;
-  color: var(--purple-700);
+  color: var(--muted-text);
   display: flex;
   font-size: 0.875rem;
   line-height: 1.35;
@@ -64,14 +65,14 @@
 .desktopToc a:focus-visible,
 .mobileToc a:hover,
 .mobileToc a:focus-visible {
-  color: var(--purple-950);
+  color: var(--sand-100);
   text-decoration: underline;
   text-underline-offset: 0.2rem;
 }
 
 .navigationGroup a[aria-current='page'] {
   border-left: 3px solid var(--purple-500);
-  color: var(--purple-950);
+  color: var(--sand-100);
   font-weight: 700;
   padding-left: 0.65rem;
 }
@@ -87,7 +88,7 @@
 }
 
 .eyebrow {
-  color: var(--purple-700);
+  color: var(--purple-electric);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -101,7 +102,7 @@
 }
 
 .description {
-  color: var(--purple-700);
+  color: var(--muted-text);
   font-size: 1.125rem;
   line-height: 1.6;
   margin: 0;
@@ -120,7 +121,7 @@
   align-items: center;
   border: 1px solid var(--purple-700);
   border-radius: var(--radius-sm);
-  color: var(--purple-950);
+  color: var(--sand-300);
   display: inline-flex;
   font-size: 0.875rem;
   min-height: 44px;
@@ -144,9 +145,15 @@
 .mobileToc {
   background: var(--sand-300);
   border-left: 4px solid var(--purple-500);
+  color: var(--purple-950);
   display: none;
   margin-bottom: 2rem;
   padding: 1rem 1.25rem;
+}
+
+.mobileToc > p,
+.mobileToc a {
+  color: var(--purple-700);
 }
 
 .markdown {
@@ -212,7 +219,7 @@
 }
 
 .markdown a {
-  color: var(--purple-700);
+  color: var(--purple-electric);
   font-weight: 600;
   text-decoration-thickness: 0.1em;
   text-underline-offset: 0.2em;
@@ -220,7 +227,7 @@
 
 .markdown blockquote {
   border-left: 4px solid var(--purple-500);
-  color: var(--purple-700);
+  color: var(--muted-text);
   margin: 1.5rem 0;
   padding: 0.25rem 0 0.25rem 1.25rem;
 }
@@ -241,6 +248,7 @@
 
 .markdown th {
   background: var(--sand-300);
+  color: var(--purple-950);
 }
 
 .markdown :not(pre) > code {
@@ -307,7 +315,7 @@
 }
 
 .pagination a span {
-  color: var(--purple-700);
+  color: var(--purple-electric);
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.1em;

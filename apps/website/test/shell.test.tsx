@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import NotFound from '../app/not-found';
 import { SiteHeader } from '../components/site-header';
 
 const globalsCss = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8');
 const homeCss = readFileSync(resolve(process.cwd(), 'components/home/home.module.css'), 'utf8');
+const docsCss = readFileSync(resolve(process.cwd(), 'components/docs/docs.module.css'), 'utf8');
 const contentPagesCss = readFileSync(resolve(process.cwd(), 'app/content-pages.module.css'), 'utf8');
 
 describe('SiteHeader', () => {
@@ -31,18 +31,18 @@ describe('SiteHeader', () => {
   });
 });
 
-describe('checkpoint shell compatibility', () => {
-  it('keeps legacy routes readable while dark route states opt into Ink', () => {
+describe('dark shell contract', () => {
+  it('gives main and every current route root a readable dark baseline', () => {
     const mainRule = globalsCss.match(/^main\s*\{([\s\S]*?)^\}/m)?.[1];
+    const homeRule = homeCss.match(/^\.home\s*\{([\s\S]*?)^\}/m)?.[1];
+    const docsRule = docsCss.match(/^\.docsShell\s*\{([\s\S]*?)^\}/m)?.[1];
+    const contentPageRule = contentPagesCss.match(/^\.contentPage\s*\{([\s\S]*?)^\}/m)?.[1];
 
-    expect(mainRule).toContain('background: var(--sand-100);');
-    expect(mainRule).toContain('color: var(--purple-950);');
-    expect(globalsCss).toContain("main:has([data-shell-surface='dark'])");
-
-    render(<NotFound />);
-    expect(
-      screen.getByRole('heading', { name: 'Page not found.' }).closest('section'),
-    ).toHaveAttribute('data-shell-surface', 'dark');
+    expect(mainRule).toContain('background: var(--ink);');
+    expect(mainRule).toContain('color: var(--sand-100);');
+    expect(homeRule).toContain('color: var(--sand-100);');
+    expect(docsRule).toContain('color: var(--sand-100);');
+    expect(contentPageRule).toContain('color: var(--sand-100);');
   });
 
   it('does not clip page-level focus outlines behind legacy bleed rules', () => {

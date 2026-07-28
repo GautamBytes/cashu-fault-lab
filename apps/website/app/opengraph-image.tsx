@@ -20,8 +20,8 @@ export default function OpenGraphImage() {
   return new ImageResponse(
     <div
       style={{
-        background: '#f6ebd6',
-        color: '#2b0c4a',
+        background: '#09070d',
+        color: '#f6ebd6',
         display: 'flex',
         flexDirection: 'column',
         fontFamily: 'monospace',
@@ -31,7 +31,7 @@ export default function OpenGraphImage() {
         width: '100%',
       }}
     >
-      <div style={{ color: '#5b2099', display: 'flex', fontSize: 24, letterSpacing: 3 }}>
+      <div style={{ color: '#a855f7', display: 'flex', fontSize: 24, letterSpacing: 3 }}>
         CASHU FAULT LAB / EXPERIMENTAL DEVELOPER PREVIEW
       </div>
       <div

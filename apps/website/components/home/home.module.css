@@ -1,3 +1,7 @@
+.home {
+  color: var(--sand-100);
+}
+
 .home a {
   color: inherit;
 }
@@ -38,7 +42,7 @@
 }
 
 .eyebrow {
-  color: var(--purple-700);
+  color: var(--purple-electric);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.74rem;
   font-weight: 700;
@@ -102,7 +106,7 @@
 }
 
 .secondaryAction:hover {
-  background: var(--sand-300);
+  background: var(--elevated-surface);
 }
 
 .commandBlock {
@@ -381,7 +385,7 @@
 
 .reportLabel,
 .reportFacts dt {
-  color: var(--purple-700);
+  color: var(--purple-electric);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.65rem;
   letter-spacing: 0.1em;
@@ -505,7 +509,7 @@
 }
 
 .reportLink:hover {
-  background: var(--sand-300);
+  background: var(--elevated-surface);
 }
 
 .invariantEvidence {
@@ -521,7 +525,7 @@
 }
 
 .invariantEvidence > p {
-  color: var(--purple-700);
+  color: var(--muted-text);
   font-size: 0.82rem;
   line-height: 1.5;
   margin: 0.5rem 0 1rem;
@@ -550,7 +554,7 @@
 
 .invariantItem code {
   background: transparent;
-  color: var(--purple-950);
+  color: var(--sand-300);
   font-size: 0.66rem;
   font-weight: 700;
   overflow-wrap: anywhere;
@@ -579,7 +583,7 @@
 
 .invariantConfidence,
 .invariantReason {
-  color: var(--purple-700);
+  color: var(--muted-text);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.6rem;
   grid-column: 1 / -1;
@@ -639,9 +643,8 @@
   margin: 2.2rem 0 0.8rem;
 }
 
-.faultGrid p,
-.profileFlow p {
-  color: var(--purple-700);
+.faultGrid p {
+  color: var(--muted-text);
   font-size: 0.88rem;
   line-height: 1.55;
   margin: 0;
@@ -649,6 +652,14 @@
 
 .profileSection {
   background: var(--sand-300);
+  color: var(--purple-950);
+}
+
+.profileFlow p {
+  color: var(--purple-700);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0;
 }
 
 .profileFlow {
@@ -790,7 +801,13 @@
 
 .boundarySection {
   background: var(--sand-300);
+  color: var(--purple-950);
   grid-template-columns: minmax(14rem, 0.5fr) minmax(0, 1.5fr);
+}
+
+.profileSection .eyebrow,
+.boundarySection .eyebrow {
+  color: var(--purple-700);
 }
 
 .boundaryMark {
