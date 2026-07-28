@@ -36,11 +36,17 @@ body {
 }
 
 main {
-  background: var(--ink);
+  background: var(--sand-100);
+  color: var(--purple-950);
   margin: 0 auto;
   max-width: var(--shell-width);
   min-height: calc(100vh - 8rem);
   padding: 4rem 1.25rem;
+}
+
+main:has([data-shell-surface='dark']) {
+  background: var(--ink);
+  color: var(--sand-100);
 }
 
 section {

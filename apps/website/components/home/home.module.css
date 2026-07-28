@@ -1,8 +1,3 @@
-.home {
-  margin: -4rem -1.25rem;
-  overflow: hidden;
-}
-
 .home a {
   color: inherit;
 }
@@ -1037,10 +1032,6 @@
 }
 
 @media (max-width: 520px) {
-  .home {
-    margin-top: -4rem;
-  }
-
   .hero,
   .section {
     padding-block: 3.5rem;

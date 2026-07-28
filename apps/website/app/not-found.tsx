@@ -10,7 +10,11 @@ export const metadata: Metadata = {
 
 export default function NotFound() {
   return (
-    <section aria-labelledby="not-found-title" className={styles.notFound}>
+    <section
+      aria-labelledby="not-found-title"
+      className={styles.notFound}
+      data-shell-surface="dark"
+    >
       <div>
         <p className={styles.eyebrow}>Route fault / no matching artifact</p>
         <h1 id="not-found-title">Page not found.</h1>
