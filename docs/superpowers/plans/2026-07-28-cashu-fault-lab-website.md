@@ -20,7 +20,7 @@
 - Desktop, 768px tablet, and 390px mobile layouts must have no page-level horizontal overflow.
 - Animation must stop under `prefers-reduced-motion: reduce`.
 - Every code implementation step follows red-green-refactor and ends with the listed focused tests.
-- Execute with `/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm`.
+- Execute with `/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm`.
 
 ---
 
@@ -214,8 +214,8 @@ describe("SiteHeader", () => {
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm install
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm install
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test
 ```
 
 Expected: dependency installation updates `pnpm-lock.yaml`; Vitest fails because `components/site-header.tsx` does not exist.
@@ -276,8 +276,8 @@ Extend `turbo.json` build outputs to include `".next/**"` and `"!.next/cache/**"
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website typecheck
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website typecheck
 ```
 
 Expected: the shell test passes and TypeScript reports no errors.
@@ -380,7 +380,7 @@ it("rejects paths outside the repository", () => {
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test -- lib/content.test.ts
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test -- lib/content.test.ts
 ```
 
 Expected: failure because registry, repository, and Markdown functions do not exist.
@@ -406,8 +406,8 @@ Expected: failure because registry, repository, and Markdown functions do not ex
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test -- lib/content.test.ts
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website typecheck
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test -- lib/content.test.ts
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website typecheck
 ```
 
 Expected: all content tests pass and TypeScript reports no errors.
@@ -502,7 +502,7 @@ Import `userEvent` from the already pinned `@testing-library/user-event` 14.6.1 
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test -- components/search/search-dialog.test.tsx
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test -- components/search/search-dialog.test.tsx
 ```
 
 Expected: failure because `SearchDialog` does not exist.
@@ -594,9 +594,9 @@ Load `getSearchRecords()` in `app/layout.tsx` and wrap route children with `<Por
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website typecheck
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website build
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website typecheck
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website build
 ```
 
 Expected: tests and type checking pass; Next lists all eight `/docs/<slug>` routes as static output.
@@ -670,7 +670,7 @@ it("counts every invariant state", async () => {
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test -- lib/demo.test.ts
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test -- lib/demo.test.ts
 ```
 
 Expected: failure because `getDemoSummary` does not exist.
@@ -725,9 +725,9 @@ CSS animation must reuse one `deliveryTrace` keyframe sequence, pause at converg
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website typecheck
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website build
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website typecheck
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website build
 ```
 
 Expected: demo tests pass and the home route builds statically.
@@ -825,7 +825,7 @@ it("reports the strict gate without turning requirements into passes", async () 
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test -- lib/scenarios.test.ts lib/release-status.test.ts
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test -- lib/scenarios.test.ts lib/release-status.test.ts
 ```
 
 Expected: failure because both loaders are missing.
@@ -872,8 +872,8 @@ Update the home page to consume `getReleaseStatus()` for its release section so 
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website build
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website build
 ```
 
 Expected: 32 scenarios appear in tests and all three product pages build statically.
@@ -921,7 +921,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm build && /Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm start --port 4317",
+      "/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm build && /Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm start --port 4317",
     port: 4317,
     reuseExistingServer: false,
     timeout: 180_000,
@@ -950,7 +950,7 @@ Write tests that:
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test:e2e
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test:e2e
 ```
 
 Expected: failures for missing metadata routes, reduced-motion signal, and any unresolved accessibility/responsive behavior.
@@ -982,10 +982,10 @@ Do not suppress axe rules. Fix every serious or critical finding at the source.
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website typecheck
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website build
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm --filter @cashu-fault-lab/website test:e2e
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website typecheck
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website build
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm --filter @cashu-fault-lab/website test:e2e
 ```
 
 Expected: unit, type, build, desktop, mobile, accessibility, keyboard, and overflow checks pass; four screenshots are written.
@@ -1058,12 +1058,12 @@ State that the site reads `README.md`, `docs/`, `spec/`, `scenarios/`, and the r
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm install --frozen-lockfile
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm format:check
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm typecheck
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm test
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm build
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm website:test:e2e
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm install --frozen-lockfile
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm format:check
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm typecheck
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm test
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm build
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm website:test:e2e
 ```
 
 Expected: lockfile install, formatting, all unit tests, all package types, all builds, and website browser tests pass.
@@ -1073,7 +1073,7 @@ Expected: lockfile install, formatting, all unit tests, all package types, all b
 Start:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm website:dev
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm website:dev
 ```
 
 Open `http://127.0.0.1:3000` with the connected browser. Capture and inspect home, docs, scenarios, architecture, and release status at 1440×900 and 390×844. Correct clipped text, weak hierarchy, accidental third hues, spacing defects, and unclear focus states. Re-run the website test, type, build, and E2E gates after any correction.
@@ -1100,9 +1100,9 @@ Expected: JSON containing `previewUrl` and `claimUrl`. Do not fetch the deployed
 Run:
 
 ```bash
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm format:check
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm website:test
-/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/pnpm website:build
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm format:check
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm website:test
+/Users/gautammanch/.nvm/versions/node/v24.14.1/bin/corepack pnpm website:build
 git diff --check
 git status --short
 ```
