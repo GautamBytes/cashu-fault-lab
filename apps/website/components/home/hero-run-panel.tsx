@@ -6,16 +6,8 @@ interface HeroRunPanelProps {
   summary: DemoSummary;
 }
 
-const traceStages = [
-  ['Prepared', '◆'],
-  ['Sent', '→'],
-  ['Response lost', '×'],
-  ['Exact retry', '↻'],
-  ['Recovered', '◇'],
-] as const;
-
 export function HeroRunPanel({ summary }: HeroRunPanelProps) {
-  const converged = summary.status === 'passed';
+  const passed = summary.status === 'passed';
 
   return (
     <aside aria-label="Deterministic demo run" className={styles.heroRunPanel}>
@@ -29,27 +21,11 @@ export function HeroRunPanel({ summary }: HeroRunPanelProps) {
           width={48}
         />
         <div>
-          <span>Live deterministic run</span>
-          <strong>Reviewed artifact / v0.1.0</strong>
+          <span>Reviewed deterministic artifact</span>
+          <strong>Checked in</strong>
         </div>
-        <span className={styles.runPanelLive}>
-          <span aria-hidden="true" />
-          Live
-        </span>
+        <span className={styles.runPanelArtifact}>Artifact</span>
       </header>
-
-      <ol aria-label="Deterministic run trace preview" className={styles.runPanelTrace}>
-        {traceStages.map(([label, symbol]) => (
-          <li key={label}>
-            <span aria-hidden="true">{symbol}</span>
-            <small>{label}</small>
-          </li>
-        ))}
-        <li className={styles.runPanelTraceFinal}>
-          <span aria-hidden="true">{converged ? '✓' : '!'}</span>
-          <small>{converged ? 'Converged' : 'Not converged'}</small>
-        </li>
-      </ol>
 
       <dl className={styles.runPanelFacts}>
         <div className={styles.runPanelScenario}>
@@ -70,9 +46,9 @@ export function HeroRunPanel({ summary }: HeroRunPanelProps) {
         </div>
         <div>
           <dt>Status</dt>
-          <dd className={converged ? styles.runPanelConverged : styles.runPanelBlocked}>
-            <span aria-hidden="true">{converged ? '✓' : '!'}</span>
-            {converged ? 'Converged' : 'Not converged'}
+          <dd className={passed ? styles.runPanelPassed : styles.runPanelReview}>
+            <span aria-hidden="true">{passed ? '✓' : '!'}</span>
+            {summary.status}
           </dd>
         </div>
       </dl>

@@ -64,13 +64,39 @@ test('home is accessible, has one visible title, and fits the viewport', async (
   await page.goto('/');
 
   if (testInfo.project.name === 'desktop-chromium') {
-    const hero = page.locator('section').first();
+    const viewportHeight = page.viewportSize()?.height ?? 900;
+    const hero = page.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
+    const productHeading = hero.getByRole('heading', {
+      level: 1,
+      name: 'Make Cashu delivery fail safely.',
+    });
+    const primaryAction = hero.getByRole('link', { name: 'Run the deterministic demo' });
+    const githubAction = hero.getByRole('link', { name: /View on GitHub/ });
+    const commandBlock = hero.getByLabel('Demo command');
+    const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
+
+    for (const element of [productHeading, primaryAction, githubAction, commandBlock, runPanel]) {
+      await expect(element).toBeVisible();
+      const elementBox = await element.boundingBox();
+      expect(elementBox).not.toBeNull();
+      if (elementBox) {
+        expect(elementBox.y).toBeGreaterThanOrEqual(0);
+        expect(elementBox.y + elementBox.height).toBeLessThanOrEqual(viewportHeight);
+      }
+    }
+
     const heroBox = await hero.boundingBox();
+    const trace = page.getByRole('region', {
+      name: 'A lost response is not a lost result.',
+    });
+    const traceSectionBox = await trace.boundingBox();
     const traceHeading = page.getByRole('heading', { name: /lost response/i });
     const traceBox = await traceHeading.boundingBox();
 
+    await expect(traceHeading).toBeVisible();
     expect(heroBox?.height).toBeLessThanOrEqual(820);
-    expect(traceBox?.y).toBeLessThan(900);
+    expect(traceSectionBox?.y).toBeLessThan(viewportHeight);
+    expect(traceBox?.y).toBeLessThan(viewportHeight);
   }
 
   await expect(page.locator('h1:visible')).toHaveCount(1);

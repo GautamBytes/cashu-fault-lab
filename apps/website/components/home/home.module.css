@@ -231,7 +231,6 @@
 
 .runPanelHeader > div span,
 .runPanelFacts dt,
-.heroTracePreview,
 .scenarioFamilySignal,
 .scenarioFamilyCount {
   color: var(--muted-text);
@@ -247,87 +246,21 @@
   overflow-wrap: anywhere;
 }
 
-.runPanelLive {
+.runPanelArtifact {
   align-items: center;
   border: 1px solid rgb(168 85 247 / 42%);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   color: var(--sand-300);
   display: inline-flex;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.6rem;
   font-weight: 700;
-  gap: 0.4rem;
   min-height: 1.8rem;
   padding: 0.3rem 0.55rem;
   text-transform: uppercase;
 }
 
-.runPanelLive > span {
-  background: var(--purple-electric);
-  border-radius: 50%;
-  box-shadow: 0 0 0 0.2rem rgb(168 85 247 / 14%);
-  height: 0.42rem;
-  width: 0.42rem;
-}
-
-.runPanelTrace {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  list-style: none;
-  margin: 0;
-  overflow: hidden;
-  padding: 1rem 0.8rem 0.9rem;
-  position: relative;
-}
-
-.runPanelTrace::before {
-  background: linear-gradient(90deg, var(--purple-700), var(--purple-electric), var(--sand-500));
-  content: '';
-  height: 1px;
-  inset: 1.76rem 8% auto;
-  position: absolute;
-}
-
-.runPanelTrace li {
-  align-items: center;
-  display: grid;
-  gap: 0.42rem;
-  justify-items: center;
-  min-width: 0;
-  position: relative;
-}
-
-.runPanelTrace li > span {
-  background: var(--control-surface);
-  border: 1px solid var(--purple-700);
-  display: grid;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.66rem;
-  height: 1.6rem;
-  place-items: center;
-  width: 1.6rem;
-}
-
-.runPanelTrace small {
-  color: var(--muted-text);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.54rem;
-  line-height: 1.25;
-  min-height: 1.4rem;
-  text-align: center;
-}
-
-.runPanelTrace .runPanelTraceFinal > span {
-  border-color: var(--sand-500);
-  color: var(--sand-300);
-}
-
-.runPanelTrace .runPanelTraceFinal small {
-  color: var(--sand-300);
-}
-
 .runPanelFacts {
-  border-top: 1px solid var(--hairline);
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0;
@@ -366,75 +299,22 @@
   overflow-wrap: anywhere;
 }
 
-.runPanelConverged,
-.runPanelBlocked {
+.runPanelPassed,
+.runPanelReview {
   align-items: center;
   display: inline-flex;
   font-size: 0.68rem;
   gap: 0.35rem;
+  text-transform: capitalize;
   white-space: nowrap;
 }
 
-.runPanelConverged {
+.runPanelPassed {
   color: var(--sand-300);
 }
 
-.runPanelBlocked {
+.runPanelReview {
   color: var(--purple-electric);
-}
-
-.heroTracePreview {
-  align-items: center;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(9rem, auto) minmax(12rem, 1fr) auto;
-  margin-top: clamp(1.6rem, 4vh, 3rem);
-  width: 100%;
-}
-
-.heroTracePreview > strong {
-  color: var(--sand-300);
-  font-size: inherit;
-}
-
-.heroTraceRail {
-  align-items: center;
-  background: linear-gradient(90deg, var(--purple-700), var(--purple-electric), var(--sand-500));
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  height: 2px;
-  position: relative;
-}
-
-.heroTraceRail::after {
-  animation: heroTraceSignal 8s ease-in-out infinite;
-  background: var(--sand-100);
-  box-shadow: 0 0 0.8rem rgb(168 85 247 / 68%);
-  content: '';
-  height: 0.5rem;
-  inset: 50% auto auto 0;
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: 0.5rem;
-}
-
-.heroTraceRail i {
-  background: var(--ink);
-  border: 1px solid var(--purple-500);
-  height: 0.65rem;
-  justify-self: center;
-  transform: rotate(45deg);
-  width: 0.65rem;
-}
-
-.heroTraceRail .heroTraceFault {
-  border-style: dashed;
-  border-width: 2px;
-}
-
-.heroTraceRail .heroTraceConverged {
-  background: var(--sand-500);
-  border-color: var(--sand-500);
 }
 
 .section {
@@ -989,12 +869,12 @@
 }
 
 .profileSection {
-  background: var(--sand-300);
-  color: var(--purple-950);
+  background: var(--control-surface);
+  color: var(--sand-100);
 }
 
 .profileFlow p {
-  color: var(--purple-700);
+  color: var(--muted-text);
   font-size: 0.88rem;
   line-height: 1.55;
   margin: 0;
@@ -1138,14 +1018,14 @@
 }
 
 .boundarySection {
-  background: var(--sand-300);
-  color: var(--purple-950);
+  background: var(--elevated-surface);
+  color: var(--sand-100);
   grid-template-columns: minmax(14rem, 0.5fr) minmax(0, 1.5fr);
 }
 
 .profileSection .eyebrow,
 .boundarySection .eyebrow {
-  color: var(--purple-700);
+  color: var(--purple-electric);
 }
 
 .boundaryMark {
@@ -1179,60 +1059,18 @@
 }
 
 .contributeSection {
-  background: var(--purple-500);
+  background: var(--control-surface);
   color: var(--sand-100);
 }
 
 .contributeSection .eyebrow {
-  color: var(--sand-100);
+  color: var(--purple-electric);
 }
 
 .contributeActions {
   align-self: end;
   justify-content: flex-end;
   margin-top: 0;
-}
-
-.contributeSection .primaryAction {
-  background: var(--sand-100);
-  border-color: var(--sand-100);
-  color: var(--purple-950) !important;
-}
-
-.contributeSection .primaryAction:hover {
-  background: var(--sand-300);
-}
-
-.contributeSection .secondaryAction {
-  border-color: var(--sand-100);
-}
-
-.contributeSection .secondaryAction:hover {
-  background: var(--purple-700);
-}
-
-@keyframes heroTraceSignal {
-  0%,
-  8% {
-    inset-inline-start: 0%;
-  }
-
-  30% {
-    inset-inline-start: 40%;
-  }
-
-  42% {
-    inset-inline-start: 40%;
-  }
-
-  64% {
-    inset-inline-start: 60%;
-  }
-
-  82%,
-  100% {
-    inset-inline-start: 100%;
-  }
 }
 
 @keyframes deliveryTrace {
@@ -1331,15 +1169,6 @@
   .heroRunPanel {
     justify-self: stretch;
     max-width: none;
-  }
-
-  .heroTracePreview {
-    grid-template-columns: 1fr auto;
-  }
-
-  .heroTraceRail {
-    grid-column: 1 / -1;
-    grid-row: 2;
   }
 
   .commandBlock {
@@ -1483,14 +1312,6 @@
     font-size: clamp(3.2rem, 17vw, 5rem);
   }
 
-  .runPanelTrace {
-    padding-inline: 0.45rem;
-  }
-
-  .runPanelTrace small {
-    font-size: 0.48rem;
-  }
-
   .heroActions,
   .contributeActions {
     align-items: stretch;
@@ -1558,11 +1379,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .heroTraceRail::after {
-    animation: none;
-    inset-inline-start: 100%;
-  }
-
   .timelineFrame {
     padding-left: 0.6rem;
     padding-top: 0;

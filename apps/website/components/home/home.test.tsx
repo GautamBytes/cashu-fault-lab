@@ -4,10 +4,19 @@ import { render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import HomePage from '../../app/page';
 import { getDemoSummary } from '../../lib/demo';
+import { getScenarioGroups } from '../../lib/scenarios';
 import { EvidenceReport } from './evidence-report';
 
 function homePath(fileName: string): string {
   return resolve(process.cwd(), 'components/home', fileName);
+}
+
+function cssRules(source: string, className: string): string[] {
+  const rules = [...source.matchAll(new RegExp(`\\.${className}\\s*{([^}]*)}`, 'g'))].map(
+    (match) => match[1] ?? '',
+  );
+  if (rules.length === 0) throw new Error(`Expected .${className} CSS rule`);
+  return rules;
 }
 
 function stubMotionPreference() {
@@ -28,9 +37,15 @@ afterEach(() => {
 describe('home components', () => {
   it('keeps GitHub in the hero and promotes scenario discovery', async () => {
     stubMotionPreference();
+    const groups = await getScenarioGroups();
+    const expectedScenarioCount = groups.reduce(
+      (total, group) => total + group.scenarios.length,
+      0,
+    );
     render(await HomePage());
 
-    expect(screen.getByRole('link', { name: /View on GitHub/ })).toHaveAttribute(
+    const hero = screen.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
+    expect(within(hero).getByRole('link', { name: /View on GitHub/ })).toHaveAttribute(
       'href',
       'https://github.com/GautamBytes/cashu-fault-lab',
     );
@@ -42,23 +57,46 @@ describe('home components', () => {
 
     const explorer = screen.getByRole('region', { name: 'Explore fault scenarios' });
     expect(within(explorer).getAllByRole('listitem')).toHaveLength(4);
-    expect(within(explorer).getByText('32')).toBeVisible();
+    expect(within(explorer).getByText(String(expectedScenarioCount))).toBeVisible();
   });
 
-  it('renders canonical demo data as semantic hero telemetry', async () => {
+  it('renders canonical artifact data without a second staged trace', async () => {
     stubMotionPreference();
     const summary = await getDemoSummary();
     render(await HomePage());
 
+    const hero = screen.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
     const runPanel = screen.getByRole('complementary', { name: 'Deterministic demo run' });
+    const panelHeader = runPanel.querySelector('header');
     const facts = runPanel.querySelector('dl');
+
+    if (!panelHeader) throw new Error('Expected artifact panel header');
+    expect(runPanel).toHaveTextContent('Reviewed deterministic artifact');
+    expect(runPanel).toHaveTextContent('Checked in');
+    expect(runPanel).toHaveTextContent('Artifact');
+    expect(runPanel).not.toHaveTextContent(/\blive\b/i);
+    expect(panelHeader).not.toHaveTextContent('v0.1.0');
+    expect(within(runPanel).queryByRole('list')).not.toBeInTheDocument();
+    expect(within(hero).queryByText(/^TRACE \//)).not.toBeInTheDocument();
 
     if (!facts) throw new Error('Expected semantic demo facts');
     expect(within(facts).getByText(summary.scenarioId)).toBeVisible();
     expect(within(facts).getByText(summary.seed)).toBeVisible();
     expect(within(facts).getByText(String(summary.commandCount))).toBeVisible();
     expect(within(facts).getByText(String(summary.invariantCount))).toBeVisible();
-    expect(within(facts).getByText('Converged')).toBeVisible();
+    expect(within(facts).getByText(new RegExp(summary.status, 'i'))).toBeVisible();
+  });
+
+  it('keeps full-width home bands on the dark surface baseline', async () => {
+    const css = await readFile(homePath('home.module.css'), 'utf8');
+
+    for (const className of ['profileSection', 'boundarySection', 'contributeSection']) {
+      expect(
+        cssRules(css, className).some((rule) =>
+          /background:\s*var\(--(?:ink|control-surface|elevated-surface)\)/.test(rule),
+        ),
+      ).toBe(true);
+    }
   });
 
   it('uses explicit CSS module classes for every rendered state', async () => {

@@ -98,19 +98,6 @@ export default async function HomePage() {
           </div>
           <HeroRunPanel summary={summary} />
         </div>
-
-        <div aria-hidden="true" className={styles.heroTracePreview}>
-          <span>TRACE / {summary.scenarioId}</span>
-          <div className={styles.heroTraceRail}>
-            <i />
-            <i />
-            <i className={styles.heroTraceFault} />
-            <i />
-            <i />
-            <i className={styles.heroTraceConverged} />
-          </div>
-          <strong>EXACT DELIVERY / CONVERGED</strong>
-        </div>
       </section>
 
       <FaultTimeline />
