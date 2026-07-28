@@ -33,6 +33,7 @@ export {
   type MatrixExecutionResult,
   type MatrixExecutor,
   type MatrixParticipant,
+  type MatrixScenarioEvidence,
 } from './matrix.js';
 export {
   evaluateReleasePolicy,

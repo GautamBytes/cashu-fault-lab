@@ -143,6 +143,7 @@ class FakeRuntime implements LabRuntime {
         receiverCapabilities: matrixCapability,
         invariants: [gateInvariant],
         mints: [{ id: 'test-mint', implementation: 'test-mint' }],
+        scenarios: [],
       },
     ];
   }

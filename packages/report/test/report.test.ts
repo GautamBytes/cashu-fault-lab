@@ -331,6 +331,7 @@ const matrixResults: readonly MatrixCaseResult[] = [
     },
     invariants: [],
     mints: [],
+    scenarios: [],
   },
   {
     profile: 'delivery-v1',

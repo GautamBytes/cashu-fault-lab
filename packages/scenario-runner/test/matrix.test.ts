@@ -4,7 +4,12 @@ import {
   type AdapterCapabilities,
 } from '@cashu-fault-lab/adapter-contract';
 import { describe, expect, it } from 'vitest';
-import { CompatibilityMatrix, type MatrixExecutor, type MatrixParticipant } from '../src/index.js';
+import {
+  CompatibilityMatrix,
+  type MatrixExecutionResult,
+  type MatrixExecutor,
+  type MatrixParticipant,
+} from '../src/index.js';
 
 function participant(
   id: string,
@@ -65,7 +70,53 @@ describe('CompatibilityMatrix', () => {
     });
     expect(first.invariants).toEqual([]);
     expect(first.mints).toEqual([]);
+    expect(first.scenarios).toEqual([]);
     expect(calls).toEqual(['delivery-v1:sender-a:receiver-a', 'delivery-v1:sender-b:receiver-a']);
+  });
+
+  it('clones per-scenario evidence into the passed matrix case', async () => {
+    const scenarios = [
+      {
+        id: 'retry-response-lost',
+        seed: 'pair-seed',
+        status: 'passed' as const,
+        invariants: [
+          {
+            id: 'retry-convergence' as const,
+            status: 'passed' as const,
+            confidence: 'observed' as const,
+            evidence: [{ source: 'timeline' as const, description: 'Retry converged.' }],
+          },
+        ],
+      },
+    ];
+    const execution = { ok: true, scenarios } as unknown as MatrixExecutionResult;
+    const result = await new CompatibilityMatrix(async () => execution).run(
+      'delivery-v1',
+      [participant('sender-a', 'sender')],
+      [participant('receiver-a', 'receiver')],
+    );
+    const selected = result[0];
+    if (selected?.status !== 'passed') throw new Error('Expected passing matrix result');
+
+    scenarios[0]!.status = 'failed' as 'passed';
+    scenarios[0]!.invariants.splice(0);
+
+    expect(selected.scenarios).toEqual([
+      {
+        id: 'retry-response-lost',
+        seed: 'pair-seed',
+        status: 'passed',
+        invariants: [
+          {
+            id: 'retry-convergence',
+            status: 'passed',
+            confidence: 'observed',
+            evidence: [{ source: 'timeline', description: 'Retry converged.' }],
+          },
+        ],
+      },
+    ]);
   });
 
   it('reports unsupported capabilities as not applicable without executing them', async () => {

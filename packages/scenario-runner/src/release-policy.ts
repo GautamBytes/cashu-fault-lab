@@ -30,6 +30,8 @@ export type ReleaseGateReasonCode =
   | 'SENDER_EVIDENCE_TOO_LOW'
   | 'RECEIVER_EVIDENCE_TOO_LOW'
   | 'MINT_IDENTITY_REQUIRED'
+  | 'REQUIRED_SCENARIO_MISSING'
+  | 'REQUIRED_SCENARIO_NOT_PASSED'
   | 'REQUIRED_INVARIANT_MISSING'
   | 'REQUIRED_INVARIANT_NOT_PASSED'
   | 'INVARIANT_CONFIDENCE_REJECTED'
@@ -42,6 +44,7 @@ export interface ReleaseGateReason {
   readonly code: ReleaseGateReasonCode;
   readonly message: string;
   readonly pair?: string;
+  readonly scenario?: string;
 }
 
 export interface ReleaseGateResult {
@@ -264,6 +267,31 @@ function pairReasons(
     add('MINT_IDENTITY_REQUIRED', 'A configured mint identity is required.');
   }
 
+  for (const id of policy.requiredScenarios) {
+    const matches = selected.scenarios.filter((scenario) => scenario.id === id);
+    if (matches.length === 0) {
+      reasons.push({
+        code: 'REQUIRED_SCENARIO_MISSING',
+        message: `Required scenario ${id} is missing for ${pair}.`,
+        pair,
+        scenario: id,
+      });
+      continue;
+    }
+    const result = matches[0]!;
+    if (matches.length !== 1 || result.status !== 'passed') {
+      reasons.push({
+        code: 'REQUIRED_SCENARIO_NOT_PASSED',
+        message:
+          matches.length === 1
+            ? `Required scenario ${id} has status ${result.status} for ${pair}.`
+            : `Required scenario ${id} does not have unique passing evidence for ${pair}.`,
+        pair,
+        scenario: id,
+      });
+    }
+  }
+
   const invariants = new Map(selected.invariants.map((result) => [result.id, result]));
   for (const id of policy.requiredInvariants) {
     const result = invariants.get(id);
@@ -288,7 +316,9 @@ function pairReasons(
 function sortReasons(reasons: readonly ReleaseGateReason[]): readonly ReleaseGateReason[] {
   return [...reasons].sort((left, right) => {
     const pair = (left.pair ?? '').localeCompare(right.pair ?? '');
-    return pair === 0 ? left.code.localeCompare(right.code) : pair;
+    if (pair !== 0) return pair;
+    const code = left.code.localeCompare(right.code);
+    return code === 0 ? (left.scenario ?? '').localeCompare(right.scenario ?? '') : code;
   });
 }
 

@@ -11,6 +11,7 @@ import {
   validateReleasePolicy,
   type InvariantResult,
   type MatrixCaseResult,
+  type MatrixScenarioEvidence,
   type ReleasePolicy,
 } from '../src/index.js';
 
@@ -97,6 +98,7 @@ function passingCase(
     receiverTier?: 'T0' | 'T1' | 'T2' | 'T3';
     mint?: AdapterMintIdentity;
     invariants?: readonly InvariantResult[];
+    scenarios?: readonly MatrixScenarioEvidence[];
     senderBuildAlias?: string;
     receiverBuildAlias?: string;
   } = {},
@@ -127,6 +129,14 @@ function passingCase(
     ),
     mints: [mint],
     invariants: options.invariants ?? required.map((id) => invariant(id)),
+    scenarios:
+      options.scenarios ??
+      policy.requiredScenarios.map((id) => ({
+        id,
+        seed: `seed-${id}`,
+        status: 'passed',
+        invariants: required.map((invariantId) => invariant(invariantId)),
+      })),
   };
 }
 
@@ -232,6 +242,32 @@ describe('release policy', () => {
     ).toEqual(
       expect.arrayContaining(['REQUIRED_INVARIANT_MISSING', 'INVARIANT_CONFIDENCE_REJECTED']),
     );
+  });
+
+  it('rejects each missing or non-passing required scenario with pair context', () => {
+    const missing = evaluateReleasePolicy(policy, [passingCase({ scenarios: [] })]).reasons.find(
+      (reason) => reason.code === 'REQUIRED_SCENARIO_MISSING',
+    );
+    const failed = evaluateReleasePolicy(policy, [
+      passingCase({
+        scenarios: [
+          {
+            id: 'retry-response-lost',
+            seed: 'failed-seed',
+            status: 'failed',
+            invariants: [],
+            code: 'SCENARIO_EXECUTION_FAILED',
+            reason: 'Scenario failed safely.',
+          },
+        ],
+      }),
+    ]).reasons.find((reason) => reason.code === 'REQUIRED_SCENARIO_NOT_PASSED');
+
+    expect(missing).toMatchObject({ pair: 'sender-ts->receiver-rs' });
+    expect(missing?.message).toContain('retry-response-lost');
+    expect(failed).toMatchObject({ pair: 'sender-ts->receiver-rs' });
+    expect(failed?.message).toContain('retry-response-lost');
+    expect(failed?.message).toContain('failed');
   });
 
   it('deduplicates aliases of one build and still enforces pair and mint minima', () => {
