@@ -2,6 +2,12 @@
 
 Main CLI binary (`cashu-fault-lab`) for running fault scenarios, compatibility matrices, and reports.
 
+The v0.1 command below produces the checked-in, secret-redacted developer-preview example:
+
+```bash
+pnpm lab demo --seed cashu-fault-lab-v0.1.0-demo --artifact docs/examples/v0.1.0-demo.json --report docs/examples/v0.1.0-demo.html
+```
+
 ## Commands
 
 | Command              | Description                                  |
@@ -26,15 +32,17 @@ pnpm lab matrix --profile delivery-v1 --verbose
 
 # Provenance-aware release gate
 pnpm lab matrix --profile delivery-v1 \
-  --release-policy spec/release-policy.json
+  --release-policy spec/release-policy.json \
+  --release-suite spec/release-suite.json
 
 # Generate JUnit report
 pnpm lab report artifacts/latest.json --format junit --output result.xml
 ```
 
 `--min-passes` remains a developer convenience. `--release-policy` validates the policy before
-starting adapters, evaluates every passing pair's identities, evidence tiers, mint provenance, and
-invariant evidence, then exits nonzero with stable rejection codes when the gate is not satisfied.
+starting adapters. It implicitly loads `spec/release-suite.json` unless `--release-suite` selects
+another strict suite, executes every named scenario for every candidate pair, and exits nonzero
+with stable rejection codes when identity, evidence, provenance, or invariant requirements fail.
 
 ## Key exports
 

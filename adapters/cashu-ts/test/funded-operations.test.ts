@@ -40,7 +40,10 @@ function encodedRequest(
   ],
 ): string {
   return new PaymentRequest(
-    transports,
+    transports.map((transport) => ({
+      ...transport,
+      tags: [['delivery', '1'], ['expires_at', String(now + 900)], ...(transport.tags ?? [])],
+    })),
     requestId,
     amount,
     'sat',
@@ -201,6 +204,25 @@ describe('FundedCashuTsOperations', () => {
       expect.objectContaining({ deliveryId, state: 'spent' }),
     ]);
     await expect(operations.ledger()).rejects.toBeInstanceOf(AdapterNotApplicableError);
+  });
+
+  it('copies the negotiated request expiry even when sending after request creation', async () => {
+    let currentTime = now + 5;
+    const wallet = new Wallet();
+    const transport = new Transport();
+    const operations = new FundedCashuTsOperations({
+      wallet,
+      transport,
+      now: () => currentTime,
+    });
+    await operations.reset('negotiated-expiry');
+
+    await operations.send({ request: encodedRequest(), deliveryId });
+    const payload = parseDeliveryPayloadJson(transport.bodies[0]!, currentTime);
+
+    expect(payload.delivery.createdAt).toBe(currentTime);
+    expect(payload.delivery.expiresAt).toBe(now + 900);
+    currentTime += 1;
   });
 
   it('recovers a lost response with the same proof reservation and bytes', async () => {

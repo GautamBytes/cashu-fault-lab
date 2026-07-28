@@ -1,0 +1,13 @@
+{
+  "name": "receiver-after-credit-before-receipt-persistence",
+  "description": "Terminates after durable merchant credit and finalizes one monotonic receipt.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "receiver",
+      "boundary": "receiver_after_credit_before_receipt_persistence"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

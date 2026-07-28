@@ -34,9 +34,13 @@ Orchestrates sender/receiver pairs, injects transport faults (drop, delay, dupli
 }
 ```
 
-Command types: `configure_fault`, `send`, `start_send`, `await_send`, `restart`, `advance_time`, `clear_faults`, `assert_quiescent`.
+Command types: `configure_fault`, `arm_crash`, `send`, `start_send`, `await_send`, `restart`, `advance_time`, `clear_faults`, `assert_quiescent`.
 
 Use `start_send` plus `await_send` when a restart or time advance must happen while a delivery is in flight. The runner validates operation IDs during execution and the shrinker keeps dependent `start_send`/`await_send` pairs together.
+
+`arm_crash` selects one documented sender or receiver checkpoint and an optional occurrence. External execution verifies that the arm starts unused, the process becomes unavailable, the replacement becomes ready, and the persisted arm is consumed exactly once.
+
+`spec/release-suite.json` binds named retry, duplicate, and recovery scenarios to required transports, durability, and invariants. A release-policy matrix evaluates the full suite for every candidate pair instead of treating one smoke scenario as release evidence.
 
 ## Tests
 

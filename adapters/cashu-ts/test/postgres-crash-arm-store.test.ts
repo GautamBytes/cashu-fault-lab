@@ -41,22 +41,18 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')('PostgresCrashArmStore', (
     await first.arm({ ...arm, runId: 'run-b' });
 
     await expect(first.arm(arm)).rejects.toThrow('already exists');
-    await expect(
-      first.arm({ ...arm, boundary: 'receiver_before_mint_request' }),
-    ).rejects.toThrow('does not match');
+    await expect(first.arm({ ...arm, boundary: 'receiver_before_mint_request' })).rejects.toThrow(
+      'does not match',
+    );
     await expect(first.hit(arm)).resolves.toBe(false);
     await expect(first.hit(arm)).resolves.toBe(false);
     const concurrent = await Promise.all(Array.from({ length: 20 }, () => first.hit(arm)));
     expect(concurrent.filter(Boolean)).toHaveLength(1);
-    expect(await first.list('run-a')).toEqual([
-      { ...arm, hits: 3, consumed: true },
-    ]);
+    expect(await first.list('run-a')).toEqual([{ ...arm, hits: 3, consumed: true }]);
     expect(await first.list('run-b')).toEqual([
       { ...arm, runId: 'run-b', hits: 0, consumed: false },
     ]);
-    expect(await otherTenant.list('run-a')).toEqual([
-      { ...arm, hits: 0, consumed: false },
-    ]);
+    expect(await otherTenant.list('run-a')).toEqual([{ ...arm, hits: 0, consumed: false }]);
 
     await first.reset('run-a');
     expect(await first.list('run-a')).toEqual([]);

@@ -1,0 +1,13 @@
+{
+  "name": "receiver-after-mint-request-before-response",
+  "description": "Terminates after possible mint consumption and recovers without unsafe redispatch.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "receiver",
+      "boundary": "receiver_after_mint_request_before_response"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

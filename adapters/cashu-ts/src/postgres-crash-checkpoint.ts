@@ -1,7 +1,4 @@
-import type {
-  CrashArmInput,
-  CrashArmStatus,
-} from '@cashu-fault-lab/adapter-contract';
+import type { CrashArmInput, CrashArmStatus } from '@cashu-fault-lab/adapter-contract';
 import {
   receiverCrashBoundaries,
   senderCrashBoundaries,
@@ -10,7 +7,7 @@ import {
 } from '@cashu-fault-lab/delivery-core';
 import type { CrashArmStore } from './postgres-crash-arm-store.js';
 
-const RUN_ID = /^[A-Za-z0-9_-]{1,128}$/u;
+const RUN_ID = /^[A-Za-z0-9_.-]{1,128}$/u;
 const SENDER_BOUNDARIES = new Set<CrashBoundary>(senderCrashBoundaries);
 const RECEIVER_BOUNDARIES = new Set<CrashBoundary>(receiverCrashBoundaries);
 

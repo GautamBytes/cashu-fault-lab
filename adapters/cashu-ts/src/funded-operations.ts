@@ -19,6 +19,7 @@ import {
   computePayloadHash,
   noopCrashCheckpoint,
   normalizeMintUrl,
+  parseDeliveryNegotiation,
   parseDeliveryReceipt,
   parseProtocolId,
   serializeDeliveryPayload,
@@ -142,16 +143,10 @@ export class MemoryCashuTsDeliveryStore implements CashuTsDeliveryStore {
 
   async putReservation(reservation: CashuTsStoredReservation): Promise<void> {
     const previous = this.#reservations.get(reservation.deliveryId);
-    if (
-      previous !== undefined &&
-      previous.requestFingerprint !== reservation.requestFingerprint
-    ) {
+    if (previous !== undefined && previous.requestFingerprint !== reservation.requestFingerprint) {
       throw new Error('Cashu delivery reservation identity conflicts');
     }
-    this.#reservations.set(
-      reservation.deliveryId,
-      structuredClone(previous ?? reservation),
-    );
+    this.#reservations.set(reservation.deliveryId, structuredClone(previous ?? reservation));
   }
 }
 
@@ -170,6 +165,7 @@ interface ParsedRequest {
   readonly unit: string;
   readonly mints: readonly string[];
   readonly transports: readonly CashuTsTransportTarget[];
+  readonly expiresAt: number;
 }
 
 interface InflightSend {
@@ -216,16 +212,18 @@ function adapterTransport(transport: CashuTsTransportTarget): AdapterTransport {
   return transport.type === 'post' ? 'http' : 'nostr';
 }
 
-function parseRequest(encoded: string): ParsedRequest {
+function parseRequest(encoded: string, now: number): ParsedRequest {
   let request: PaymentRequest;
   try {
     request = PaymentRequest.fromEncodedRequest(encoded);
   } catch {
     throw new Error('Cashu payment request is invalid');
   }
-  const transports = (request.transport ?? []).flatMap((transport) => {
+  const negotiated = (request.transport ?? []).flatMap((transport) => {
     const target = transportTarget(transport);
-    return target === undefined ? [] : [target];
+    if (target === undefined) return [];
+    const negotiation = parseDeliveryNegotiation(transport.tags ?? [], now);
+    return negotiation === undefined ? [] : [{ target, negotiation }];
   });
   if (
     request.id === undefined ||
@@ -234,7 +232,7 @@ function parseRequest(encoded: string): ParsedRequest {
     request.mints === undefined ||
     request.mints.length === 0 ||
     !request.singleUse ||
-    transports.length === 0
+    negotiated.length === 0
   ) {
     throw new Error('Cashu payment request is incomplete');
   }
@@ -243,12 +241,17 @@ function parseRequest(encoded: string): ParsedRequest {
     throw new Error('Cashu payment request amount is invalid');
   }
   parseProtocolId(request.id);
+  const expiresAt = negotiated[0]!.negotiation.expiresAt;
+  if (negotiated.some((entry) => entry.negotiation.expiresAt !== expiresAt)) {
+    throw new Error('Cashu payment request transport expiries conflict');
+  }
   return {
     id: request.id,
     amount,
     unit: request.unit,
     mints: request.mints.map(normalizeMintUrl),
-    transports,
+    transports: negotiated.map((entry) => entry.target),
+    expiresAt,
   };
 }
 
@@ -314,7 +317,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
         sender: {
           transports: this.#supportedTransports,
           profiles: ['delivery-v1'],
-          durability: persistent ? 'persistent' : 'process',
+          durability: persistent ? 'restart_safe' : 'process',
           evidence: {
             tier: 'T1',
             sources: persistent
@@ -347,7 +350,9 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
   }
 
   async send(input: SendPaymentInput): Promise<DeliveryReceiptView> {
-    const parsed = parseRequest(input.request);
+    const now = this.#now();
+    if (!Number.isSafeInteger(now) || now < 0) throw new Error('Cashu adapter time is invalid');
+    const parsed = parseRequest(input.request, now);
     const transports = parsed.transports.filter((transport) =>
       this.#supportedTransports.includes(adapterTransport(transport)),
     );
@@ -399,10 +404,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
       if (!Number.isSafeInteger(now) || now < 0) throw new Error('Cashu adapter time is invalid');
       await this.#crashCheckpoint.hit('sender_before_proof_reservation', deliveryId);
       let reservation = await this.#store.getReservation?.(deliveryId);
-      if (
-        reservation !== undefined &&
-        reservation.requestFingerprint !== requestFingerprint
-      ) {
+      if (reservation !== undefined && reservation.requestFingerprint !== requestFingerprint) {
         throw new Error('Delivery ID is already bound to another payment request');
       }
       if (reservation === undefined) {
@@ -440,7 +442,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
           version: 1,
           id: parseProtocolId(deliveryId),
           createdAt: now,
-          expiresAt: now + 900,
+          expiresAt: request.expiresAt,
         },
       };
       const payloadBytes = serializeDeliveryPayload(payload);
@@ -488,8 +490,8 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
     let receipt: DeliveryReceiptView;
     try {
       receipt = await this.#transport.send(selectedTarget, record.payloadBytes);
-    } catch {
-      throw new Error('Cashu payment delivery failed');
+    } catch (error) {
+      throw new Error('Cashu payment delivery failed', { cause: error });
     }
     await this.#crashCheckpoint.hit('sender_after_send_before_response', deliveryId);
     assertReceiptIdentity(receipt, record);

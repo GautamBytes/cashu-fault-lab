@@ -1,14 +1,8 @@
 #!/usr/bin/env node
 import { buildFundedCashuTsAdapterServer } from './funded-server.js';
 import { createPostgresCashuTsReceiverStore } from './postgres-receiver-store.js';
-import {
-  PostgresCrashCheckpoint,
-  SigkillProcessTerminator,
-} from './postgres-crash-checkpoint.js';
-import {
-  PostgresCrashArmStore,
-  migratePostgresCrashArmStore,
-} from './postgres-crash-arm-store.js';
+import { PostgresCrashCheckpoint, SigkillProcessTerminator } from './postgres-crash-checkpoint.js';
+import { PostgresCrashArmStore, migratePostgresCrashArmStore } from './postgres-crash-arm-store.js';
 import {
   createPostgresCashuTsSenderStore,
   parseCashuTsSenderStateKeys,

@@ -30,10 +30,7 @@ import {
   renderDiagnosticText,
 } from './diagnostics.js';
 import { PackagedLabRuntime } from './packaged-runtime.js';
-import {
-  loadReleaseSuite,
-  type LoadedReleaseSuite,
-} from './release-suite-loader.js';
+import { loadReleaseSuite, type LoadedReleaseSuite } from './release-suite-loader.js';
 
 const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
 
@@ -261,7 +258,7 @@ export async function runCli(
     .command('demo')
     .description('Run the response-loss recovery demo against the reference stack')
     .option('--keep', 'leave a stack started by this command running', false)
-    .option('--seed <seed>', 'deterministic demo seed', 'cashu-fault-lab-demo')
+    .option('--seed <seed>', 'deterministic demo seed', 'cashu-fault-lab-v0.1.0-demo')
     .option('--artifact <path>', 'write JSON evidence to this path')
     .option('--report <path>', 'write HTML report to this path')
     .action(
@@ -323,13 +320,15 @@ export async function runCli(
                 ? `send: ${cmd.sender} request ${cmd.requestId}`
                 : cmd.type === 'restart'
                   ? `restart: ${cmd.component}`
-                  : cmd.type === 'clear_faults'
-                    ? `clear_faults${cmd.target !== undefined ? ` (${cmd.target})` : ''}`
-                    : cmd.type === 'advance_time'
-                      ? `advance_time: ${cmd.milliseconds}ms`
-                      : cmd.type === 'assert_quiescent'
-                        ? 'assert_quiescent'
-                        : `unknown: ${JSON.stringify(cmd)}`;
+                  : cmd.type === 'arm_crash'
+                    ? `arm_crash: ${cmd.component} ${cmd.boundary} occurrence=${cmd.occurrence ?? 1}`
+                    : cmd.type === 'clear_faults'
+                      ? `clear_faults${cmd.target !== undefined ? ` (${cmd.target})` : ''}`
+                      : cmd.type === 'advance_time'
+                        ? `advance_time: ${cmd.milliseconds}ms`
+                        : cmd.type === 'assert_quiescent'
+                          ? 'assert_quiescent'
+                          : `unknown: ${JSON.stringify(cmd)}`;
           verboseLine(options.verbose, io, `[${i + 1}/${spec.commands.length}] ${label}`);
         }
 

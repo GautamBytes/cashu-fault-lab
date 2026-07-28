@@ -162,9 +162,7 @@ const proofResponseSchema = {
   },
 } as const;
 
-const crashControlProperties = crashControlSchema.properties as Readonly<
-  Record<string, unknown>
->;
+const crashControlProperties = crashControlSchema.properties as Readonly<Record<string, unknown>>;
 const crashStatusResponseSchema = {
   type: 'array',
   maxItems: 1_000,

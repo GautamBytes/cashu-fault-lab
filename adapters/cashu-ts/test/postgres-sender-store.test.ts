@@ -34,7 +34,16 @@ const proof: CashuProof = {
 
 function encodedRequest(): string {
   return new PaymentRequest(
-    [{ type: PaymentRequestTransportType.POST, target: 'http://127.0.0.1:8181/pay' }],
+    [
+      {
+        type: PaymentRequestTransportType.POST,
+        target: 'http://127.0.0.1:8181/pay',
+        tags: [
+          ['delivery', '1'],
+          ['expires_at', String(now + 900)],
+        ],
+      },
+    ],
     requestId,
     8,
     'sat',
@@ -223,7 +232,7 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')(
       });
 
       await expect(replacement.capabilities()).resolves.toMatchObject({
-        roles: { sender: { durability: 'persistent' } },
+        roles: { sender: { durability: 'restart_safe' } },
       });
       await expect(
         replacement.send({ request: encodedRequest(), deliveryId }),
@@ -256,10 +265,7 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')(
         store,
         crashCheckpoint: {
           async hit(boundary): Promise<void> {
-            if (
-              boundary === 'sender_after_reservation_before_payload_persistence' &&
-              !crashed
-            ) {
+            if (boundary === 'sender_after_reservation_before_payload_persistence' && !crashed) {
               crashed = true;
               throw new Error('simulated process crash');
             }
@@ -268,9 +274,9 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')(
         now: () => now,
       });
       await first.reset('reservation-crash');
-      await expect(
-        first.send({ request: encodedRequest(), deliveryId }),
-      ).rejects.toThrow('simulated process crash');
+      await expect(first.send({ request: encodedRequest(), deliveryId })).rejects.toThrow(
+        'simulated process crash',
+      );
 
       const replacementTransport = new Transport();
       const replacement = new FundedCashuTsOperations({

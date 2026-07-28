@@ -4,6 +4,9 @@ import {
   type AdapterCapabilities,
   type AdapterRoleCapability,
   type AdapterTransport,
+  type AdapterTestControlClient,
+  type CrashArmInput,
+  type CrashArmStatus,
 } from '@cashu-fault-lab/adapter-contract';
 import { renderHtml, renderJson } from '@cashu-fault-lab/report';
 import {
@@ -48,10 +51,7 @@ import type {
 } from './index.js';
 import { ExternalAdapterRegistry } from './adapter-registry.js';
 import type { AdapterManifest } from './adapter-manifest.js';
-import type {
-  LoadedReleaseSuite,
-  LoadedReleaseSuiteScenario,
-} from './release-suite-loader.js';
+import type { LoadedReleaseSuite, LoadedReleaseSuiteScenario } from './release-suite-loader.js';
 import { ensureReferenceRuntimeEnv } from './runtime-env.js';
 
 const execFileAsync = promisify(execFile);
@@ -404,15 +404,18 @@ class RestartableExternalFaultController implements ExternalFaultController {
   readonly #base: ExternalFaultController;
   readonly #services: LabServiceController;
   readonly #components: Readonly<Record<string, string>>;
+  readonly #controls: Readonly<Record<'sender' | 'receiver', AdapterTestControlClient>>;
 
   constructor(
     base: ExternalFaultController,
     services: LabServiceController,
     components: Readonly<Record<string, string>>,
+    controls: Readonly<Record<'sender' | 'receiver', AdapterTestControlClient>>,
   ) {
     this.#base = base;
     this.#services = services;
     this.#components = components;
+    this.#controls = controls;
   }
 
   async reset(): Promise<void> {
@@ -444,6 +447,26 @@ class RestartableExternalFaultController implements ExternalFaultController {
       throw new Error('External service restart is not configured');
     }
     await this.#services.restart(service);
+  }
+
+  armCrash(input: CrashArmInput): Promise<void> {
+    return this.#controls[input.component].armCrash(input);
+  }
+
+  crashStatus(): Promise<readonly CrashArmStatus[]> {
+    return Promise.allSettled([
+      this.#controls.sender.crashStatus(),
+      this.#controls.receiver.crashStatus(),
+    ]).then((results) => {
+      const unique = new Map<string, CrashArmStatus>();
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        for (const item of result.value) {
+          unique.set(`${item.runId}:${item.component}:${item.boundary}:${item.occurrence}`, item);
+        }
+      }
+      return [...unique.values()];
+    });
   }
 }
 
@@ -511,7 +534,7 @@ export class PackagedLabRuntime implements LabRuntime {
   }
 
   async demo(options: LabDemoOptions = {}): Promise<LabDemoResult> {
-    const seed = options.seed ?? 'cashu-fault-lab-demo';
+    const seed = options.seed ?? 'cashu-fault-lab-v0.1.0-demo';
     const runtimeEnv = await this.#referenceEnv();
     const alreadyRunning = this.#services.isUp
       ? await this.#services.isUp('lab', { envFile: runtimeEnv.path })
@@ -618,10 +641,15 @@ export class PackagedLabRuntime implements LabRuntime {
       const driver = new ExternalAdapterScenarioDriver({
         sender,
         receiver,
-        faults: new RestartableExternalFaultController(this.#faultController(), this.#services, {
-          sender: selection.sender,
-          receiver: selection.receiver,
-        }),
+        faults: new RestartableExternalFaultController(
+          this.#faultController(),
+          this.#services,
+          {
+            sender: selection.sender,
+            receiver: selection.receiver,
+          },
+          { sender, receiver },
+        ),
         amount: 8,
         unit: 'sat',
         transports: externalScenarioTransports(scenario.name),
@@ -739,10 +767,7 @@ export class PackagedLabRuntime implements LabRuntime {
         const scenarios: MatrixScenarioEvidence[] = [];
         for (const entry of releaseSuite.scenarios) {
           const scenarioSeed = String(
-            seededProtocolId(
-              seed,
-              `release-suite:${sender.id}:${receiver.id}:${entry.id}`,
-            ),
+            seededProtocolId(seed, `release-suite:${sender.id}:${receiver.id}:${entry.id}`),
           );
           const senderRole = sender.capabilities.roles.sender;
           const receiverRole = receiver.capabilities.roles.receiver;
@@ -791,6 +816,7 @@ export class PackagedLabRuntime implements LabRuntime {
               this.#faultController(),
               this.#services,
               { sender: sender.id, receiver: receiver.id },
+              { sender: senderClient, receiver: receiverClient },
             ),
             amount: 8,
             unit: 'sat',

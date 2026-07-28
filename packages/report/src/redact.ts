@@ -123,6 +123,13 @@ function commandView(
         duplicateCount: command.rule.duplicateCount,
         statusCode: command.rule.statusCode,
       };
+    case 'arm_crash':
+      return {
+        type: command.type,
+        component: command.component,
+        boundary: command.boundary,
+        occurrence: command.occurrence,
+      };
     case 'send':
       return { type: command.type, sender: command.sender, requestId: command.requestId };
     case 'start_send':

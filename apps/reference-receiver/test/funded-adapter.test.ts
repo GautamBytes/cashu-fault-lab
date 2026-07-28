@@ -46,7 +46,10 @@ describe('FundedReceiverAdapterControl', () => {
     expect(decoded.singleUse).toBe(true);
     expect(decoded.getTransport(PaymentRequestTransportType.POST)).toMatchObject({
       target: 'http://127.0.0.1:4200/pay',
-      tags: [],
+      tags: [
+        ['delivery', '1'],
+        ['expires_at', String(now + 900)],
+      ],
     });
     expect(
       await store.createRequest({

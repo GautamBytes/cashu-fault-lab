@@ -67,8 +67,6 @@ export async function acceptDelivery(
   return recoverDelivery(command.payload.delivery.id, deps);
 }
 
-export function receiverCrashCheckpoint(
-  deps: AcceptDeliveryDependencies,
-): CrashCheckpoint {
+export function receiverCrashCheckpoint(deps: AcceptDeliveryDependencies): CrashCheckpoint {
   return deps.crashCheckpoint ?? noopCrashCheckpoint;
 }

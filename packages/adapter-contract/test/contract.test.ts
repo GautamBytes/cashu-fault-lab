@@ -19,6 +19,7 @@ import {
   validateDeliveryPayload,
   validateDeliveryReceipt,
   validateDeliveryRequest,
+  validateScenarioSpec,
 } from '../src/index.js';
 
 interface ValidVector {
@@ -131,6 +132,14 @@ describe('adapter HTTP contract', () => {
     expect(
       validateAdapterRequest('armCrash', {
         runId: 'run-001',
+        component: 'sender',
+        boundary: 'sender_before_proof_reservation',
+        occurrence: 1,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateAdapterRequest('armCrash', {
+        runId: 'cashu-fault-lab-v0.1.0-demo',
         component: 'sender',
         boundary: 'sender_before_proof_reservation',
         occurrence: 1,
@@ -257,6 +266,33 @@ describe('adapter HTTP contract', () => {
       ok: false,
       errorCode: 'SCHEMA_ADDITIONAL_PROPERTY',
     });
+  });
+
+  it('validates component-specific crash scenario commands', () => {
+    expect(
+      validateScenarioSpec({
+        name: 'sender-crash',
+        commands: [
+          {
+            type: 'arm_crash',
+            component: 'sender',
+            boundary: 'sender_before_proof_reservation',
+          },
+        ],
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateScenarioSpec({
+        name: 'invalid-crash',
+        commands: [
+          {
+            type: 'arm_crash',
+            component: 'receiver',
+            boundary: 'sender_before_proof_reservation',
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: false });
   });
 
   it('rejects placeholder implementation digests', () => {

@@ -661,12 +661,7 @@ describe('PackagedLabRuntime', () => {
         },
       ],
     };
-    const results = await runtime.matrix(
-      'delivery-v1',
-      'external-seed',
-      manifest,
-      releaseSuite,
-    );
+    const results = await runtime.matrix('delivery-v1', 'external-seed', manifest, releaseSuite);
 
     expect(results).toContainEqual(
       expect.objectContaining({

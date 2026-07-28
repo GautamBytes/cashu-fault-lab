@@ -1,11 +1,5 @@
-import {
-  CrashBoundaryHit,
-  type DeliveryReceipt,
-} from '@cashu-fault-lab/delivery-core';
-import {
-  receiverCrashCheckpoint,
-  type AcceptDeliveryDependencies,
-} from './accept-delivery.js';
+import { CrashBoundaryHit, type DeliveryReceipt } from '@cashu-fault-lab/delivery-core';
+import { receiverCrashCheckpoint, type AcceptDeliveryDependencies } from './accept-delivery.js';
 import { ReceiverDomainError } from './types.js';
 import { isMintGatewayError } from '../ports/mint-gateway.js';
 
@@ -65,12 +59,15 @@ async function recoverLockedDelivery(
 
     const restored = await deps.mint.restore(record.plan);
     if (restored.kind === 'recovered') {
-      return settleWithCheckpoints({
-        deliveryId,
-        replacementPlanHash: restored.result.replacementPlanHash,
-        replacementProofs: restored.result.replacementProofs,
-        now: deps.now(),
-      }, deps);
+      return settleWithCheckpoints(
+        {
+          deliveryId,
+          replacementPlanHash: restored.result.replacementPlanHash,
+          replacementProofs: restored.result.replacementProofs,
+          now: deps.now(),
+        },
+        deps,
+      );
     }
 
     const states = await deps.mint.proofStates(record.plan);
@@ -100,12 +97,15 @@ async function swapAndSettle(
       'receiver_after_mint_request_before_response',
       deliveryId,
     );
-    return settleWithCheckpoints({
-      deliveryId,
-      replacementPlanHash: swapped.replacementPlanHash,
-      replacementProofs: swapped.replacementProofs,
-      now: deps.now(),
-    }, deps);
+    return settleWithCheckpoints(
+      {
+        deliveryId,
+        replacementPlanHash: swapped.replacementPlanHash,
+        replacementProofs: swapped.replacementProofs,
+        now: deps.now(),
+      },
+      deps,
+    );
   } catch (error) {
     if (isMintGatewayError(error) && !error.mayHaveConsumedInputs) {
       return deps.store.reject(deliveryId, 'mint_unavailable', true);

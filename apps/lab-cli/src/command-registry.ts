@@ -107,12 +107,15 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
         {
           flags: '--seed <seed>',
           description: 'Deterministic demo seed.',
-          defaultValue: 'cashu-fault-lab-demo',
+          defaultValue: 'cashu-fault-lab-v0.1.0-demo',
         },
         { flags: '--artifact <path>', description: 'Write JSON evidence to this path.' },
         { flags: '--report <path>', description: 'Write HTML report to this path.' },
       ],
-      examples: ['cashu-fault-lab demo', 'cashu-fault-lab demo --keep'],
+      examples: [
+        'cashu-fault-lab demo',
+        'cashu-fault-lab demo --seed cashu-fault-lab-v0.1.0-demo --artifact docs/examples/v0.1.0-demo.json --report docs/examples/v0.1.0-demo.html',
+      ],
       env: [],
       modes: ['text'],
       artifacts: [
@@ -228,6 +231,7 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
         },
         { flags: '--min-passes <count>', description: 'Minimum passing pairs required.' },
         { flags: '--release-policy <path>', description: 'Release policy JSON file.' },
+        { flags: '--release-suite <path>', description: 'Release scenario suite JSON file.' },
         { flags: '--adapters <path>', description: 'External adapter manifest.' },
         {
           flags: '--format <format>',

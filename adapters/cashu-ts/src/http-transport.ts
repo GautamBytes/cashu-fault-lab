@@ -68,6 +68,12 @@ async function boundedJson(response: Response): Promise<unknown> {
   }
 }
 
+function responseErrorCode(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const code = Reflect.get(value, 'code');
+  return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/u.test(code) ? code : undefined;
+}
+
 export class CashuTsHttpTransport implements CashuTsTransportPort {
   readonly #timeoutMs: number;
   readonly #fetch: typeof fetch;
@@ -106,8 +112,10 @@ export class CashuTsHttpTransport implements CashuTsTransportPort {
       throw new Error('Cashu payment redirect is forbidden');
     }
     if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error(`Cashu receiver returned HTTP ${response.status}`);
+      const code = responseErrorCode(await boundedJson(response));
+      throw new Error(
+        `Cashu receiver returned HTTP ${response.status}${code === undefined ? '' : ` (${code})`}`,
+      );
     }
     const value = await boundedJson(response);
     const validation = validateAdapterResponse('delivery', value);

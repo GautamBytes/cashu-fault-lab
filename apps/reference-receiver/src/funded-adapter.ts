@@ -139,7 +139,16 @@ export class FundedReceiverAdapterControl implements ReceiverAdapterControl {
       expiresAt,
     });
     const request = new PaymentRequest(
-      [{ type: PaymentRequestTransportType.POST, target: this.#paymentTarget, tags: [] }],
+      [
+        {
+          type: PaymentRequestTransportType.POST,
+          target: this.#paymentTarget,
+          tags: [
+            ['delivery', '1'],
+            ['expires_at', String(expiresAt)],
+          ],
+        },
+      ],
       id,
       input.amount,
       input.unit,

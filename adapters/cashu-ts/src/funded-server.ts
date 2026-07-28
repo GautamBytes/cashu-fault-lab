@@ -67,9 +67,7 @@ export async function buildFundedCashuTsAdapterServer(
     transport,
     ...(options.store === undefined ? {} : { store: options.store }),
     supportedTransports: options.senderNostrPrivateKey === undefined ? ['http'] : ['http', 'nostr'],
-    ...(options.crashControl === undefined
-      ? {}
-      : { crashCheckpoint: options.crashControl }),
+    ...(options.crashControl === undefined ? {} : { crashCheckpoint: options.crashControl }),
     now,
   });
   if (options.resumeRunId !== undefined) {
@@ -103,9 +101,7 @@ export async function buildFundedCashuTsAdapterServer(
       ...(options.nostrPollIntervalMs === undefined
         ? {}
         : { nostrPollIntervalMs: options.nostrPollIntervalMs }),
-      ...(options.crashControl === undefined
-        ? {}
-        : { crashCheckpoint: options.crashControl }),
+      ...(options.crashControl === undefined ? {} : { crashCheckpoint: options.crashControl }),
       now,
     });
   }

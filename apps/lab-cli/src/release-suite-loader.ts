@@ -101,7 +101,10 @@ export async function loadReleaseSuite(
     );
     scenarios.push({
       ...entry,
-      spec: scenarioSpec(parsedJson(contents, `Release suite scenario ${entry.id}`), entry.scenario),
+      spec: scenarioSpec(
+        parsedJson(contents, `Release suite scenario ${entry.id}`),
+        entry.scenario,
+      ),
     });
   }
   return { ...suite, scenarios };

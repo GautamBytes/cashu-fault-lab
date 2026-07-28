@@ -168,9 +168,14 @@ describe('FundedCashuTsReceiverOperations', () => {
 
     expect(request.id).toHaveLength(requestId.length);
     expect(
-      PaymentRequest.fromEncodedRequest(request.raw).getTransport(PaymentRequestTransportType.POST)
-        ?.target,
-    ).toBe(paymentTarget);
+      PaymentRequest.fromEncodedRequest(request.raw).getTransport(PaymentRequestTransportType.POST),
+    ).toMatchObject({
+      target: paymentTarget,
+      tags: [
+        ['delivery', '1'],
+        ['expires_at', String(now + 900)],
+      ],
+    });
 
     const receipt = await receiver.receive(serializeDeliveryPayload(payload(request.id)));
     expect(receipt).toMatchObject({
@@ -282,7 +287,16 @@ describe('FundedCashuTsReceiverOperations', () => {
     await operations.reset('dual-role-proof-composition');
 
     const externalRequest = new PaymentRequest(
-      [{ type: PaymentRequestTransportType.POST, target: 'http://127.0.0.1:4102/pay' }],
+      [
+        {
+          type: PaymentRequestTransportType.POST,
+          target: 'http://127.0.0.1:4102/pay',
+          tags: [
+            ['delivery', '1'],
+            ['expires_at', String(now + 900)],
+          ],
+        },
+      ],
       requestId,
       8,
       'sat',
@@ -340,10 +354,20 @@ describe('FundedCashuTsReceiverOperations', () => {
     });
 
     expect(request.transports.map((transport) => transport.type)).toEqual(['post', 'nostr']);
-    expect(request.transports[1]).toMatchObject({ tags: [['n', '17']] });
+    expect(request.transports[1]).toMatchObject({
+      tags: [
+        ['delivery', '1'],
+        ['expires_at', String(now + 900)],
+        ['n', '17'],
+      ],
+    });
     const decoded = PaymentRequest.fromEncodedRequest(request.raw);
     expect(decoded.getTransport(PaymentRequestTransportType.POST)?.target).toBe(paymentTarget);
-    expect(decoded.getTransport(PaymentRequestTransportType.NOSTR)?.tags).toEqual([['n', '17']]);
+    expect(decoded.getTransport(PaymentRequestTransportType.NOSTR)?.tags).toEqual([
+      ['delivery', '1'],
+      ['expires_at', String(now + 900)],
+      ['n', '17'],
+    ]);
   });
 
   it('keeps control endpoints bearer-gated without requiring control auth on /pay', async () => {

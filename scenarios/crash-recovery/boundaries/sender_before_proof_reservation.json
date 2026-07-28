@@ -1,0 +1,13 @@
+{
+  "name": "sender-before-proof-reservation",
+  "description": "Terminates the funded sender before proof reservation and verifies deterministic retry after restart.",
+  "commands": [
+    {
+      "type": "arm_crash",
+      "component": "sender",
+      "boundary": "sender_before_proof_reservation"
+    },
+    { "type": "send", "sender": "reference", "requestId": "AAECAwQFBgcICQoLDA0ODw" },
+    { "type": "assert_quiescent" }
+  ]
+}

@@ -3,6 +3,8 @@ import {
   AdapterNotApplicableError,
   validateAdapterCompatibility,
   type AdapterCapabilities,
+  type CrashArmInput,
+  type CrashArmStatus,
   type AdapterTransport,
   type AdapterClient,
   type LedgerCreditView,
@@ -32,6 +34,8 @@ export interface ExternalFaultController {
   clear(target?: string): Promise<void>;
   evidence(): Promise<ExternalFaultEvidence>;
   restart?(component: string): Promise<void>;
+  armCrash?(input: CrashArmInput): Promise<void>;
+  crashStatus?(): Promise<readonly CrashArmStatus[]>;
 }
 
 export interface ExternalAdapterScenarioDriverOptions {
@@ -170,6 +174,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   #receiverCapabilities: AdapterCapabilities | undefined;
   readonly #redeemedDeliveries = new Set<string>();
   readonly #configuredTransportFaults = new Set<string>();
+  readonly #armedCrashes: CrashArmInput[] = [];
 
   constructor(options: ExternalAdapterScenarioDriverOptions) {
     this.#sender = options.sender;
@@ -209,6 +214,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     this.#receiverCapabilities = undefined;
     this.#redeemedDeliveries.clear();
     this.#configuredTransportFaults.clear();
+    this.#armedCrashes.length = 0;
     this.#senderCapabilities = await adapterCall('sender capability discovery', () =>
       this.#sender.capabilities(),
     );
@@ -277,6 +283,30 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     }
   }
 
+  async armCrash(input: CrashArmInput): Promise<void> {
+    if (this.#faults.armCrash === undefined || this.#faults.crashStatus === undefined) {
+      throw new AdapterNotApplicableError('Selected adapter does not provide crash controls');
+    }
+    try {
+      await this.#faults.armCrash(input);
+      const status = await this.#faults.crashStatus();
+      const evidence = status.find(
+        (item) =>
+          item.runId === input.runId &&
+          item.component === input.component &&
+          item.boundary === input.boundary &&
+          item.occurrence === input.occurrence,
+      );
+      if (evidence === undefined || evidence.hits !== 0 || evidence.consumed) {
+        throw new Error('Crash arm evidence does not match the requested checkpoint');
+      }
+      this.#armedCrashes.push(input);
+    } catch (error) {
+      if (error instanceof AdapterNotApplicableError) throw error;
+      throw new Error('External crash control could not be armed');
+    }
+  }
+
   async send(sender: string, requestId: string): Promise<DriverSendResult> {
     const request = this.#request;
     const senderCapabilities = this.#senderCapabilities;
@@ -305,6 +335,9 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       } catch (error) {
         if (error instanceof AdapterNotApplicableError) throw error;
         lastSendError = error;
+        if (this.#armedCrashes.length > 0) {
+          await this.#waitForRestartReadiness(this.#armedCrashes.at(-1)?.component ?? 'sender');
+        }
         if (sendAttempts + 1 === this.#maxAttempts) {
           throw new Error(
             `External sender did not return a receipt after retry attempts${adapterErrorHint(lastSendError)}`,
@@ -314,6 +347,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       }
     }
     if (sent === undefined) throw new Error('External sender did not return a receipt');
+    await this.#assertCrashEvidence();
     if (
       sent.requestId !== request.id ||
       sent.deliveryId !== deliveryId ||
@@ -506,6 +540,26 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
           );
         }
         await this.#sleep(this.#restartReadinessDelayMs);
+      }
+    }
+  }
+
+  async #assertCrashEvidence(): Promise<void> {
+    if (this.#armedCrashes.length === 0) return;
+    if (this.#faults.crashStatus === undefined) {
+      throw new Error('External crash status evidence is unavailable');
+    }
+    const status = await this.#faults.crashStatus();
+    for (const armed of this.#armedCrashes) {
+      const evidence = status.find(
+        (item) =>
+          item.runId === armed.runId &&
+          item.component === armed.component &&
+          item.boundary === armed.boundary &&
+          item.occurrence === armed.occurrence,
+      );
+      if (evidence === undefined || !evidence.consumed || evidence.hits < armed.occurrence) {
+        throw new Error('External crash arm was not consumed');
       }
     }
   }

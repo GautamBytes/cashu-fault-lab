@@ -164,8 +164,7 @@ function fixture(files: Readonly<Record<string, string>> = {}) {
   const io: CliIo = {
     readText: async (path) => {
       const value =
-        stored.get(path) ??
-        stored.get(relative(process.cwd(), path).split('\\').join('/'));
+        stored.get(path) ?? stored.get(relative(process.cwd(), path).split('\\').join('/'));
       if (value === undefined) throw new Error(`missing ${path}`);
       return value;
     },

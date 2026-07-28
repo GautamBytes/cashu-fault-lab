@@ -134,59 +134,56 @@ describe('PostgreSQL crash recovery', () => {
     expect(await restartedStore.credits()).toHaveLength(1);
   });
 
-  it.each(receiverCrashBoundaries)(
-    'recovers safely after the %s checkpoint',
-    async (boundary) => {
-      const firstStore = new PostgresReceiverStore(fixture.pool, new CryptoEnvelope(key));
-      await firstStore.createRequest({
-        id: requestId,
-        amount: 8,
-        unit: 'sat',
-        mints: ['https://mint.example'],
-        singleUse: true,
-        expiresAt: now + 900,
-      });
-      const mint = new FakeMint();
-      const verifier = new FakeProofVerifier();
-      const checkpoint = createOneShotCrashCheckpoint({ boundary });
-      const command = {
-        payload: payload(requestId, deliveryId, now),
-        payloadHash: 'a'.repeat(64),
-      };
+  it.each(receiverCrashBoundaries)('recovers safely after the %s checkpoint', async (boundary) => {
+    const firstStore = new PostgresReceiverStore(fixture.pool, new CryptoEnvelope(key));
+    await firstStore.createRequest({
+      id: requestId,
+      amount: 8,
+      unit: 'sat',
+      mints: ['https://mint.example'],
+      singleUse: true,
+      expiresAt: now + 900,
+    });
+    const mint = new FakeMint();
+    const verifier = new FakeProofVerifier();
+    const checkpoint = createOneShotCrashCheckpoint({ boundary });
+    const command = {
+      payload: payload(requestId, deliveryId, now),
+      payloadHash: 'a'.repeat(64),
+    };
 
-      await expect(
-        acceptDelivery(command, {
-          store: firstStore,
-          mint,
-          verifier,
-          now: () => now,
-          crashCheckpoint: checkpoint,
-        }),
-      ).rejects.toBeInstanceOf(CrashBoundaryHit);
+    await expect(
+      acceptDelivery(command, {
+        store: firstStore,
+        mint,
+        verifier,
+        now: () => now,
+        crashCheckpoint: checkpoint,
+      }),
+    ).rejects.toBeInstanceOf(CrashBoundaryHit);
 
-      const restartedStore = new PostgresReceiverStore(fixture.pool, new CryptoEnvelope(key));
-      await expect(
-        acceptDelivery(command, {
-          store: restartedStore,
-          mint,
-          verifier,
-          now: () => now,
-          crashCheckpoint: checkpoint,
-        }),
-      ).resolves.toMatchObject({
-        deliveryId,
-        payloadHash: 'a'.repeat(64),
-        status: 'settled',
-      });
-      expect(mint.swapCalls).toBe(1);
-      expect(await restartedStore.credits()).toHaveLength(1);
-      expect(await restartedStore.current(deliveryId)).toMatchObject({
-        deliveryId,
-        payloadHash: 'a'.repeat(64),
-        phase: 'settled',
-      });
-    },
-  );
+    const restartedStore = new PostgresReceiverStore(fixture.pool, new CryptoEnvelope(key));
+    await expect(
+      acceptDelivery(command, {
+        store: restartedStore,
+        mint,
+        verifier,
+        now: () => now,
+        crashCheckpoint: checkpoint,
+      }),
+    ).resolves.toMatchObject({
+      deliveryId,
+      payloadHash: 'a'.repeat(64),
+      status: 'settled',
+    });
+    expect(mint.swapCalls).toBe(1);
+    expect(await restartedStore.credits()).toHaveLength(1);
+    expect(await restartedStore.current(deliveryId)).toMatchObject({
+      deliveryId,
+      payloadHash: 'a'.repeat(64),
+      phase: 'settled',
+    });
+  });
 
   it('resumes a durably prepared delivery after restart before mint dispatch', async () => {
     const firstStore = new PostgresReceiverStore(fixture.pool, new CryptoEnvelope(key));

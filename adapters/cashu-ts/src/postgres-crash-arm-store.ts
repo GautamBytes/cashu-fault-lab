@@ -170,10 +170,10 @@ export class PostgresCrashArmStore implements CrashArmStore {
     const client = await this.#pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query(
-        `DELETE FROM cashu_test_crash_arms WHERE tenant_id = $1 AND run_id = $2`,
-        [this.#tenantId, runId],
-      );
+      await client.query(`DELETE FROM cashu_test_crash_arms WHERE tenant_id = $1 AND run_id = $2`, [
+        this.#tenantId,
+        runId,
+      ]);
       await client.query(
         `INSERT INTO cashu_test_crash_sessions (tenant_id, run_id)
          VALUES ($1, $2)

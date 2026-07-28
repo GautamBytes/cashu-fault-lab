@@ -38,4 +38,30 @@ describe('CashuTsHttpTransport', () => {
       'Cashu payment redirect is forbidden',
     );
   });
+
+  it('preserves only a bounded receiver error code from failed responses', async () => {
+    const body = new TextEncoder().encode('{"proof":"opaque"}');
+    const transport = new CashuTsHttpTransport({
+      fetch: async () =>
+        Response.json(
+          { code: 'REQUEST_MISMATCH', message: 'private upstream diagnostic' },
+          { status: 422 },
+        ),
+    });
+
+    await expect(transport.post('http://127.0.0.1:8181/pay', body)).rejects.toThrow(
+      'Cashu receiver returned HTTP 422 (REQUEST_MISMATCH)',
+    );
+
+    const unsafe = new CashuTsHttpTransport({
+      fetch: async () =>
+        Response.json({ code: 'unsafe diagnostic!', secret: 'proof-secret' }, { status: 500 }),
+    });
+    await expect(unsafe.post('http://127.0.0.1:8181/pay', body)).rejects.toThrow(
+      'Cashu receiver returned HTTP 500',
+    );
+    await expect(unsafe.post('http://127.0.0.1:8181/pay', body)).rejects.not.toThrow(
+      /proof-secret|unsafe diagnostic/u,
+    );
+  });
 });

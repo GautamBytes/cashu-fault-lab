@@ -58,9 +58,7 @@ class FakeTerminator implements ProcessTerminator {
   }
 }
 
-function crashArm(
-  overrides: Partial<CrashArmInput> = {},
-): CrashArmInput {
+function crashArm(overrides: Partial<CrashArmInput> = {}): CrashArmInput {
   return {
     runId: 'run-a',
     component: 'sender',
@@ -97,15 +95,25 @@ describe('cashu-ts crash controls', () => {
     ]);
   });
 
+  it('accepts dotted scenario seeds as crash-control run IDs', async () => {
+    const checkpoint = new PostgresCrashCheckpoint({
+      store: new MemoryCrashArmStore(),
+      terminator: new FakeTerminator(),
+    });
+
+    await expect(checkpoint.reset('cashu-fault-lab-v0.1.0-demo')).resolves.toBeUndefined();
+    expect(checkpoint.activeRunId()).toBe('cashu-fault-lab-v0.1.0-demo');
+  });
+
   it('keeps routes disabled by default and bearer-gates enabled controls', async () => {
     const disabled = await buildCashuTsAdapterServer({
       controlToken: 'control-token',
       now: () => 1,
     });
     try {
-      expect(
-        (await disabled.inject({ method: 'GET', url: '/v1/test/crashes' })).statusCode,
-      ).toBe(401);
+      expect((await disabled.inject({ method: 'GET', url: '/v1/test/crashes' })).statusCode).toBe(
+        401,
+      );
       expect(
         (
           await disabled.inject({
