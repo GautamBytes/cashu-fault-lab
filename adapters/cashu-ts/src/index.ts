@@ -51,6 +51,13 @@ export {
   type ResettablePostgresReceiverStoreOptions,
 } from './postgres-receiver-store.js';
 export {
+  PostgresCrashArmStore,
+  migratePostgresCrashArmStore,
+  type CrashArm,
+  type CrashArmStore,
+  type PostgresCrashArmStoreOptions,
+} from './postgres-crash-arm-store.js';
+export {
   PostgresCashuTsSenderStore,
   createPostgresCashuTsSenderStore,
   migratePostgresCashuTsSenderStore,
