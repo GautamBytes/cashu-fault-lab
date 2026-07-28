@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseDeliveryPayload, parseDeliveryReceipt } from '@cashu-fault-lab/delivery-core';
+import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 import {
   adapterCapabilitiesSchema,
   deliveryPayloadSchema,
   deliveryReceiptSchema,
   deliveryRequestSchema,
+  releasePolicySchema,
+  releaseSuiteSchema,
   scenarioResultSchema,
   currentAdapterContract,
   validateAdapterRequest,
@@ -51,6 +54,30 @@ describe('normative delivery-v1 vectors', () => {
     expect(deliveryReceiptSchema).toEqual(fixture('schemas/delivery-receipt.schema.json'));
     expect(adapterCapabilitiesSchema).toEqual(fixture('schemas/adapter-capabilities.schema.json'));
     expect(scenarioResultSchema).toEqual(fixture('schemas/scenario-result.schema.json'));
+    expect(releasePolicySchema).toEqual(fixture('schemas/release-policy.schema.json'));
+    expect(releaseSuiteSchema).toEqual(fixture('schemas/release-suite.schema.json'));
+  });
+
+  it('validates the checked-in release policy and suite against their published schemas', () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+
+    expect(ajv.validate(releasePolicySchema, fixture('release-policy.json'))).toBe(true);
+    expect(ajv.validate(releaseSuiteSchema, fixture('release-suite.json'))).toBe(true);
+    expect(
+      ajv.validate(releaseSuiteSchema, {
+        ...fixture<Record<string, unknown>>('release-suite.json'),
+        scenarios: [
+          {
+            id: 'unsafe',
+            scenario: 'scenarios//unsafe.json',
+            transports: ['http'],
+            senderDurability: 'persistent',
+            receiverDurability: 'restart_safe',
+            requiredInvariants: ['reproducibility'],
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it.each(validVectors)('accepts $name', ({ now, request, payload, receipt }) => {

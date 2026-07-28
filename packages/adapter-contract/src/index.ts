@@ -3,6 +3,8 @@ export {
   deliveryPayloadSchema,
   deliveryReceiptSchema,
   deliveryRequestSchema,
+  releasePolicySchema,
+  releaseSuiteSchema,
   scenarioResultSchema,
   scenarioSpecSchema,
   type JsonSchema,

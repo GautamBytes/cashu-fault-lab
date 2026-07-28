@@ -7,7 +7,7 @@ import {
 import type { MatrixCaseResult } from './matrix.js';
 
 export interface ReleasePolicy {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly profile: string;
   readonly minimumQualifyingPairs: number;
   readonly requireCrossImplementation: boolean;
@@ -19,6 +19,7 @@ export interface ReleasePolicy {
     readonly receiver: EvidenceTier;
   };
   readonly requiredInvariants: readonly InvariantId[];
+  readonly requiredScenarios: readonly string[];
   readonly acceptedConfidence: readonly EvidenceConfidence[];
 }
 
@@ -59,6 +60,7 @@ const POLICY_KEYS = new Set([
   'minimumDistinctMints',
   'minimumEvidence',
   'requiredInvariants',
+  'requiredScenarios',
   'acceptedConfidence',
 ]);
 const EVIDENCE_KEYS = new Set(['sender', 'receiver']);
@@ -104,7 +106,7 @@ function tier(value: unknown, name: string): EvidenceTier {
 export function validateReleasePolicy(value: unknown): ReleasePolicy {
   const input = record(value, 'Release policy must be an object');
   exactKeys(input, POLICY_KEYS, 'Release policy contains an unknown field');
-  if (input.schemaVersion !== 1) throw new Error('Release policy schemaVersion must be 1');
+  if (input.schemaVersion !== 2) throw new Error('Release policy schemaVersion must be 2');
   if (typeof input.profile !== 'string' || !INVARIANT_ID.test(input.profile)) {
     throw new Error('Release policy profile is invalid');
   }
@@ -125,6 +127,14 @@ export function validateReleasePolicy(value: unknown): ReleasePolicy {
     throw new Error('Release policy requiredInvariants are invalid');
   }
   if (
+    !Array.isArray(input.requiredScenarios) ||
+    input.requiredScenarios.length === 0 ||
+    input.requiredScenarios.some((id) => typeof id !== 'string' || !INVARIANT_ID.test(id)) ||
+    new Set(input.requiredScenarios).size !== input.requiredScenarios.length
+  ) {
+    throw new Error('Release policy requiredScenarios are invalid');
+  }
+  if (
     !Array.isArray(input.acceptedConfidence) ||
     input.acceptedConfidence.length === 0 ||
     input.acceptedConfidence.some(
@@ -135,7 +145,7 @@ export function validateReleasePolicy(value: unknown): ReleasePolicy {
     throw new Error('Release policy acceptedConfidence is invalid');
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     profile: input.profile,
     minimumQualifyingPairs: nonnegativeInteger(
       input.minimumQualifyingPairs,
@@ -153,6 +163,7 @@ export function validateReleasePolicy(value: unknown): ReleasePolicy {
       receiver: tier(evidence.receiver, 'minimumEvidence.receiver'),
     },
     requiredInvariants: input.requiredInvariants as readonly InvariantId[],
+    requiredScenarios: input.requiredScenarios as readonly string[],
     acceptedConfidence: input.acceptedConfidence as readonly EvidenceConfidence[],
   };
 }

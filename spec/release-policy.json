@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "profile": "delivery-v1",
   "minimumQualifyingPairs": 2,
   "requireCrossImplementation": true,
@@ -23,6 +23,21 @@
     "independent-ledger-evidence",
     "reproducibility",
     "no-unsupported-pass"
+  ],
+  "requiredScenarios": [
+    "retry-response-lost",
+    "duplicate-http-storm",
+    "recovery-receiver-restart-after-settlement",
+    "sender-before-proof-reservation",
+    "sender-after-reservation-before-payload-persistence",
+    "sender-after-payload-persistence-before-network-send",
+    "sender-after-send-before-response",
+    "receiver-before-mint-request",
+    "receiver-after-mint-request-before-response",
+    "receiver-after-mint-response-before-output-persistence",
+    "receiver-after-output-persistence-before-merchant-credit",
+    "receiver-after-credit-before-receipt-persistence",
+    "receiver-after-receipt-persistence-before-response-or-outbox"
   ],
   "acceptedConfidence": ["observed", "derived"]
 }

@@ -43,6 +43,11 @@ export {
   type ReleasePolicy,
 } from './release-policy.js';
 export {
+  validateReleaseSuite,
+  type ReleaseSuite,
+  type ReleaseSuiteEntry,
+} from './release-suite.js';
+export {
   ScenarioRunner,
   type DriverSendResult,
   type FailureArtifact,

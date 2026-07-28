@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "profile": "delivery-v1",
+  "scenarios": [
+    {
+      "id": "retry-response-lost",
+      "scenario": "scenarios/retry/response-lost.json",
+      "transports": ["http"],
+      "senderDurability": "persistent",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "stable-duplicate-response",
+        "retry-convergence",
+        "independent-mint-evidence",
+        "independent-ledger-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "duplicate-http-storm",
+      "scenario": "scenarios/concurrency/duplicate-storm.json",
+      "transports": ["http"],
+      "senderDurability": "persistent",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-once-redemption-start",
+        "at-most-one-merchant-credit-per-request",
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "stable-duplicate-response",
+        "independent-ledger-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "recovery-receiver-restart-after-settlement",
+      "scenario": "scenarios/crash-recovery/external-receiver-restart-after-settlement.json",
+      "transports": ["http"],
+      "senderDurability": "persistent",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "stable-duplicate-response",
+        "crash-recovery",
+        "independent-ledger-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "sender-before-proof-reservation",
+      "scenario": "scenarios/crash-recovery/boundaries/sender_before_proof_reservation.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "delivery-identity-immutability",
+        "crash-recovery",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "sender-after-reservation-before-payload-persistence",
+      "scenario": "scenarios/crash-recovery/boundaries/sender_after_reservation_before_payload_persistence.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "delivery-identity-immutability",
+        "crash-recovery",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "sender-after-payload-persistence-before-network-send",
+      "scenario": "scenarios/crash-recovery/boundaries/sender_after_payload_persistence_before_network_send.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "delivery-identity-immutability",
+        "crash-recovery",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "sender-after-send-before-response",
+      "scenario": "scenarios/crash-recovery/boundaries/sender_after_send_before_response.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "delivery-identity-immutability",
+        "stable-duplicate-response",
+        "crash-recovery",
+        "independent-ledger-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "receiver-before-mint-request",
+      "scenario": "scenarios/crash-recovery/boundaries/receiver_before_mint_request.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-once-redemption-start",
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "crash-recovery",
+        "independent-mint-evidence",
+        "independent-ledger-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "receiver-after-mint-request-before-response",
+      "scenario": "scenarios/crash-recovery/boundaries/receiver_after_mint_request_before_response.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-once-redemption-start",
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "no-false-rejection-after-possible-consumption",
+        "crash-recovery",
+        "independent-mint-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "receiver-after-mint-response-before-output-persistence",
+      "scenario": "scenarios/crash-recovery/boundaries/receiver_after_mint_response_before_output_persistence.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-once-redemption-start",
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "no-premature-settlement",
+        "no-false-rejection-after-possible-consumption",
+        "crash-recovery",
+        "independent-mint-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "receiver-after-output-persistence-before-merchant-credit",
+      "scenario": "scenarios/crash-recovery/boundaries/receiver_after_output_persistence_before_merchant_credit.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-once-redemption-start",
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "no-premature-settlement",
+        "crash-recovery",
+        "independent-mint-evidence",
+        "independent-ledger-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "receiver-after-credit-before-receipt-persistence",
+      "scenario": "scenarios/crash-recovery/boundaries/receiver_after_credit_before_receipt_persistence.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "no-premature-settlement",
+        "monotonic-receipts",
+        "crash-recovery",
+        "independent-ledger-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "receiver-after-receipt-persistence-before-response-or-outbox",
+      "scenario": "scenarios/crash-recovery/boundaries/receiver_after_receipt_persistence_before_response_or_outbox.json",
+      "transports": ["http"],
+      "senderDurability": "restart_safe",
+      "receiverDurability": "restart_safe",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "monotonic-receipts",
+        "stable-duplicate-response",
+        "crash-recovery",
+        "independent-ledger-evidence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    }
+  ]
+}

@@ -20,7 +20,7 @@ const required = [
 ] as const;
 
 const policy: ReleasePolicy = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   profile: 'delivery-v1',
   minimumQualifyingPairs: 2,
   requireCrossImplementation: true,
@@ -29,6 +29,7 @@ const policy: ReleasePolicy = {
   minimumDistinctMints: 2,
   minimumEvidence: { sender: 'T1', receiver: 'T3' },
   requiredInvariants: required,
+  requiredScenarios: ['retry-response-lost'],
   acceptedConfidence: ['observed', 'derived'],
 };
 
@@ -145,6 +146,18 @@ describe('release policy', () => {
         requiredInvariants: ['not-a-real-invariant'],
       }),
     ).toThrow(/requiredInvariants/u);
+    expect(() =>
+      validateReleasePolicy({
+        ...repositoryPolicy,
+        requiredScenarios: ['retry-response-lost', 'retry-response-lost'],
+      }),
+    ).toThrow(/requiredScenarios/u);
+    expect(() =>
+      validateReleasePolicy({
+        ...repositoryPolicy,
+        requiredScenarios: ['Unsafe Scenario'],
+      }),
+    ).toThrow(/requiredScenarios/u);
   });
 
   it('accepts two independent cross-language pairs backed by two mints', () => {
