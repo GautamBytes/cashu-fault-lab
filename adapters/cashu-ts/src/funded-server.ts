@@ -9,6 +9,7 @@ import { FundedCashuTsWallet } from './funded-wallet.js';
 import { CashuTsHttpTransport } from './http-transport.js';
 import { CashuTsCompositeTransport, CashuTsNostrTransport } from './nostr-transport.js';
 import { buildCashuTsAdapterServer, type CashuTsAdapterServerOptions } from './server.js';
+import type { CrashControl } from './postgres-crash-checkpoint.js';
 
 export interface FundedCashuTsAdapterServerOptions {
   readonly mintUrl: string;
@@ -29,6 +30,8 @@ export interface FundedCashuTsAdapterServerOptions {
   readonly nostrPollIntervalMs?: number;
   readonly senderNostrPollAttempts?: number;
   readonly senderNostrPollDelayMs?: number;
+  readonly crashControl?: CrashControl;
+  readonly resumeRunId?: string;
 }
 
 export async function buildFundedCashuTsAdapterServer(
@@ -64,8 +67,14 @@ export async function buildFundedCashuTsAdapterServer(
     transport,
     ...(options.store === undefined ? {} : { store: options.store }),
     supportedTransports: options.senderNostrPrivateKey === undefined ? ['http'] : ['http', 'nostr'],
+    ...(options.crashControl === undefined
+      ? {}
+      : { crashCheckpoint: options.crashControl }),
     now,
   });
+  if (options.resumeRunId !== undefined) {
+    await sender.resume(options.resumeRunId);
+  }
   const receiverEnabled =
     options.proofClaimKey !== undefined ||
     options.paymentTarget !== undefined ||
@@ -94,6 +103,9 @@ export async function buildFundedCashuTsAdapterServer(
       ...(options.nostrPollIntervalMs === undefined
         ? {}
         : { nostrPollIntervalMs: options.nostrPollIntervalMs }),
+      ...(options.crashControl === undefined
+        ? {}
+        : { crashCheckpoint: options.crashControl }),
       now,
     });
   }
@@ -109,6 +121,7 @@ export async function buildFundedCashuTsAdapterServer(
     operations,
     ...(options.controlToken === undefined ? {} : { controlToken: options.controlToken }),
     ...(options.testMode === undefined ? {} : { testMode: options.testMode }),
+    ...(options.crashControl === undefined ? {} : { crashControl: options.crashControl }),
   };
   const app = await buildCashuTsAdapterServer(serverOptions);
   receiver?.startNostr();

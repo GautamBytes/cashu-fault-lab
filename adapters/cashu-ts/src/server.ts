@@ -10,6 +10,7 @@ import {
   validateAdapterRequest,
   validateAdapterResponse,
   type AdapterCapabilities,
+  type CrashArmInput,
   type CreateRequestInput,
   type DeliveryReceiptView,
   type LedgerCreditView,
@@ -75,6 +76,7 @@ export interface CashuTsAdapterServerOptions {
   readonly operations?: CashuTsAdapterOperations;
   readonly controlToken?: string;
   readonly testMode?: boolean;
+  readonly crashControl?: import('./postgres-crash-checkpoint.js').CrashControl;
 }
 
 function validateRequest(
@@ -198,6 +200,9 @@ export async function buildCashuTsAdapterServer(
   if (!options.testMode && !options.controlToken) {
     throw new Error('A control token is required outside explicit test mode');
   }
+  if (options.crashControl !== undefined && !options.controlToken) {
+    throw new Error('Crash controls require an adapter control token');
+  }
   const app = Fastify({ logger: false, bodyLimit: 16_384 });
   app.setErrorHandler<FastifyError>((error, _request, reply) => {
     if (reply.sent) return;
@@ -217,7 +222,7 @@ export async function buildCashuTsAdapterServer(
   let requestOrdinal = 0;
 
   app.addHook('preHandler', async (request, reply) => {
-    if (options.testMode) return;
+    if (options.testMode && !request.url.startsWith('/v1/test/crashes')) return;
     if (request.url !== '/v1' && !request.url.startsWith('/v1/')) return;
     if (!secureEqual(request.headers.authorization ?? '', `Bearer ${options.controlToken!}`)) {
       await reply.code(401).header('WWW-Authenticate', 'Bearer').send({
@@ -228,7 +233,14 @@ export async function buildCashuTsAdapterServer(
   });
 
   app.get('/v1/capabilities', async () => {
-    const value = (await options.operations?.capabilities?.()) ?? capabilities;
+    const discovered = (await options.operations?.capabilities?.()) ?? capabilities;
+    const value: AdapterCapabilities =
+      options.crashControl === undefined
+        ? discovered
+        : {
+            ...discovered,
+            testControls: { crashBoundaries: options.crashControl.boundaries },
+          };
     assertResponse('capabilities', value);
     return value;
   });
@@ -238,8 +250,29 @@ export async function buildCashuTsAdapterServer(
     seed = (request.body as { readonly seed: string }).seed;
     requestOrdinal = 0;
     await options.operations?.reset?.(seed);
+    await options.crashControl?.reset(seed);
     const response = { ok: true } as const;
     assertResponse('reset', response);
+    return response;
+  });
+
+  app.post<{ Body: unknown }>('/v1/test/crashes', async (request, reply) => {
+    if (options.crashControl === undefined) {
+      return unavailable(reply, 'Crash controls are disabled');
+    }
+    if (!validateRequest('armCrash', request.body, reply)) return reply;
+    await options.crashControl.arm(request.body as CrashArmInput);
+    const response = { ok: true } as const;
+    assertResponse('armCrash', response);
+    return response;
+  });
+
+  app.get('/v1/test/crashes', async (_request, reply) => {
+    if (options.crashControl === undefined) {
+      return unavailable(reply, 'Crash controls are disabled');
+    }
+    const response = await options.crashControl.status();
+    assertResponse('crashStatus', response);
     return response;
   });
 

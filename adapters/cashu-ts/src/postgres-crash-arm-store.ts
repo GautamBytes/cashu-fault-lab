@@ -19,6 +19,7 @@ export interface CrashArmStore {
   hit(input: Pick<CrashArm, 'runId' | 'component' | 'boundary'>): Promise<boolean>;
   list(runId: string): Promise<readonly CrashArm[]>;
   reset(runId: string): Promise<void>;
+  activeRun(): Promise<string | undefined>;
 }
 
 interface CrashArmRow extends QueryResultRow {
@@ -67,6 +68,13 @@ function databaseErrorCode(value: unknown): string | undefined {
 }
 
 export async function migratePostgresCrashArmStore(pool: Pool): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cashu_test_crash_sessions (
+      tenant_id text PRIMARY KEY,
+      run_id text NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS cashu_test_crash_arms (
       tenant_id text NOT NULL,
@@ -159,9 +167,34 @@ export class PostgresCrashArmStore implements CrashArmStore {
 
   async reset(runIdValue: string): Promise<void> {
     const runId = scopedId(runIdValue, 'Crash arm run ID');
-    await this.#pool.query(
-      `DELETE FROM cashu_test_crash_arms WHERE tenant_id = $1 AND run_id = $2`,
-      [this.#tenantId, runId],
+    const client = await this.#pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `DELETE FROM cashu_test_crash_arms WHERE tenant_id = $1 AND run_id = $2`,
+        [this.#tenantId, runId],
+      );
+      await client.query(
+        `INSERT INTO cashu_test_crash_sessions (tenant_id, run_id)
+         VALUES ($1, $2)
+         ON CONFLICT (tenant_id) DO UPDATE
+         SET run_id = EXCLUDED.run_id, updated_at = now()`,
+        [this.#tenantId, runId],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async activeRun(): Promise<string | undefined> {
+    const result = await this.#pool.query<{ readonly run_id: string }>(
+      `SELECT run_id FROM cashu_test_crash_sessions WHERE tenant_id = $1`,
+      [this.#tenantId],
     );
+    return result.rows[0]?.run_id;
   }
 }

@@ -73,6 +73,13 @@ export interface CashuTsStoredDelivery {
   readonly settledMarked: boolean;
 }
 
+export interface CashuTsStoredReservation {
+  readonly deliveryId: string;
+  readonly requestFingerprint: string;
+  readonly reserved: ReservedCashuTsProofs;
+  readonly proofEvidence: ProofEvidenceView;
+}
+
 export type CashuTsDeliveryStoreDurability = 'process-local' | 'persistent';
 
 export interface CashuTsDeliveryStore {
@@ -81,6 +88,8 @@ export interface CashuTsDeliveryStore {
   get(deliveryId: string): Promise<CashuTsStoredDelivery | undefined>;
   put(record: CashuTsStoredDelivery): Promise<void>;
   list(): Promise<readonly CashuTsStoredDelivery[]>;
+  getReservation?(deliveryId: string): Promise<CashuTsStoredReservation | undefined>;
+  putReservation?(reservation: CashuTsStoredReservation): Promise<void>;
 }
 
 function cloneRecord(record: CashuTsStoredDelivery): CashuTsStoredDelivery {
@@ -106,9 +115,11 @@ function cloneRecord(record: CashuTsStoredDelivery): CashuTsStoredDelivery {
 export class MemoryCashuTsDeliveryStore implements CashuTsDeliveryStore {
   readonly durability = 'process-local' as const;
   readonly #records = new Map<string, CashuTsStoredDelivery>();
+  readonly #reservations = new Map<string, CashuTsStoredReservation>();
 
   async reset(): Promise<void> {
     this.#records.clear();
+    this.#reservations.clear();
   }
 
   async get(deliveryId: string): Promise<CashuTsStoredDelivery | undefined> {
@@ -122,6 +133,25 @@ export class MemoryCashuTsDeliveryStore implements CashuTsDeliveryStore {
 
   async list(): Promise<readonly CashuTsStoredDelivery[]> {
     return [...this.#records.values()].map(cloneRecord);
+  }
+
+  async getReservation(deliveryId: string): Promise<CashuTsStoredReservation | undefined> {
+    const value = this.#reservations.get(deliveryId);
+    return value === undefined ? undefined : structuredClone(value);
+  }
+
+  async putReservation(reservation: CashuTsStoredReservation): Promise<void> {
+    const previous = this.#reservations.get(reservation.deliveryId);
+    if (
+      previous !== undefined &&
+      previous.requestFingerprint !== reservation.requestFingerprint
+    ) {
+      throw new Error('Cashu delivery reservation identity conflicts');
+    }
+    this.#reservations.set(
+      reservation.deliveryId,
+      structuredClone(previous ?? reservation),
+    );
   }
 }
 
@@ -308,6 +338,14 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
     await this.#wallet.reset(seed);
   }
 
+  async resume(seed: string): Promise<void> {
+    if (seed.length === 0) throw new Error('Cashu funded adapter seed is required');
+    this.#seed = seed;
+    this.#ordinal = 0;
+    this.#inflight.clear();
+    await this.#wallet.reset(seed);
+  }
+
   async send(input: SendPaymentInput): Promise<DeliveryReceiptView> {
     const parsed = parseRequest(input.request);
     const transports = parsed.transports.filter((transport) =>
@@ -357,20 +395,37 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
       throw new Error('Delivery ID is already bound to another payment request');
     }
     if (record === undefined) {
-      if (this.#seed.length === 0) throw new Error('Cashu funded adapter must be reset first');
       const now = this.#now();
       if (!Number.isSafeInteger(now) || now < 0) throw new Error('Cashu adapter time is invalid');
       await this.#crashCheckpoint.hit('sender_before_proof_reservation', deliveryId);
-      const reserved = await this.#wallet.reserve(
-        request.amount,
-        request.unit,
-        request.mints,
-        deliveryId,
-      );
+      let reservation = await this.#store.getReservation?.(deliveryId);
+      if (
+        reservation !== undefined &&
+        reservation.requestFingerprint !== requestFingerprint
+      ) {
+        throw new Error('Delivery ID is already bound to another payment request');
+      }
+      if (reservation === undefined) {
+        if (this.#seed.length === 0) throw new Error('Cashu funded adapter must be reset first');
+        const reserved = await this.#wallet.reserve(
+          request.amount,
+          request.unit,
+          request.mints,
+          deliveryId,
+        );
+        reservation = {
+          deliveryId,
+          requestFingerprint,
+          reserved,
+          proofEvidence: await this.#wallet.evidence(deliveryId),
+        };
+        await this.#store.putReservation?.(reservation);
+      }
       await this.#crashCheckpoint.hit(
         'sender_after_reservation_before_payload_persistence',
         deliveryId,
       );
+      const reserved = reservation.reserved;
       const mint = normalizeMintUrl(reserved.mint);
       if (!request.mints.includes(mint)) {
         throw new Error('Cashu wallet reserved proofs from an unrequested mint');
@@ -389,7 +444,7 @@ export class FundedCashuTsOperations implements CashuTsAdapterOperations {
         },
       };
       const payloadBytes = serializeDeliveryPayload(payload);
-      const proofEvidence = await this.#wallet.evidence(deliveryId);
+      const proofEvidence = reservation.proofEvidence;
       record = {
         deliveryId,
         requestId: request.id,

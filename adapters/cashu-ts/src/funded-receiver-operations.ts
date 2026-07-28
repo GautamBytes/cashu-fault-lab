@@ -17,6 +17,7 @@ import {
   normalizeMintUrl,
   parseProtocolId,
   serializeDeliveryReceipt,
+  type CrashCheckpoint,
   type DeliveryReceiptWire,
 } from '@cashu-fault-lab/delivery-core';
 import {
@@ -58,6 +59,7 @@ export interface FundedCashuTsReceiverOperationsOptions {
   readonly nostrRelayUrls?: readonly string[];
   readonly nostrTimeoutMs?: number;
   readonly nostrPollIntervalMs?: number;
+  readonly crashCheckpoint?: CrashCheckpoint;
 }
 
 export interface FundedCashuTsDualRoleOperationsOptions {
@@ -155,6 +157,9 @@ export class FundedCashuTsReceiverOperations {
         }),
       verifier: proofVerifier(options),
       now: options.now,
+      ...(options.crashCheckpoint === undefined
+        ? {}
+        : { crashCheckpoint: options.crashCheckpoint }),
     };
     if (
       (options.receiverNostrPrivateKey === undefined) !==

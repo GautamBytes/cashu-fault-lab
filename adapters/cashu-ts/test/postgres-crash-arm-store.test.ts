@@ -61,5 +61,7 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')('PostgresCrashArmStore', (
     await first.reset('run-a');
     expect(await first.list('run-a')).toEqual([]);
     expect(await otherTenant.list('run-a')).toHaveLength(1);
+    expect(await first.activeRun()).toBe('run-a');
+    expect(await otherTenant.activeRun()).toBeUndefined();
   });
 });

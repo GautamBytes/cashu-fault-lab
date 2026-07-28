@@ -235,5 +235,60 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')(
       expect(replacementTransport.bodies).toHaveLength(1);
       expect(Buffer.compare(firstTransport.bodies[0]!, replacementTransport.bodies[0]!)).toBe(0);
     });
+
+    it('persists a proof reservation before the reservation crash boundary', async () => {
+      if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+      const keyRing = parseCashuTsSenderStateKeys({
+        activeKeyVersion: 1,
+        encodedKeys: `1:${Buffer.alloc(32, 7).toString('base64url')}`,
+      });
+      const store = new PostgresCashuTsSenderStore({
+        pool,
+        keyRing,
+        runId: 'sender-reservation-crash',
+        tenantId: 'cashu-ts-postgres-reservation-e2e',
+      });
+      const wallet = new Wallet();
+      let crashed = false;
+      const first = new FundedCashuTsOperations({
+        wallet,
+        transport: new Transport(),
+        store,
+        crashCheckpoint: {
+          async hit(boundary): Promise<void> {
+            if (
+              boundary === 'sender_after_reservation_before_payload_persistence' &&
+              !crashed
+            ) {
+              crashed = true;
+              throw new Error('simulated process crash');
+            }
+          },
+        },
+        now: () => now,
+      });
+      await first.reset('reservation-crash');
+      await expect(
+        first.send({ request: encodedRequest(), deliveryId }),
+      ).rejects.toThrow('simulated process crash');
+
+      const replacementTransport = new Transport();
+      const replacement = new FundedCashuTsOperations({
+        wallet: new ReplacementWallet(),
+        transport: replacementTransport,
+        store: new PostgresCashuTsSenderStore({
+          pool,
+          keyRing,
+          runId: 'sender-reservation-crash',
+          tenantId: 'cashu-ts-postgres-reservation-e2e',
+        }),
+        now: () => now,
+      });
+      await expect(
+        replacement.send({ request: encodedRequest(), deliveryId }),
+      ).resolves.toMatchObject({ status: 'settled' });
+      expect(wallet.reserveCalls).toBe(1);
+      expect(replacementTransport.bodies).toHaveLength(1);
+    });
   },
 );

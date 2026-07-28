@@ -2,6 +2,14 @@
 import { buildFundedCashuTsAdapterServer } from './funded-server.js';
 import { createPostgresCashuTsReceiverStore } from './postgres-receiver-store.js';
 import {
+  PostgresCrashCheckpoint,
+  SigkillProcessTerminator,
+} from './postgres-crash-checkpoint.js';
+import {
+  PostgresCrashArmStore,
+  migratePostgresCrashArmStore,
+} from './postgres-crash-arm-store.js';
+import {
   createPostgresCashuTsSenderStore,
   parseCashuTsSenderStateKeys,
 } from './postgres-sender-store.js';
@@ -98,6 +106,31 @@ const durableReceiver =
           ? {}
           : { tenantId: process.env.CFL_CASHU_TS_RECEIVER_TENANT_ID }),
       });
+const crashControlsEnabled = process.env.CFL_CASHU_TS_TEST_CRASH_CONTROL === '1';
+if (
+  process.env.CFL_CASHU_TS_TEST_CRASH_CONTROL !== undefined &&
+  process.env.CFL_CASHU_TS_TEST_CRASH_CONTROL !== '0' &&
+  process.env.CFL_CASHU_TS_TEST_CRASH_CONTROL !== '1'
+) {
+  throw new Error('CFL_CASHU_TS_TEST_CRASH_CONTROL must be 0 or 1');
+}
+if (crashControlsEnabled && durableSender === undefined) {
+  throw new Error('Crash controls require the durable PostgreSQL sender store');
+}
+const crashControl =
+  crashControlsEnabled && durableSender !== undefined
+    ? new PostgresCrashCheckpoint({
+        store: new PostgresCrashArmStore({
+          pool: durableSender.pool,
+          tenantId: process.env.CFL_CASHU_TS_CRASH_TENANT_ID ?? 'cashu-ts-crash',
+        }),
+        terminator: new SigkillProcessTerminator(),
+      })
+    : undefined;
+if (crashControlsEnabled && durableSender !== undefined) {
+  await migratePostgresCrashArmStore(durableSender.pool);
+  await crashControl?.initialize();
+}
 const app = await buildFundedCashuTsAdapterServer({
   mintUrl: required('CFL_CASHU_TS_MINT_URL'),
   controlToken: required('CFL_CASHU_TS_CONTROL_TOKEN'),
@@ -113,6 +146,10 @@ const app = await buildFundedCashuTsAdapterServer({
   ...(senderNostrPrivateKey === undefined ? {} : { senderNostrPrivateKey }),
   ...(receiverNostrPrivateKey === undefined ? {} : { receiverNostrPrivateKey }),
   ...(nostrRelayUrls === undefined ? {} : { nostrRelayUrls }),
+  ...(crashControl === undefined ? {} : { crashControl }),
+  ...(crashControl?.activeRunId() === undefined
+    ? {}
+    : { resumeRunId: crashControl.activeRunId()! }),
 });
 
 const close = async (): Promise<void> => {
