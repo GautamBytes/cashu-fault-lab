@@ -16,6 +16,29 @@ export interface ScenarioGroup {
   scenarios: ScenarioCard[];
 }
 
+interface ScenarioSourceLocation {
+  family: string;
+  slug: string;
+  sourcePath: string;
+}
+
+export function scenarioSourceLocation(relativePath: string): ScenarioSourceLocation {
+  const pathSegments = relativePath.split('/');
+  const family = pathSegments.length > 1 ? pathSegments[0] : undefined;
+
+  if (!family) {
+    throw new Error(
+      `Scenario scenarios/${relativePath} must belong to a top-level family directory`,
+    );
+  }
+
+  return {
+    family,
+    slug: relativePath.replace(/\.json$/, ''),
+    sourcePath: `scenarios/${relativePath}`,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -50,28 +73,23 @@ async function discoverJsonFiles(directory: string): Promise<string[]> {
 
 async function parseScenario(scenariosRoot: string, filePath: string): Promise<ScenarioCard> {
   const relativePath = relative(scenariosRoot, filePath).split(sep).join('/');
-  const sourcePath = `scenarios/${relativePath}`;
+  const location = scenarioSourceLocation(relativePath);
   const parsed: unknown = JSON.parse(await readFile(filePath, 'utf8'));
 
   if (!isRecord(parsed)) {
-    throw new Error(`Scenario ${sourcePath} must contain a JSON object`);
+    throw new Error(`Scenario ${location.sourcePath} must contain a JSON object`);
   }
   if (!Array.isArray(parsed.commands)) {
-    throw new Error(`Scenario ${sourcePath} must contain a commands array`);
-  }
-
-  const [family] = relativePath.split('/');
-  if (!family) {
-    throw new Error(`Scenario ${sourcePath} must belong to a top-level family`);
+    throw new Error(`Scenario ${location.sourcePath} must contain a commands array`);
   }
 
   return {
-    slug: relativePath.replace(/\.json$/, ''),
-    name: requireNonEmptyString(parsed, 'name', sourcePath),
-    description: requireNonEmptyString(parsed, 'description', sourcePath),
-    family,
+    slug: location.slug,
+    name: requireNonEmptyString(parsed, 'name', location.sourcePath),
+    description: requireNonEmptyString(parsed, 'description', location.sourcePath),
+    family: location.family,
     commandCount: parsed.commands.length,
-    sourceUrl: sourceUrl(sourcePath, 'view'),
+    sourceUrl: sourceUrl(location.sourcePath, 'view'),
   };
 }
 

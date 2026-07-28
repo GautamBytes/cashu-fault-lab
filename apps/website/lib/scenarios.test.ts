@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { getScenarioGroups } from './scenarios';
+import { getScenarioGroups, scenarioSourceLocation } from './scenarios';
 
 describe('getScenarioGroups', () => {
+  it('rejects a root-level JSON path without a family directory', () => {
+    expect(() => scenarioSourceLocation('root-level.json')).toThrow(
+      'must belong to a top-level family directory',
+    );
+  });
+
   it('discovers and groups every checked-in scenario', async () => {
     const groups = await getScenarioGroups();
     const all = groups.flatMap((group) => group.scenarios);

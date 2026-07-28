@@ -6,36 +6,45 @@ export const metadata: Metadata = {
   description: 'How Cashu Fault Lab separates delivery faults from independent recovery evidence.',
 };
 
-const stages = [
+const deliveryStages = [
   {
+    id: 'sender',
     marker: 'S',
     title: 'Durable sender',
     text: 'Reserves proofs, persists one immutable payload, and recovers the same delivery identity.',
   },
   {
+    id: 'faults',
     marker: '×',
     title: 'HTTP/Nostr faults',
     text: 'Drops, delays, duplicates, and reorders lab-controlled transport events.',
   },
   {
+    id: 'receiver',
     marker: 'R',
     title: 'Durable receiver',
     text: 'Persists intent and receipts across crashes without granting itself a pass.',
   },
+] as const;
+
+const evidenceBranches = [
   {
+    className: 'senderBranch' as const,
+    describedBy: 'sender-title',
+    id: 'exact-payload',
+    marker: 'P',
+    origin: 'From durable sender',
+    title: 'Exact payload',
+    text: 'Preserves the immutable payload bytes and delivery identity used for every retry.',
+  },
+  {
+    className: 'receiverBranch' as const,
+    describedBy: 'receiver-title',
+    id: 'mint-recovery',
     marker: 'M',
+    origin: 'From durable receiver',
     title: 'Mint recovery',
     text: 'Reconciles possible proof consumption against independent mint observations.',
-  },
-  {
-    marker: 'O',
-    title: 'Independent oracle',
-    text: 'Evaluates safety and liveness from authorities outside the implementation under test.',
-  },
-  {
-    marker: 'E',
-    title: 'JSON/JUnit/HTML evidence',
-    text: 'Emits portable results with unsupported claims kept explicitly not observable.',
   },
 ] as const;
 
@@ -62,22 +71,101 @@ export default function ArchitecturePage() {
 
       <section aria-labelledby="flow-title" className={styles.flowSection}>
         <header className={styles.sectionIntro}>
-          <p className={styles.eyebrow}>Six-stage evidence path</p>
+          <p className={styles.eyebrow}>Branched evidence path</p>
           <h2 id="flow-title">One delivery. Separate authorities.</h2>
         </header>
-        <ol aria-label="Evidence architecture flow" className={styles.architectureFlow}>
-          {stages.map((stage, index) => (
-            <li className={styles.flowStage} key={stage.title}>
-              <span className={styles.flowMarker} aria-hidden="true">
-                {stage.marker}
+        <figure
+          aria-describedby="topology-caption"
+          aria-labelledby="flow-title"
+          className={styles.topologyFigure}
+        >
+          <div
+            aria-label="Cashu delivery and evidence topology"
+            className={styles.topologyDiagram}
+            role="group"
+          >
+            <ol aria-label="Primary delivery path" className={styles.deliveryPath}>
+              {deliveryStages.map((stage) => (
+                <li className={styles.pathStage} key={stage.id}>
+                  <article aria-labelledby={`${stage.id}-title`} className={styles.stageCard}>
+                    <span aria-hidden="true" className={styles.flowMarker}>
+                      {stage.marker}
+                    </span>
+                    <span className={styles.stageKicker}>Delivery path</span>
+                    <h3 id={`${stage.id}-title`}>{stage.title}</h3>
+                    <p>{stage.text}</p>
+                  </article>
+                </li>
+              ))}
+            </ol>
+
+            <ul
+              aria-label="Evidence branches converging at independent oracle"
+              className={styles.branchList}
+            >
+              {evidenceBranches.map((branch) => (
+                <li className={styles[branch.className]} key={branch.id}>
+                  <article
+                    aria-describedby={branch.describedBy}
+                    aria-labelledby={`${branch.id}-title`}
+                    className={`${styles.stageCard} ${styles.branchCard}`}
+                  >
+                    <span className={styles.branchOrigin}>
+                      {branch.origin} <span aria-hidden="true">↓</span>
+                    </span>
+                    <span aria-hidden="true" className={styles.flowMarker}>
+                      {branch.marker}
+                    </span>
+                    <h3 id={`${branch.id}-title`}>{branch.title}</h3>
+                    <p>{branch.text}</p>
+                  </article>
+                </li>
+              ))}
+            </ul>
+
+            <div aria-hidden="true" className={styles.convergenceLines}>
+              <span>Both evidence branches converge</span>
+            </div>
+
+            <article
+              aria-describedby="exact-payload-title mint-recovery-title"
+              aria-labelledby="oracle-title"
+              className={`${styles.stageCard} ${styles.oracleStage}`}
+            >
+              <span aria-hidden="true" className={styles.flowMarker}>
+                O
               </span>
-              <span className={styles.flowNumber}>{String(index + 1).padStart(2, '0')}</span>
-              <h3>{stage.title}</h3>
-              <p>{stage.text}</p>
-              {index === 0 ? <span className={styles.payloadLabel}>exact payload →</span> : null}
-            </li>
-          ))}
-        </ol>
+              <span className={styles.stageKicker}>Convergence point</span>
+              <h3 id="oracle-title">Independent oracle</h3>
+              <p>
+                Evaluates safety and liveness from authorities outside the implementation under
+                test.
+              </p>
+            </article>
+
+            <div aria-hidden="true" className={styles.oracleOutputLine}>
+              <span>evaluated result</span>
+            </div>
+
+            <article
+              aria-describedby="oracle-title"
+              aria-labelledby="evidence-title"
+              className={`${styles.stageCard} ${styles.evidenceStage}`}
+            >
+              <span aria-hidden="true" className={styles.flowMarker}>
+                E
+              </span>
+              <span className={styles.stageKicker}>Evidence output</span>
+              <h3 id="evidence-title">JSON/JUnit/HTML evidence</h3>
+              <p>Emits portable results with unsupported claims kept explicitly not observable.</p>
+            </article>
+          </div>
+          <figcaption className={styles.topologyCaption} id="topology-caption">
+            Durable sender → HTTP/Nostr faults → durable receiver. Sender payload evidence and
+            receiver mint-recovery evidence branch downward, converge at the independent oracle,
+            then flow to JSON, JUnit, and HTML evidence.
+          </figcaption>
+        </figure>
       </section>
 
       <section aria-labelledby="separation-title" className={styles.separationSection}>

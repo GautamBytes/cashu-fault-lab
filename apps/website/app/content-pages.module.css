@@ -70,8 +70,9 @@
 .cardMeta,
 .heroReadout dt,
 .groupHeading > span,
-.flowNumber,
-.payloadLabel,
+.stageKicker,
+.branchOrigin,
+.topologyCaption,
 .listLabel,
 .statusStamp,
 .gateGrid > article > span {
@@ -345,40 +346,46 @@
   margin: 1.4rem 0 0;
 }
 
-.architectureFlow {
+.topologyFigure {
+  margin: 4rem 0 0;
+}
+
+.topologyDiagram {
+  border: 1px solid var(--purple-500);
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.deliveryPath,
+.branchList {
   display: grid;
-  gap: 0;
+  gap: clamp(1.5rem, 5vw, 4rem);
   grid-template-columns: repeat(3, minmax(0, 1fr));
   list-style: none;
-  margin: 4rem 0 0;
+  margin: 0;
   padding: 0;
+}
+
+.pathStage {
+  min-width: 0;
   position: relative;
 }
 
-.architectureFlow::before {
-  border-left: 2px solid var(--purple-500);
-  border-top: 2px solid var(--purple-500);
-  content: '';
-  inset: 2rem 7% auto;
-  pointer-events: none;
+.pathStage:not(:last-child)::after {
+  color: var(--sand-500);
+  content: '→';
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 1.2rem;
   position: absolute;
-  transform: skewX(-18deg);
+  right: calc(clamp(1.5rem, 5vw, 4rem) * -0.67);
+  top: 50%;
+  transform: translate(50%, -50%);
 }
 
-.flowStage {
+.stageCard {
   border: 1px solid var(--purple-500);
-  min-height: 18rem;
+  min-height: 16rem;
   padding: 1.2rem;
   position: relative;
-}
-
-.flowStage:nth-child(3n + 2),
-.flowStage:nth-child(3n + 3) {
-  border-left: 0;
-}
-
-.flowStage:nth-child(n + 4) {
-  border-top: 0;
 }
 
 .flowMarker {
@@ -396,14 +403,15 @@
   z-index: 1;
 }
 
-.flowNumber {
+.stageKicker,
+.branchOrigin {
   color: var(--sand-500);
   display: block;
   font-size: 0.64rem;
   margin: 2.5rem 0 0.8rem;
 }
 
-.flowStage h3 {
+.stageCard h3 {
   font-family: 'Archivo Black', sans-serif;
   font-size: 1.45rem;
   letter-spacing: -0.045em;
@@ -411,19 +419,156 @@
   margin: 0;
 }
 
-.flowStage p {
+.stageCard p {
   color: var(--sand-300);
   font-size: 0.88rem;
   line-height: 1.55;
   margin: 1rem 0 0;
 }
 
-.payloadLabel {
+.branchList {
+  margin-top: 4rem;
+}
+
+.senderBranch {
+  grid-column: 1;
+}
+
+.receiverBranch {
+  grid-column: 3;
+}
+
+.senderBranch,
+.receiverBranch {
+  position: relative;
+}
+
+.senderBranch::before,
+.receiverBranch::before {
+  border-left: 2px solid var(--purple-500);
   color: var(--sand-500);
-  font-size: 0.62rem;
+  content: '↓';
+  font-family: 'IBM Plex Mono', monospace;
+  height: 4rem;
+  left: 50%;
+  padding-left: 0.45rem;
   position: absolute;
-  right: 1rem;
-  top: 1.7rem;
+  top: -4rem;
+}
+
+.branchCard {
+  border-style: dashed;
+  min-height: 13rem;
+}
+
+.branchCard .flowMarker {
+  position: absolute;
+  right: 1.2rem;
+  top: 1.2rem;
+}
+
+.branchOrigin {
+  margin-top: 0;
+  padding-right: 3rem;
+}
+
+.convergenceLines {
+  border-bottom: 2px solid var(--purple-500);
+  border-left: 2px solid var(--purple-500);
+  border-right: 2px solid var(--purple-500);
+  height: 4rem;
+  margin: 0 calc(100% / 6);
+  position: relative;
+}
+
+.convergenceLines::after {
+  border-left: 2px solid var(--purple-500);
+  bottom: -2rem;
+  content: '↓';
+  color: var(--sand-500);
+  font-family: 'IBM Plex Mono', monospace;
+  height: 2rem;
+  left: 50%;
+  padding-left: 0.45rem;
+  position: absolute;
+}
+
+.convergenceLines span,
+.oracleOutputLine span {
+  background: var(--purple-950);
+  color: var(--sand-500);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
+  left: 50%;
+  padding: 0 0.65rem;
+  position: absolute;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.convergenceLines span {
+  bottom: -0.45rem;
+}
+
+.oracleStage,
+.evidenceStage {
+  margin-left: auto;
+  margin-right: auto;
+  width: min(31rem, 58%);
+}
+
+.oracleStage {
+  background: var(--sand-300);
+  border-color: var(--sand-300);
+  color: var(--purple-950);
+  margin-top: 2rem;
+  min-height: 12rem;
+}
+
+.oracleStage .flowMarker {
+  border-color: var(--sand-300);
+}
+
+.oracleStage .stageKicker,
+.oracleStage p {
+  color: var(--purple-700);
+}
+
+.oracleOutputLine {
+  border-left: 2px solid var(--sand-500);
+  height: 4rem;
+  margin: 0 auto;
+  position: relative;
+  width: 0;
+}
+
+.oracleOutputLine::after {
+  bottom: -0.5rem;
+  color: var(--sand-500);
+  content: '↓';
+  font-family: 'IBM Plex Mono', monospace;
+  left: -0.42rem;
+  position: absolute;
+}
+
+.oracleOutputLine span {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.evidenceStage {
+  border-style: double;
+  border-width: 3px;
+  min-height: 12rem;
+}
+
+.topologyCaption {
+  border-bottom: 1px solid var(--purple-500);
+  color: var(--sand-500);
+  font-size: 0.68rem;
+  line-height: 1.6;
+  padding: 1rem 0;
 }
 
 .separationSection,
@@ -627,23 +772,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .architectureFlow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .flowStage:nth-child(3n + 2),
-  .flowStage:nth-child(3n + 3) {
-    border-left: 1px solid var(--purple-500);
-  }
-
-  .flowStage:nth-child(even) {
-    border-left: 0;
-  }
-
-  .flowStage:nth-child(n + 3) {
-    border-top: 0;
-  }
-
   .sourceRail {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -680,7 +808,6 @@
 
   .scenarioGrid,
   .gateGrid,
-  .architectureFlow,
   .separationSection,
   .blockersSection,
   .sourceRail {
@@ -691,14 +818,76 @@
     min-height: 24rem;
   }
 
-  .flowStage:nth-child(even),
-  .flowStage:nth-child(3n + 2),
-  .flowStage:nth-child(3n + 3) {
-    border-left: 1px solid var(--purple-500);
+  .topologyDiagram {
+    padding: 0.8rem;
   }
 
-  .flowStage:nth-child(n + 2) {
-    border-top: 0;
+  .deliveryPath,
+  .branchList {
+    gap: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .pathStage + .pathStage {
+    margin-top: 3rem;
+  }
+
+  .pathStage:not(:last-child)::after {
+    bottom: -2.2rem;
+    content: '↓';
+    left: 50%;
+    right: auto;
+    top: auto;
+    transform: translateX(-50%);
+  }
+
+  .branchList {
+    border-top: 1px dashed var(--purple-500);
+    margin-top: 3rem;
+    padding-top: 3rem;
+  }
+
+  .senderBranch,
+  .receiverBranch {
+    grid-column: 1;
+  }
+
+  .receiverBranch {
+    margin-top: 1rem;
+  }
+
+  .senderBranch::before,
+  .receiverBranch::before {
+    display: none;
+  }
+
+  .stageCard,
+  .branchCard {
+    min-height: 0;
+  }
+
+  .branchCard {
+    border-left-width: 3px;
+  }
+
+  .convergenceLines {
+    border-bottom: 0;
+    border-left: 2px solid var(--purple-500);
+    border-right: 0;
+    height: 4rem;
+    margin: 0 auto;
+    width: 0;
+  }
+
+  .convergenceLines span {
+    bottom: auto;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .oracleStage,
+  .evidenceStage {
+    width: 100%;
   }
 
   .sourceRail a {

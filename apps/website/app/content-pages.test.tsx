@@ -21,17 +21,38 @@ describe('generated content pages', () => {
     );
   });
 
-  it('presents the evidence architecture as a semantic six-stage flow', () => {
+  it('preserves the delivery branches, oracle convergence, and evidence output in the DOM', () => {
     render(<ArchitecturePage />);
 
-    expect(screen.getByRole('list', { name: 'Evidence architecture flow' }).children).toHaveLength(
-      6,
+    const deliveryPath = screen.getByRole('list', { name: 'Primary delivery path' });
+    expect(within(deliveryPath).getAllByRole('listitem')).toHaveLength(3);
+    expect(within(deliveryPath).getByText('Durable sender')).toBeInTheDocument();
+    expect(within(deliveryPath).getByText('HTTP/Nostr faults')).toBeInTheDocument();
+    expect(within(deliveryPath).getByText('Durable receiver')).toBeInTheDocument();
+
+    const branches = screen.getByRole('list', {
+      name: 'Evidence branches converging at independent oracle',
+    });
+    expect(within(branches).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(branches).getByText('Exact payload')).toBeInTheDocument();
+    expect(within(branches).getByText('Mint recovery')).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Exact payload' })).toHaveAttribute(
+      'aria-describedby',
+      'sender-title',
     );
-    expect(screen.getByText('Durable sender')).toBeInTheDocument();
-    expect(screen.getByText('HTTP/Nostr faults')).toBeInTheDocument();
-    expect(screen.getByText('Durable receiver')).toBeInTheDocument();
-    expect(screen.getByText('Independent oracle')).toBeInTheDocument();
-    expect(screen.getByText('JSON/JUnit/HTML evidence')).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Mint recovery' })).toHaveAttribute(
+      'aria-describedby',
+      'receiver-title',
+    );
+
+    expect(screen.getByRole('article', { name: 'Independent oracle' })).toHaveAttribute(
+      'aria-describedby',
+      'exact-payload-title mint-recovery-title',
+    );
+    expect(screen.getByRole('article', { name: 'JSON/JUnit/HTML evidence' })).toHaveAttribute(
+      'aria-describedby',
+      'oracle-title',
+    );
   });
 
   it('shows the blocked gate and links to every governing release source', async () => {
