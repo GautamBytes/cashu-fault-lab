@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { validateReleasePolicy } from '@cashu-fault-lab/scenario-runner';
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { loadReleaseSuite } from '../src/release-suite-loader.js';
@@ -73,6 +75,21 @@ describe('release suite loader', () => {
     });
 
     expect(first.digest).not.toBe(second.digest);
+  });
+
+  it('binds the checked-in release policy to the real loaded scenario suite', async () => {
+    const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
+    const loaded = await loadReleaseSuite({
+      repositoryRoot,
+      path: 'spec/release-suite.json',
+      readText: async (path) => readFile(path, 'utf8'),
+      realPath: realpath,
+    });
+    const policy = validateReleasePolicy(
+      JSON.parse(await readFile(resolve(repositoryRoot, 'spec/release-policy.json'), 'utf8')),
+    );
+
+    expect(policy.releaseSuiteDigest).toBe(loaded.digest);
   });
 
   it.each(['/tmp/release-suite.json', '../release-suite.json'])(

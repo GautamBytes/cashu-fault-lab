@@ -17,6 +17,7 @@ import {
   INVARIANT_REGISTRY,
   ScenarioRunner,
   minimizeFailingCommands,
+  releaseSuiteFailure,
   seededProtocolId,
   runExternalDeliveryPair,
   runReferenceDeliveryProbe,
@@ -983,35 +984,32 @@ export class PackagedLabRuntime implements LabRuntime {
     if (releaseSuite === undefined) return results;
     return results.map((result) => {
       if (result.status !== 'passed') return result;
+      const scenarios = releaseSuite.scenarios.map((entry) =>
+        suiteNotApplicable(
+          entry,
+          String(
+            seededProtocolId(seed, `release-suite:${result.sender}:${result.receiver}:${entry.id}`),
+          ),
+          'Release suites require configured external adapters',
+        ),
+      );
+      const invariants = aggregateReleaseSuiteInvariants(scenarios);
+      const suiteFailure = releaseSuiteFailure(scenarios);
+      if (suiteFailure !== undefined) {
+        return {
+          ...result,
+          status: 'failed',
+          ...suiteFailure,
+          invariants,
+          releaseSuiteDigest: releaseSuite.digest,
+          scenarios,
+        };
+      }
       return {
         ...result,
-        invariants: aggregateReleaseSuiteInvariants(
-          releaseSuite.scenarios.map((entry) =>
-            suiteNotApplicable(
-              entry,
-              String(
-                seededProtocolId(
-                  seed,
-                  `release-suite:${result.sender}:${result.receiver}:${entry.id}`,
-                ),
-              ),
-              'Release suites require configured external adapters',
-            ),
-          ),
-        ),
+        invariants,
         releaseSuiteDigest: releaseSuite.digest,
-        scenarios: releaseSuite.scenarios.map((entry) =>
-          suiteNotApplicable(
-            entry,
-            String(
-              seededProtocolId(
-                seed,
-                `release-suite:${result.sender}:${result.receiver}:${entry.id}`,
-              ),
-            ),
-            'Release suites require configured external adapters',
-          ),
-        ),
+        scenarios,
       };
     });
   }

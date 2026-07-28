@@ -33,6 +33,7 @@ export {
 } from './external-http-fault-controller.js';
 export {
   CompatibilityMatrix,
+  releaseSuiteFailure,
   type MatrixCaseResult,
   type MatrixExecutionResult,
   type MatrixExecutor,

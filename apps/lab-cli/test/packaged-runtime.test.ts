@@ -633,6 +633,47 @@ describe('PackagedLabRuntime', () => {
     );
   });
 
+  it('fails a repository-only matrix case when its required release scenarios cannot run', async () => {
+    const runtime = new PackagedLabRuntime();
+    const releaseSuite: LoadedReleaseSuite = {
+      schemaVersion: 1,
+      profile: 'delivery-v1',
+      digest: `sha256:${'ab'.repeat(32)}`,
+      scenarios: [
+        {
+          id: 'retry-response-lost',
+          scenario: 'scenarios/retry/response-lost.json',
+          transports: ['http'],
+          senderDurability: 'persistent',
+          receiverDurability: 'restart_safe',
+          requiredInvariants: ['retry-convergence'],
+          spec: {
+            name: 'retry-response-lost',
+            commands: [{ type: 'assert_quiescent' }],
+          },
+        },
+      ],
+    };
+
+    await expect(
+      runtime.matrix('delivery-v1', 'repository-suite', undefined, releaseSuite),
+    ).resolves.toContainEqual(
+      expect.objectContaining({
+        sender: 'reference-ts',
+        receiver: 'reference-ts',
+        status: 'failed',
+        code: 'RELEASE_SUITE_NOT_PASSED',
+        scenarios: [
+          expect.objectContaining({
+            id: 'retry-response-lost',
+            status: 'not_applicable',
+          }),
+        ],
+        releaseSuiteDigest: releaseSuite.digest,
+      }),
+    );
+  });
+
   it('allows a compose-only fault gateway token without enabling HTTP fault injection', async () => {
     const runtime = new PackagedLabRuntime({
       env: { CFL_HTTP_FAULT_GATEWAY_TOKEN: 'compose-only-fault-token' },

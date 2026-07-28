@@ -48,6 +48,19 @@ export type MatrixExecutor = (
   receiver: MatrixParticipant,
 ) => Promise<MatrixExecutionResult>;
 
+export function releaseSuiteFailure(
+  scenarios: readonly MatrixScenarioEvidence[],
+): { readonly code: 'RELEASE_SUITE_NOT_PASSED'; readonly reason: string } | undefined {
+  const blockers = scenarios.filter(({ status }) => status !== 'passed');
+  if (blockers.length === 0) return undefined;
+  return {
+    code: 'RELEASE_SUITE_NOT_PASSED',
+    reason: `Required release scenarios did not pass: ${blockers
+      .map(({ id, status }) => `${id} (${status})`)
+      .join(', ')}`,
+  };
+}
+
 interface MatrixCaseIdentity {
   readonly profile: string;
   readonly sender: string;
@@ -70,6 +83,11 @@ export type MatrixCaseResult =
       readonly status: 'failed' | 'expected_failure';
       readonly code: string;
       readonly reason: string;
+      readonly invariants?: readonly InvariantResult[];
+      readonly mints?: readonly AdapterMintIdentity[];
+      readonly scenarios?: readonly MatrixScenarioEvidence[];
+      readonly releaseSuiteDigest?: string;
+      readonly evidence?: Readonly<Record<string, unknown>>;
     })
   | (MatrixCaseIdentity & {
       readonly status: 'not_applicable';
@@ -156,6 +174,23 @@ export class CompatibilityMatrix {
           continue;
         }
         if (execution.ok) {
+          const scenarios = structuredClone(execution.scenarios ?? []);
+          const suiteFailure = releaseSuiteFailure(scenarios);
+          if (suiteFailure !== undefined) {
+            results.push({
+              ...compatibleIdentity,
+              status: 'failed',
+              ...suiteFailure,
+              invariants: structuredClone(execution.invariants ?? []),
+              mints: structuredClone(execution.mints ?? []),
+              scenarios,
+              ...(execution.releaseSuiteDigest === undefined
+                ? {}
+                : { releaseSuiteDigest: execution.releaseSuiteDigest }),
+              ...(execution.evidence === undefined ? {} : { evidence: execution.evidence }),
+            });
+            continue;
+          }
           results.push({
             ...compatibleIdentity,
             status: 'passed',
@@ -163,7 +198,7 @@ export class CompatibilityMatrix {
             receiverCapabilities: structuredClone(receiver.capabilities),
             invariants: structuredClone(execution.invariants ?? []),
             mints: structuredClone(execution.mints ?? []),
-            scenarios: structuredClone(execution.scenarios ?? []),
+            scenarios,
             ...(execution.releaseSuiteDigest === undefined
               ? {}
               : { releaseSuiteDigest: execution.releaseSuiteDigest }),
