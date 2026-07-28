@@ -12,6 +12,13 @@ const statusLabels: Record<InvariantStatus, { icon: string; label: string }> = {
   not_applicable: { icon: '–', label: 'Not applicable' },
 };
 
+const statusStyles: Record<InvariantStatus, string> = {
+  passed: styles.statusPassed,
+  failed: styles.statusFailed,
+  not_observable: styles.statusNotObservable,
+  not_applicable: styles.statusNotApplicable,
+};
+
 export function EvidenceReport({ summary }: EvidenceReportProps) {
   return (
     <section
@@ -34,7 +41,9 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
             <strong>{summary.scenarioId}</strong>
           </div>
           <span
-            className={`${styles.runStatus} ${styles[summary.status === 'passed' ? 'passed' : 'failed']}`}
+            className={`${styles.runStatus} ${
+              summary.status === 'passed' ? styles.statusPassed : styles.statusFailed
+            }`}
           >
             <span aria-hidden="true">{summary.status === 'passed' ? '✓' : '!'}</span>
             Run {summary.status}
@@ -62,7 +71,7 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
 
         <ul aria-label="Invariant status counts" className={styles.statusGrid}>
           {(Object.keys(statusLabels) as InvariantStatus[]).map((status) => (
-            <li className={`${styles.statusCard} ${styles[status]}`} key={status}>
+            <li className={`${styles.statusCard} ${statusStyles[status]}`} key={status}>
               <span aria-hidden="true" className={styles.statusIcon}>
                 {statusLabels[status].icon}
               </span>

@@ -302,12 +302,25 @@
   text-align: center;
 }
 
-.timelineStage.fault,
-.timelineStage.recovery {
+.stagePrepared {
+  border-style: solid;
+}
+
+.stageActive {
+  border-width: 2px;
+}
+
+.stageFault,
+.stageRecovery {
   border-style: dashed;
 }
 
-.timelineStage.converged {
+.stageRetry {
+  border-style: dotted;
+  border-width: 2px;
+}
+
+.stageConverged {
   border-style: double;
   border-width: 3px;
 }
@@ -397,7 +410,11 @@
   white-space: nowrap;
 }
 
-.runStatus.failed {
+.runStatus.statusPassed {
+  border-style: solid;
+}
+
+.runStatus.statusFailed {
   border-style: double;
   border-width: 3px;
 }
@@ -448,16 +465,20 @@
   padding: 0.8rem;
 }
 
-.statusCard.failed {
+.statusCard.statusPassed {
+  border-style: solid;
+}
+
+.statusCard.statusFailed {
   border-style: double;
   border-width: 3px;
 }
 
-.statusCard.not_observable {
+.statusCard.statusNotObservable {
   border-style: dashed;
 }
 
-.statusCard.not_applicable {
+.statusCard.statusNotApplicable {
   border-style: dotted;
   border-width: 2px;
 }
@@ -575,6 +596,7 @@
 }
 
 .textLink {
+  align-items: center;
   border-bottom: 1px solid var(--purple-700);
   display: inline-flex;
   font-family: 'IBM Plex Mono', monospace;
@@ -582,7 +604,9 @@
   font-weight: 700;
   gap: 1rem;
   margin-top: 2rem;
-  padding-bottom: 0.3rem;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  padding: 0.35rem 0.15rem;
   text-decoration: none;
 }
 

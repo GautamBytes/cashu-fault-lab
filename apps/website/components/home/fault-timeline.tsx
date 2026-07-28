@@ -9,6 +9,15 @@ const stages = [
   { label: 'One durable credit', icon: '✓', kind: 'converged' },
 ] as const;
 
+const stageStyles = {
+  prepared: styles.stagePrepared,
+  active: styles.stageActive,
+  fault: styles.stageFault,
+  retry: styles.stageRetry,
+  recovery: styles.stageRecovery,
+  converged: styles.stageConverged,
+} satisfies Record<(typeof stages)[number]['kind'], string>;
+
 export function FaultTimeline() {
   return (
     <section
@@ -30,7 +39,7 @@ export function FaultTimeline() {
         </div>
         <ol aria-label="Six-stage response-loss recovery flow" className={styles.timeline}>
           {stages.map((stage, index) => (
-            <li className={`${styles.timelineStage} ${styles[stage.kind]}`} key={stage.label}>
+            <li className={`${styles.timelineStage} ${stageStyles[stage.kind]}`} key={stage.label}>
               <span aria-hidden="true" className={styles.stageIcon}>
                 {stage.icon}
               </span>
