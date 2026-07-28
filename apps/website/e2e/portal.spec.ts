@@ -63,6 +63,16 @@ test('home is accessible, has one visible title, and fits the viewport', async (
 }, testInfo) => {
   await page.goto('/');
 
+  if (testInfo.project.name === 'desktop-chromium') {
+    const hero = page.locator('section').first();
+    const heroBox = await hero.boundingBox();
+    const traceHeading = page.getByRole('heading', { name: /lost response/i });
+    const traceBox = await traceHeading.boundingBox();
+
+    expect(heroBox?.height).toBeLessThanOrEqual(820);
+    expect(traceBox?.y).toBeLessThan(900);
+  }
+
   await expect(page.locator('h1:visible')).toHaveCount(1);
   await expectNoSeriousAccessibilityViolations(page);
   await expectNoPageOverflow(page);

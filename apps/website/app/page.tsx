@@ -1,9 +1,11 @@
-import Image from 'next/image';
 import { EvidenceReport } from '../components/home/evidence-report';
 import { FaultTimeline } from '../components/home/fault-timeline';
+import { HeroRunPanel } from '../components/home/hero-run-panel';
 import styles from '../components/home/home.module.css';
+import { ScenarioExplorer } from '../components/home/scenario-explorer';
 import { getDemoSummary } from '../lib/demo';
 import { getReleaseStatus } from '../lib/release-status';
+import { getScenarioGroups } from '../lib/scenarios';
 import { serializeJsonLd } from './site-metadata';
 
 const softwareApplication = {
@@ -51,7 +53,11 @@ const profileSteps = [
 ] as const;
 
 export default async function HomePage() {
-  const [summary, releaseStatus] = await Promise.all([getDemoSummary(), getReleaseStatus()]);
+  const [summary, releaseStatus, scenarioGroups] = await Promise.all([
+    getDemoSummary(),
+    getReleaseStatus(),
+    getScenarioGroups(),
+  ]);
 
   return (
     <div className={styles.home}>
@@ -60,56 +66,56 @@ export default async function HomePage() {
         type="application/ld+json"
       />
       <section aria-labelledby="home-title" className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>Cashu delivery fault injection and recovery evidence</p>
-          <h1 id="home-title">Make Cashu delivery fail safely.</h1>
-          <p className={styles.heroDescription}>
-            Inject response loss, retries, duplicates, and process crashes across real wallets and
-            mints—then prove every implementation converges.
-          </p>
-          <div className={styles.heroActions}>
-            <a
-              className={styles.primaryAction}
-              href="/docs/getting-started#run-the-deterministic-demo"
-            >
-              Run the deterministic demo
-            </a>
-            <a
-              className={styles.secondaryAction}
-              href="https://github.com/GautamBytes/cashu-fault-lab"
-              rel="noreferrer noopener"
-              target="_blank"
-            >
-              View on GitHub <span aria-hidden="true">↗</span>
-            </a>
+        <div className={styles.heroGrid}>
+          <div className={styles.heroCopy}>
+            <p className={styles.eyebrow}>Cashu delivery fault injection and recovery evidence</p>
+            <h1 id="home-title">Make Cashu delivery fail safely.</h1>
+            <p className={styles.heroDescription}>
+              Inject response loss, retries, duplicates, and process crashes across real wallets and
+              mints—then prove every implementation converges.
+            </p>
+            <div className={styles.heroActions}>
+              <a
+                className={styles.primaryAction}
+                href="/docs/getting-started#run-the-deterministic-demo"
+              >
+                Run the deterministic demo
+              </a>
+              <a
+                className={styles.secondaryAction}
+                href="https://github.com/GautamBytes/cashu-fault-lab"
+                rel="noreferrer noopener"
+                target="_blank"
+              >
+                View on GitHub <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+            <div aria-label="Demo command" className={styles.commandBlock}>
+              <span aria-hidden="true">$</span>
+              <code>pnpm lab demo</code>
+              <span className={styles.commandNote}>seeded · local · secret-redacted</span>
+            </div>
           </div>
-          <div aria-label="Demo command" className={styles.commandBlock}>
-            <span aria-hidden="true">$</span>
-            <code>pnpm lab demo</code>
-            <span className={styles.commandNote}>seeded · local · secret-redacted</span>
-          </div>
+          <HeroRunPanel summary={summary} />
         </div>
 
-        <aside aria-label="Cashu Fault Lab mark" className={styles.heroInstrument}>
-          <div className={styles.markFrame}>
-            <Image
-              alt="Cashu Fault Lab pixel-art mark"
-              height={256}
-              priority
-              src="/cashu-fault-lab.png"
-              width={256}
-            />
+        <div aria-hidden="true" className={styles.heroTracePreview}>
+          <span>TRACE / {summary.scenarioId}</span>
+          <div className={styles.heroTraceRail}>
+            <i />
+            <i />
+            <i className={styles.heroTraceFault} />
+            <i />
+            <i />
+            <i className={styles.heroTraceConverged} />
           </div>
-          <div className={styles.instrumentReadout}>
-            <span>LAB / v0.1</span>
-            <span>FAULT: RESPONSE_LOST</span>
-            <strong>CONVERGED ✓</strong>
-          </div>
-        </aside>
+          <strong>EXACT DELIVERY / CONVERGED</strong>
+        </div>
       </section>
 
       <FaultTimeline />
       <EvidenceReport summary={summary} />
+      <ScenarioExplorer groups={scenarioGroups} />
 
       <section aria-labelledby="tested-title" className={styles.section}>
         <div className={styles.sectionHeading}>

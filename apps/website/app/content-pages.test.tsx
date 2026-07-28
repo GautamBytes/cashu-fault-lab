@@ -107,7 +107,10 @@ describe('generated content pages', () => {
     const source = await readFile(resolve(process.cwd(), 'app/page.tsx'), 'utf8');
 
     expect(source).toContain("import { getReleaseStatus } from '../lib/release-status'");
-    expect(source).toContain('await Promise.all([getDemoSummary(), getReleaseStatus()])');
+    expect(source).toContain("import { getScenarioGroups } from '../lib/scenarios'");
+    expect(source).toMatch(
+      /await Promise\.all\(\[\s*getDemoSummary\(\),\s*getReleaseStatus\(\),\s*getScenarioGroups\(\),\s*\]\)/,
+    );
     expect(source).toContain('{releaseStatus.label}');
   });
 });
