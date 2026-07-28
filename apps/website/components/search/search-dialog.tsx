@@ -10,6 +10,15 @@ export interface SearchDialogProps {
   records: SearchRecord[];
 }
 
+const focusableSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
 function searchRecords(records: SearchRecord[], query: string): SearchRecord[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   if (!normalizedQuery) return records.slice(0, 8);
@@ -35,6 +44,7 @@ function searchRecords(records: SearchRecord[], query: string): SearchRecord[] {
 }
 
 export function SearchDialog({ open, onOpenChange, records }: SearchDialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -70,9 +80,34 @@ export function SearchDialog({ open, onOpenChange, records }: SearchDialogProps)
           if (event.key === "Escape") {
             event.preventDefault();
             onOpenChange(false);
+            return;
+          }
+
+          if (event.key === "Tab") {
+            const focusableElements = Array.from(
+              dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
+            );
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements.at(-1);
+
+            if (!firstElement || !lastElement) {
+              event.preventDefault();
+              dialogRef.current?.focus();
+              return;
+            }
+
+            if (event.shiftKey && document.activeElement === firstElement) {
+              event.preventDefault();
+              lastElement.focus();
+            } else if (!event.shiftKey && document.activeElement === lastElement) {
+              event.preventDefault();
+              firstElement.focus();
+            }
           }
         }}
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
       >
         <div className={styles.dialogHeader}>
           <label htmlFor="documentation-search">Search documentation</label>

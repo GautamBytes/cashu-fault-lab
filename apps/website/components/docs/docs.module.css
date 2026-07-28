@@ -357,4 +357,15 @@
   .pagination a:last-child {
     text-align: left;
   }
+
+  .markdown a {
+    align-items: center;
+    display: inline-flex;
+    max-width: 100%;
+    min-height: 44px;
+    min-width: 44px;
+    overflow-wrap: anywhere;
+    vertical-align: middle;
+    word-break: break-word;
+  }
 }

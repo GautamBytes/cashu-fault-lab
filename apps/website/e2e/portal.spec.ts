@@ -108,7 +108,18 @@ test('keyboard search navigates directly to a matching docs heading', async ({
   await page.goto('/');
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
   await page.getByRole('searchbox', { name: 'Search documentation' }).fill('NUT-19');
-  await page.getByRole('link', { name: /Delivery profile/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search documentation' });
+  const closeButton = dialog.getByRole('button', { name: 'Close search' });
+  const results = dialog.getByRole('link');
+  const lastResult = results.last();
+
+  await lastResult.focus();
+  await page.keyboard.press('Tab');
+  await expect(closeButton).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(lastResult).toBeFocused();
+
+  await dialog.getByRole('link', { name: /Delivery profile/ }).click();
 
   await expect(page).toHaveURL(/\/docs\/delivery-profile$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Delivery profile' })).toBeVisible();
@@ -134,7 +145,7 @@ test('mobile menu reaches scenarios and exposes 44px controls', async ({ page },
   await page.goto('/docs/getting-started');
   await expectMinimumTouchTargets(
     page,
-    'button, header a, aside a, nav a, article > header a',
+    'button, header a, aside a, nav a, article a',
   );
 });
 

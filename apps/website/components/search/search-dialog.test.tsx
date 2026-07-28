@@ -64,6 +64,39 @@ describe("documentation search", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("contains forward and reverse Tab navigation inside the modal", async () => {
+    const user = userEvent.setup();
+    render(
+      <PortalShell
+        records={[
+          {
+            id: "retry",
+            title: "Retry convergence",
+            description: "Invariant",
+            href: "/docs/invariants#retry-convergence",
+            text: "response loss exact payload",
+          },
+        ]}
+      >
+        <div>Page content</div>
+      </PortalShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Search documentation" }));
+    const dialog = screen.getByRole("dialog", { name: "Search documentation" });
+    const closeButton = within(dialog).getByRole("button", { name: "Close search" });
+    const lastResult = within(dialog).getByRole("link", { name: /Retry convergence/ });
+
+    expect(within(dialog).getByRole("searchbox")).toHaveFocus();
+
+    lastResult.focus();
+    await user.tab();
+    expect(closeButton).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(lastResult).toHaveFocus();
+  });
+
   it("does not intercept the shortcut inside editable fields", async () => {
     const user = userEvent.setup();
     render(
