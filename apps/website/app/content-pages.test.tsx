@@ -1,10 +1,16 @@
 import { render, screen, within } from '@testing-library/react';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ArchitecturePage from './architecture/page';
 import ReleaseStatusPage from './release-status/page';
 import ScenariosPage from './scenarios/page';
+import { DocsShell } from '../components/docs/docs-shell';
+import { getAllDocuments, getDocument } from '../lib/markdown';
+
+vi.mock('../components/docs/markdown-document', () => ({
+  MarkdownDocument: () => null,
+}));
 
 describe('generated content pages', () => {
   it('renders every repository scenario with an exact run command and source link', async () => {
@@ -53,6 +59,25 @@ describe('generated content pages', () => {
       'aria-describedby',
       'oracle-title',
     );
+  });
+
+  it('exposes Architecture in the documentation navigation', async () => {
+    const [document, documents] = await Promise.all([
+      getDocument('getting-started'),
+      getAllDocuments(),
+    ]);
+    if (!document) throw new Error('Expected getting started document');
+
+    render(<DocsShell document={document} documents={documents} />);
+
+    const documentationNavigation = screen.getAllByRole('navigation', {
+      name: 'Documentation',
+    })[0];
+
+    expect(documentationNavigation).toHaveTextContent('Architecture');
+    expect(
+      within(documentationNavigation).getByRole('link', { name: 'Architecture' }),
+    ).toHaveAttribute('href', '/architecture');
   });
 
   it('shows the blocked gate and links to every governing release source', async () => {

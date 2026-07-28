@@ -10,10 +10,6 @@ export interface SiteHeaderProps {
 const navigation = [
   { href: '/', label: 'Home' },
   { href: '/docs/getting-started', label: 'Docs' },
-  { href: '/docs/cli', label: 'CLI' },
-  { href: '/scenarios', label: 'Scenarios' },
-  { href: '/docs/adapters', label: 'Adapters' },
-  { href: '/architecture', label: 'Architecture' },
   { href: '/release-status', label: 'Release status' },
 ];
 
@@ -54,13 +50,6 @@ export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
                 {item.label}
               </a>
             ))}
-            <a
-              href="https://github.com/GautamBytes/cashu-fault-lab"
-              rel="noreferrer noopener"
-              target="_blank"
-            >
-              GitHub
-            </a>
           </div>
           <button
             aria-haspopup="dialog"

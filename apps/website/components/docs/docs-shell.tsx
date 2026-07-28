@@ -31,6 +31,11 @@ function DocumentationNavigation({
                   </a>
                 </li>
               ))}
+              {group === 'Understand' ? (
+                <li>
+                  <a href="/architecture">Architecture</a>
+                </li>
+              ) : null}
             </ul>
           </section>
         );
