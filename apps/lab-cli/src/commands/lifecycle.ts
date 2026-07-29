@@ -7,6 +7,7 @@ import type { CliIo, CliOutcome, LabRuntime } from '../index.js';
 export interface LifecycleCommandContext {
   readonly io: CliIo;
   readonly runtime: LabRuntime;
+  readonly distribution: 'workspace' | 'package';
   readonly doctorProbes?: DoctorProbes;
   readonly setExitCode: (exitCode: CliOutcome['exitCode']) => void;
 }
@@ -15,7 +16,7 @@ export function registerLifecycleCommands(
   program: Command,
   context: LifecycleCommandContext,
 ): void {
-  const { io, runtime, doctorProbes, setExitCode } = context;
+  const { io, runtime, distribution, doctorProbes, setExitCode } = context;
 
   program
     .command('up')
@@ -25,7 +26,10 @@ export function registerLifecycleCommands(
       const startup = await runDoctor(doctorProbes ?? defaultDoctorProbes(), {
         environment: false,
         senderDurability: false,
+        pnpm: distribution === 'workspace',
         cargo: false,
+        dockerCompose: distribution === 'package',
+        testcontainers: distribution === 'workspace',
         testTiers: false,
         portConflict: 'warn',
       });
@@ -79,7 +83,20 @@ export function registerLifecycleCommands(
     .description('Check local prerequisites (env, tools, ports) for funded lab lanes')
     .option('--json', 'emit machine-readable JSON instead of text', false)
     .action(async (options: { json: boolean }) => {
-      const report = await runDoctor(doctorProbes ?? defaultDoctorProbes());
+      const report = await runDoctor(
+        doctorProbes ?? defaultDoctorProbes(),
+        distribution === 'package'
+          ? {
+              environment: false,
+              senderDurability: false,
+              pnpm: false,
+              cargo: false,
+              dockerCompose: true,
+              testcontainers: false,
+              testTiers: false,
+            }
+          : {},
+      );
       if (options.json) {
         io.stdout(`${JSON.stringify(report, null, 2)}\n`);
       } else {

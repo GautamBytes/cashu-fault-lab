@@ -109,7 +109,7 @@ test('home is accessible, has one visible title, and fits the viewport', async (
   await quickstartAction.focus();
   await expect(quickstartAction).toBeFocused();
   await quickstartAction.evaluate((element) => element.blur());
-  await expect(page.getByLabel('Demo command').getByText('./scripts/quickstart')).toBeVisible();
+  await expect(page.getByLabel('Demo command').getByText('npx cashu-fault-lab demo')).toBeVisible();
 
   if (testInfo.project.name === 'desktop-chromium') {
     const viewportHeight = page.viewportSize()?.height ?? 900;
@@ -332,7 +332,9 @@ test('tablet hero stacks without clipping command metadata or run evidence', asy
   const primaryAction = hero.getByRole('link', { name: 'Open in Codespaces' });
   const actions = primaryAction.locator('..');
   const command = hero.getByLabel('Demo command');
-  const commandMetadata = hero.getByText('pinned · isolated · secret-redacted', { exact: true });
+  const commandMetadata = hero.getByText('available with v0.1.0 · isolated · secret-redacted', {
+    exact: true,
+  });
   const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
 
   for (const element of [heading, actions, command, commandMetadata, runPanel]) {

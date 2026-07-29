@@ -1,4 +1,10 @@
-name: cashu-fault-lab-wallets
+name: cashu-fault-lab-npm
+
+x-node-runtime: &node-runtime
+  image: ${CFL_NODE_WALLETS_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-node-wallets:__CFL_PACKAGE_VERSION__}
+  pull_policy: missing
+  init: true
+  network_mode: service:lab-netns
 
 services:
   nutshell-redis:
@@ -16,10 +22,8 @@ services:
         condition: service_healthy
 
   lab-netns:
-    build:
-      context: ../..
-      dockerfile: infra/docker/wallet-adapters.Dockerfile
-      target: lab-netns
+    image: ${CFL_NETNS_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-netns:__CFL_PACKAGE_VERSION__}
+    pull_policy: missing
     depends_on:
       nutshell:
         condition: service_healthy
@@ -38,10 +42,7 @@ services:
       - '127.0.0.1:${CFL_NOSTR_FAULT_RELAY_PORT:-4400}:4400'
 
   reference-receiver:
-    build:
-      context: ../..
-      dockerfile: infra/docker/wallet-adapters.Dockerfile
-      target: node-wallets
+    <<: *node-runtime
     command: ['node', 'apps/reference-receiver/dist/bin.js']
     environment:
       CFL_REFERENCE_RECEIVER_CLAIM_KEY: ${CFL_REFERENCE_RECEIVER_CLAIM_KEY:?set CFL_REFERENCE_RECEIVER_CLAIM_KEY}
@@ -64,14 +65,9 @@ services:
       interval: 2s
       timeout: 2s
       retries: 60
-    init: true
-    network_mode: service:lab-netns
 
   http-fault-gateway:
-    build:
-      context: ../..
-      dockerfile: infra/docker/wallet-adapters.Dockerfile
-      target: node-wallets
+    <<: *node-runtime
     command: ['node', 'apps/http-fault-gateway/dist/bin.js']
     environment:
       CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN: ${CFL_HTTP_FAULT_GATEWAY_TOKEN:?set CFL_HTTP_FAULT_GATEWAY_TOKEN}
@@ -92,8 +88,6 @@ services:
       interval: 2s
       timeout: 2s
       retries: 60
-    init: true
-    network_mode: service:lab-netns
 
   cashu-ts-postgres:
     image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
@@ -111,45 +105,37 @@ services:
       - cashu-fault-lab-cashu-ts-postgres:/var/lib/postgresql
 
   nostr-fault-relay:
-    build:
-      context: ../..
-      dockerfile: infra/docker/wallet-adapters.Dockerfile
-      target: node-wallets
+    <<: *node-runtime
     command: ['node', 'apps/nostr-fault-relay/dist/bin.js']
     environment:
       CFL_NOSTR_FAULT_RELAY_HOST: 0.0.0.0
       CFL_NOSTR_FAULT_RELAY_PORT: 4400
     depends_on:
       lab-netns:
-        condition: service_healthy
-    init: true
-    network_mode: service:lab-netns
+        condition: service_started
 
   cashu-ts:
-    build:
-      context: ../..
-      dockerfile: infra/docker/wallet-adapters.Dockerfile
-      target: node-wallets
+    <<: *node-runtime
     command: ['node', 'adapters/cashu-ts/dist/bin.js']
     environment:
       CFL_CASHU_TS_CONTROL_TOKEN: ${CFL_CASHU_TS_TOKEN:?set CFL_CASHU_TS_TOKEN}
       CFL_CASHU_TS_CRASH_TENANT_ID: cashu-ts-funded-crash
-      CFL_CASHU_TS_CLAIM_KEY: ${CFL_CASHU_TS_CLAIM_KEY:-ERERERERERERERERERERERERERERERERERERERERERE}
+      CFL_CASHU_TS_CLAIM_KEY: ${CFL_CASHU_TS_CLAIM_KEY:?set CFL_CASHU_TS_CLAIM_KEY}
       CFL_CASHU_TS_FUNDING_AMOUNT: ${CFL_WALLET_FUNDING_AMOUNT:-64}
       CFL_CASHU_TS_HOST: 0.0.0.0
       CFL_CASHU_TS_MINT_URL: http://127.0.0.1:3338
-      CFL_CASHU_TS_NOSTR_RECEIVER_KEY: ${CFL_CASHU_TS_NOSTR_RECEIVER_KEY:-IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI}
+      CFL_CASHU_TS_NOSTR_RECEIVER_KEY: ${CFL_CASHU_TS_NOSTR_RECEIVER_KEY:?set CFL_CASHU_TS_NOSTR_RECEIVER_KEY}
       CFL_CASHU_TS_NOSTR_RELAYS: ws://127.0.0.1:4400
-      CFL_CASHU_TS_NOSTR_SENDER_KEY: ${CFL_CASHU_TS_NOSTR_SENDER_KEY:-ERERERERERERERERERERERERERERERERERERERERERE}
+      CFL_CASHU_TS_NOSTR_SENDER_KEY: ${CFL_CASHU_TS_NOSTR_SENDER_KEY:?set CFL_CASHU_TS_NOSTR_SENDER_KEY}
       CFL_CASHU_TS_PAYMENT_TARGET: http://127.0.0.1:4101/pay
       CFL_CASHU_TS_PORT: 4101
-      CFL_CASHU_TS_RECEIVER_DATABASE_URL: postgresql://cashu:${CFL_POSTGRES_PASSWORD:-cashu-local-development-only}@cashu-ts-postgres:5432/cashu_fault_lab
-      CFL_CASHU_TS_RECEIVER_STATE_KEY: ${CFL_CASHU_TS_RECEIVER_STATE_KEY:-BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc}
+      CFL_CASHU_TS_RECEIVER_DATABASE_URL: postgresql://cashu:${CFL_POSTGRES_PASSWORD:?set CFL_POSTGRES_PASSWORD}@cashu-ts-postgres:5432/cashu_fault_lab
+      CFL_CASHU_TS_RECEIVER_STATE_KEY: ${CFL_CASHU_TS_RECEIVER_STATE_KEY:?set CFL_CASHU_TS_RECEIVER_STATE_KEY}
       CFL_CASHU_TS_RECEIVER_TENANT_ID: cashu-ts-local
-      CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION: ${CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION:-1}
-      CFL_CASHU_TS_SENDER_DATABASE_URL: postgresql://cashu:${CFL_POSTGRES_PASSWORD:-cashu-local-development-only}@cashu-ts-postgres:5432/cashu_fault_lab
-      CFL_CASHU_TS_SENDER_RUN_ID: ${CFL_CASHU_TS_SENDER_RUN_ID:-cashu-ts-local}
-      CFL_CASHU_TS_SENDER_STATE_KEYS: ${CFL_CASHU_TS_SENDER_STATE_KEYS:-1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc}
+      CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION: ${CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION:?set CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION}
+      CFL_CASHU_TS_SENDER_DATABASE_URL: postgresql://cashu:${CFL_POSTGRES_PASSWORD:?set CFL_POSTGRES_PASSWORD}@cashu-ts-postgres:5432/cashu_fault_lab
+      CFL_CASHU_TS_SENDER_RUN_ID: ${CFL_CASHU_TS_SENDER_RUN_ID:?set CFL_CASHU_TS_SENDER_RUN_ID}
+      CFL_CASHU_TS_SENDER_STATE_KEYS: ${CFL_CASHU_TS_SENDER_STATE_KEYS:?set CFL_CASHU_TS_SENDER_STATE_KEYS}
       CFL_CASHU_TS_SENDER_TENANT_ID: cashu-ts-local
       CFL_CASHU_TS_TEST_CRASH_CONTROL: '1'
     depends_on:
@@ -170,15 +156,11 @@ services:
       interval: 2s
       timeout: 2s
       retries: 60
-    init: true
     restart: 'on-failure:10'
-    network_mode: service:lab-netns
 
   cdk:
-    build:
-      context: ../..
-      dockerfile: infra/docker/wallet-adapters.Dockerfile
-      target: cdk-adapter
+    image: ${CFL_CDK_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter:__CFL_PACKAGE_VERSION__}
+    pull_policy: missing
     environment:
       CASHU_FAULT_LAB_CDK_FUNDING_AMOUNT: ${CFL_WALLET_FUNDING_AMOUNT:-64}
       CASHU_FAULT_LAB_CDK_FUNDING_TIMEOUT_SECONDS: 30

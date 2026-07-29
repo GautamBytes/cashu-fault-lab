@@ -1,0 +1,42 @@
+{
+  "name": "cashu-fault-lab",
+  "version": "0.1.0",
+  "description": "Deterministic Cashu payment delivery fault injection and recovery evidence",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "cashu-fault-lab": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "runtime",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GautamBytes/cashu-fault-lab.git",
+    "directory": "apps/npm-cli"
+  },
+  "homepage": "https://cashu-fault-lab.vercel.app/",
+  "bugs": {
+    "url": "https://github.com/GautamBytes/cashu-fault-lab/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs && node --test test/*.test.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@cashu-fault-lab/lab-cli": "workspace:*",
+    "esbuild": "0.28.1"
+  }
+}

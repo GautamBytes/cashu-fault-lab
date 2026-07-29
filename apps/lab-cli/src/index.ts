@@ -31,6 +31,7 @@ import {
 } from './diagnostics.js';
 import { PackagedLabRuntime } from './packaged-runtime.js';
 import { loadReleaseSuite, type LoadedReleaseSuite } from './release-suite-loader.js';
+import { runtimeAssetPath } from './runtime-assets.js';
 
 const DEFAULT_ARTIFACT_PATH = 'artifacts/latest.json';
 
@@ -95,6 +96,7 @@ export interface RunCliDependencies {
   readonly runtime?: LabRuntime;
   readonly io?: CliIo;
   readonly doctorProbes?: import('./doctor.js').DoctorProbes;
+  readonly distribution?: 'workspace' | 'package';
 }
 
 export interface CliOutcome {
@@ -183,7 +185,12 @@ async function maybeWrite(io: CliIo, path: string | undefined, value: string): P
 }
 
 async function readScenario(io: CliIo, path: string): Promise<string> {
-  const candidates = [path, ...(!path.endsWith('.json') ? [`scenarios/${path}.json`] : [])];
+  const packagedRelative = path.endsWith('.json') ? path : `${path}.json`;
+  const candidates = [
+    path,
+    ...(!path.endsWith('.json') ? [`scenarios/${path}.json`] : []),
+    runtimeAssetPath('scenarios', packagedRelative),
+  ];
   for (const candidate of candidates) {
     try {
       return await io.readText(candidate);
@@ -214,9 +221,17 @@ async function readAdapterManifest(
 async function readReleasePolicy(
   io: CliIo,
   path: string | undefined,
+  distribution: 'workspace' | 'package',
 ): Promise<ReleasePolicy | undefined> {
   if (path === undefined) return undefined;
-  return validateReleasePolicy(json(await io.readText(path)));
+  let contents: string;
+  try {
+    contents = await io.readText(path);
+  } catch (error) {
+    if (distribution !== 'package' || !path.startsWith('spec/')) throw error;
+    contents = await io.readText(runtimeAssetPath(path));
+  }
+  return validateReleasePolicy(json(contents));
 }
 
 function elapsed(start: number): string {
@@ -249,6 +264,7 @@ export async function runCli(
   registerLifecycleCommands(program, {
     io,
     runtime,
+    distribution: dependencies.distribution ?? 'workspace',
     ...(doctorProbes === undefined ? {} : { doctorProbes }),
     setExitCode: (code) => {
       exitCode = code;
@@ -472,7 +488,11 @@ export async function runCli(
         if (!Number.isSafeInteger(minimum) || minimum < 0 || minimum > 10_000) {
           throw new Error('Minimum matrix passes must be a nonnegative safe integer');
         }
-        const releasePolicy = await readReleasePolicy(io, options.releasePolicy);
+        const releasePolicy = await readReleasePolicy(
+          io,
+          options.releasePolicy,
+          dependencies.distribution ?? 'workspace',
+        );
         if (releasePolicy !== undefined && releasePolicy.profile !== options.profile) {
           throw new Error(
             `Release policy profile ${releasePolicy.profile} does not match matrix profile ${options.profile}`,
@@ -485,11 +505,15 @@ export async function runCli(
         const releaseSuitePath =
           options.releaseSuite ??
           (releasePolicy === undefined ? undefined : 'spec/release-suite.json');
+        const usePackagedReleaseSuite =
+          dependencies.distribution === 'package' &&
+          options.releaseSuite === undefined &&
+          releasePolicy !== undefined;
         const releaseSuite =
           releaseSuitePath === undefined
             ? undefined
             : await loadReleaseSuite({
-                repositoryRoot: process.cwd(),
+                repositoryRoot: usePackagedReleaseSuite ? runtimeAssetPath() : process.cwd(),
                 path: releaseSuitePath,
                 readText: io.readText,
                 realPath: io.realPath,
@@ -616,19 +640,12 @@ export async function runCli(
     .description('List all available scenarios')
     .option('--json', 'output JSON', false)
     .action(async (options: { json: boolean }) => {
-      const root = 'scenarios';
+      const roots = [...new Set(['scenarios', runtimeAssetPath('scenarios')])];
       const entries: { path: string; name: string; description?: string }[] = [];
+      const seen = new Set<string>();
 
-      let dirExists = false;
-      try {
-        await readdir(root);
-        dirExists = true;
-      } catch {
-        // scenarios/ directory not found
-      }
-
-      if (dirExists) {
-        const walk = async (dir: string) => {
+      for (const root of roots) {
+        const walk = async (dir: string): Promise<void> => {
           const items = await readdir(dir, { withFileTypes: true });
           for (const item of items) {
             const full = join(dir, item.name);
@@ -639,8 +656,11 @@ export async function runCli(
                 const raw = await readFile(full, 'utf8');
                 const spec = JSON.parse(raw) as { name: string; description?: string };
                 if (typeof spec.name === 'string') {
+                  const scenarioPath = relative(root, full).replace(/\\/g, '/');
+                  if (seen.has(scenarioPath)) continue;
+                  seen.add(scenarioPath);
                   entries.push({
-                    path: relative(root, full).replace(/\\/g, '/'),
+                    path: scenarioPath,
                     name: spec.name,
                     ...(typeof spec.description === 'string'
                       ? { description: spec.description }
@@ -653,14 +673,20 @@ export async function runCli(
             }
           }
         };
-        await walk(root);
+        try {
+          await walk(root);
+        } catch {
+          // This distribution does not contain a scenarios directory.
+        }
       }
+
+      entries.sort((left, right) => left.path.localeCompare(right.path));
 
       if (options.json) {
         io.stdout(`${JSON.stringify(entries, null, 2)}\n`);
       } else {
         if (entries.length === 0) {
-          io.stdout('no scenarios found — run from the repository root\n');
+          io.stdout('no scenarios found\n');
         } else {
           for (const entry of entries) {
             const desc = entry.description ? `  — ${entry.description}` : '';
@@ -705,7 +731,10 @@ export async function runCli(
   try {
     await program.parseAsync(parseArgv, { from: 'node' });
   } catch (error) {
-    if (error instanceof CommanderError && error.code === 'commander.helpDisplayed') {
+    if (
+      error instanceof CommanderError &&
+      (error.code === 'commander.helpDisplayed' || error.code === 'commander.version')
+    ) {
       return { exitCode: 0 };
     }
     if (error instanceof LabDiagnosticError) {

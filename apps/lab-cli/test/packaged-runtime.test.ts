@@ -341,7 +341,7 @@ describe('PackagedLabRuntime', () => {
       '--env-file',
       '/tmp/cashu-fault-lab.env',
       '-f',
-      expect.stringMatching(/wallet-adapters\.compose\.yml$/u),
+      expect.stringMatching(/infra\/compose\/wallet-adapters\.compose\.yml$/u),
       'up',
       '--build',
       '-d',
@@ -362,7 +362,7 @@ describe('PackagedLabRuntime', () => {
     expect(invocations[0]?.args).toEqual([
       'compose',
       '-f',
-      expect.stringMatching(/wallet-adapters\.compose\.yml$/u),
+      expect.stringMatching(/infra\/compose\/wallet-adapters\.compose\.yml$/u),
       'restart',
       'cashu-ts',
     ]);

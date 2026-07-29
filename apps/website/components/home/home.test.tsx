@@ -80,7 +80,7 @@ describe('home components', () => {
       'href',
       'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
     );
-    expect(within(hero).getByText('./scripts/quickstart')).toBeVisible();
+    expect(within(hero).getByText('npx cashu-fault-lab demo')).toBeVisible();
     expect(within(hero).getByRole('link', { name: /View on GitHub/ })).toHaveAttribute(
       'href',
       'https://github.com/GautamBytes/cashu-fault-lab',

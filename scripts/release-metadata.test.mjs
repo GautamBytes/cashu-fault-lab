@@ -9,6 +9,7 @@ const workspacePackages = [
   'adapters/template/package.json',
   'apps/http-fault-gateway/package.json',
   'apps/lab-cli/package.json',
+  'apps/npm-cli/package.json',
   'apps/nostr-fault-relay/package.json',
   'apps/reference-receiver/package.json',
   'apps/reference-sender/package.json',

@@ -235,6 +235,40 @@ async function dockerDaemonCheck(probe: DoctorProbes): Promise<DoctorCheck> {
   }
 }
 
+async function dockerComposeVersionCheck(probe: DoctorProbes): Promise<DoctorCheck> {
+  try {
+    const { stdout } = await probe.execFile('docker', ['compose', 'version', '--short']);
+    const version = stdout.trim();
+    const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)/u);
+    if (match === null) {
+      return {
+        name: 'docker compose',
+        status: 'fail',
+        detail: `unexpected version: ${truncate(version)}`,
+      };
+    }
+    const current = [Number(match[1]), Number(match[2]), Number(match[3])] as const;
+    const minimum = [2, 24, 4] as const;
+    const supported = current.some(
+      (part, index) =>
+        part > minimum[index]! &&
+        current.slice(0, index).every((earlier, earlierIndex) => earlier === minimum[earlierIndex]),
+    );
+    const exactMinimum = current.every((part, index) => part === minimum[index]);
+    if (!supported && !exactMinimum) {
+      return {
+        name: 'docker compose',
+        status: 'fail',
+        detail: `requires Docker Compose 2.24.4 or newer; found ${version}`,
+      };
+    }
+    return { name: 'docker compose', status: 'ok', detail: version };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'command failed';
+    return { name: 'docker compose', status: 'fail', detail: truncate(reason) };
+  }
+}
+
 function testcontainersCheck(dockerDaemon: DoctorCheck): DoctorCheck {
   if (dockerDaemon.status === 'ok') {
     return {
@@ -350,7 +384,10 @@ export async function runDoctor(
     readonly ports?: readonly { readonly label: string; readonly port: number }[];
     readonly environment?: boolean;
     readonly senderDurability?: boolean;
+    readonly pnpm?: boolean;
     readonly cargo?: boolean;
+    readonly dockerCompose?: boolean;
+    readonly testcontainers?: boolean;
     readonly testTiers?: boolean;
     readonly portConflict?: 'warn' | 'fail';
   } = {},
@@ -363,8 +400,11 @@ export async function runDoctor(
   }
   const node = await nodeVersionCheck(probes);
   checks.push(node);
-  const pnpm = await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm');
-  checks.push(pnpm);
+  const pnpm =
+    options.pnpm === false
+      ? { name: 'pnpm', status: 'ok' as const, detail: 'not required by this distribution' }
+      : await versionCheck(probes, 'pnpm', ['--version'], /^\d+\.\d+\.\d+$/, 'pnpm');
+  if (options.pnpm !== false) checks.push(pnpm);
   const docker = await versionCheck(
     probes,
     'docker',
@@ -377,9 +417,12 @@ export async function runDoctor(
       ? { ...docker, diagnostic: createDiagnostic('DOCKER_NOT_INSTALLED') }
       : docker,
   );
+  if (options.dockerCompose === true) {
+    checks.push(await dockerComposeVersionCheck(probes));
+  }
   const dockerDaemon = await dockerDaemonCheck(probes);
   checks.push(dockerDaemon);
-  checks.push(testcontainersCheck(dockerDaemon));
+  if (options.testcontainers !== false) checks.push(testcontainersCheck(dockerDaemon));
   const cargo =
     options.cargo === false
       ? { name: 'cargo (CDK adapter)', status: 'ok' as const, detail: 'skipped for startup' }

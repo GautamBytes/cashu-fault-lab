@@ -47,7 +47,6 @@ import {
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import type {
   LabDemoOptions,
@@ -59,6 +58,7 @@ import type {
 import { ExternalAdapterRegistry } from './adapter-registry.js';
 import type { AdapterManifest } from './adapter-manifest.js';
 import type { LoadedReleaseSuite, LoadedReleaseSuiteScenario } from './release-suite-loader.js';
+import { IS_PACKAGED_DISTRIBUTION, runtimeAssetPath } from './runtime-assets.js';
 import { ensureReferenceRuntimeEnv } from './runtime-env.js';
 
 const execFileAsync = promisify(execFile);
@@ -107,14 +107,10 @@ export class DockerComposeServiceController implements LabServiceController {
       if (options.envFile === undefined) {
         throw new Error('Reference lab compose requires an env file');
       }
-      const composeFile = fileURLToPath(
-        new URL('../../../infra/compose/wallet-adapters.compose.yml', import.meta.url),
-      );
+      const composeFile = runtimeAssetPath('compose', 'wallet-adapters.compose.yml');
       return ['compose', '--env-file', options.envFile, '-f', composeFile];
     }
-    const composeFile = fileURLToPath(
-      new URL('../../../infra/compose/lab.compose.yml', import.meta.url),
-    );
+    const composeFile = runtimeAssetPath('compose', 'lab.compose.yml');
     return ['compose', '-f', composeFile, '--profile', profile];
   }
 
@@ -123,7 +119,7 @@ export class DockerComposeServiceController implements LabServiceController {
     await this.#execute('docker', [
       ...base,
       'up',
-      ...(profile === 'lab' ? ['--build'] : []),
+      ...(profile === 'lab' && !IS_PACKAGED_DISTRIBUTION ? ['--build'] : []),
       '-d',
       ...(profile === 'lab' ? ['--wait'] : []),
     ]);
@@ -169,9 +165,7 @@ export class DockerComposeServiceController implements LabServiceController {
     if (!/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(service)) {
       throw new Error('Compose service is invalid');
     }
-    const composeFile = fileURLToPath(
-      new URL('../../../infra/compose/wallet-adapters.compose.yml', import.meta.url),
-    );
+    const composeFile = runtimeAssetPath('compose', 'wallet-adapters.compose.yml');
     await this.#execute('docker', ['compose', '-f', composeFile, 'restart', service]);
   }
 }
@@ -671,9 +665,7 @@ export class PackagedLabRuntime implements LabRuntime {
     const reportPath = options.reportPath ?? join(reportsDirectory, 'demo.html');
     let result!: ScenarioRunResult;
     try {
-      const scenarioPath = fileURLToPath(
-        new URL('../../../scenarios/retry/response-lost.json', import.meta.url),
-      );
+      const scenarioPath = runtimeAssetPath('scenarios', 'retry', 'response-lost.json');
       const spec = JSON.parse(await readFile(scenarioPath, 'utf8')) as ScenarioSpec;
       const manifest: AdapterManifest = {
         schemaVersion: 1,

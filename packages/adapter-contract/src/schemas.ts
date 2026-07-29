@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { specAssetPath } from './spec-assets.js';
 
 export type JsonSchema = Readonly<Record<string, unknown>>;
 
 function loadSchema(name: string): JsonSchema {
-  const path = fileURLToPath(new URL(`../../../spec/schemas/${name}`, import.meta.url));
+  const path = specAssetPath('schemas', name);
   return JSON.parse(readFileSync(path, 'utf8')) as JsonSchema;
 }
 

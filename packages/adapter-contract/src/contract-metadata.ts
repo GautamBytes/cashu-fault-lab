@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { specAssetPath } from './spec-assets.js';
 import type {
   AdapterCapabilities,
   AdapterCompatibilityResult,
@@ -13,7 +13,7 @@ const SUPPORTED_SCHEMA_VERSION = 2;
 let cached: AdapterContractMetadata | undefined;
 
 function specDigest(): string {
-  const path = fileURLToPath(new URL('../../../spec/openapi.yaml', import.meta.url));
+  const path = specAssetPath('openapi.yaml');
   return `sha256:${createHash('sha256').update(readFileSync(path)).digest('hex')}`;
 }
 

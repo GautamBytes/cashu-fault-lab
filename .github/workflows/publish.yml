@@ -1,0 +1,117 @@
+name: Publish developer CLI
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  runtime-images:
+    name: Runtime image — ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: cashu-fault-lab-node-wallets
+            target: node-wallets
+          - image: cashu-fault-lab-cdk-adapter
+            target: cdk-adapter
+          - image: cashu-fault-lab-netns
+            target: lab-netns
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Protect an existing version tag
+        id: existing
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          reference="ghcr.io/gautambytes/${{ matrix.image }}:${version}"
+          if docker manifest inspect "${reference}" >/dev/null 2>&1
+          then
+            docker pull --platform linux/amd64 "${reference}"
+            revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${reference}")"
+            if [ "${revision}" != "${GITHUB_SHA}" ]
+            then
+              echo "refusing to overwrite ${reference}, which belongs to ${revision}"
+              exit 1
+            fi
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "skip=false" >> "${GITHUB_OUTPUT}"
+          fi
+      - id: metadata
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/gautambytes/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha
+      - uses: docker/build-push-action@v7
+        if: steps.existing.outputs.skip != 'true'
+        with:
+          context: .
+          file: infra/docker/wallet-adapters.Dockerfile
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  npm:
+    name: npm package
+    needs: runtime-images
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: npm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Verify tag matches package version
+        run: node -e "const p=require('./apps/npm-cli/package.json');if(process.env.GITHUB_REF_NAME!=='v'+p.version)process.exit(1)"
+      - name: Verify tagged commit is on main
+        run: git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+      - name: Verify public runtime images
+        run: |
+          version="$(node -p "require('./apps/npm-cli/package.json').version")"
+          for image in \
+            cashu-fault-lab-node-wallets \
+            cashu-fault-lab-cdk-adapter \
+            cashu-fault-lab-netns
+          do
+            docker manifest inspect "ghcr.io/gautambytes/${image}:${version}" >/dev/null
+          done
+      - name: Test installed CLI against published runtime
+        run: pnpm test:npm-package
+        env:
+          CFL_NPM_E2E_DEMO: '1'
+      - name: Publish with provenance
+        working-directory: apps/npm-cli
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
