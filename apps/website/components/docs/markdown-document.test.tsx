@@ -50,9 +50,9 @@ describe('repository Markdown links', () => {
 });
 
 describe('Markdown component props', () => {
-  it('renders inline code as annotated prose instead of bordered UI boxes', () => {
+  it('renders inline code as plain monospace prose without decorative boxes', () => {
     expect(docsCss).toMatch(
-      /\.markdown :not\(pre\) > code\s*\{[^}]*background:\s*linear-gradient\([^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*font-size:\s*0\.92em;[^}]*padding:\s*0 0\.08em/s,
+      /\.markdown :not\(pre\) > code\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*font-size:\s*0\.94em;[^}]*padding:\s*0;/s,
     );
   });
 
