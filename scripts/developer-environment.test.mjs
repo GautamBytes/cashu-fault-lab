@@ -26,7 +26,10 @@ describe('developer environment', () => {
       'source=${localWorkspaceFolderBasename}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume',
       'source=${localWorkspaceFolderBasename}-pnpm-store,target=/home/node/.local/share/pnpm/store,type=volume',
     ]);
-    assert.match(config.postCreateCommand, /^sudo chown -R node:node node_modules && /u);
+    assert.match(
+      config.postCreateCommand,
+      /^sudo chown -R node:node node_modules \/home\/node\/\.local\/share\/pnpm\/store && /u,
+    );
     assert.deepEqual(config.forwardPorts, [3000]);
     assert.equal(config.remoteUser, 'node');
     assert.deepEqual(Object.keys(lock.features).sort(), Object.keys(config.features).sort());
@@ -64,6 +67,10 @@ describe('developer environment', () => {
       /command:\s*'corepack pnpm build && corepack pnpm start --port 4317'/u,
     );
     assert.match(contributing, /Next\.js website uses bundler-resolved extensionless imports/u);
+    assert.match(
+      ci,
+      /pnpm --filter @cashu-fault-lab\/website exec playwright install --with-deps chromium/u,
+    );
     assert.match(ci, /pnpm website:test:e2e/u);
     assert.match(ci, /\.\/scripts\/quickstart --skip-install/u);
     assert.match(ci, /@devcontainers\/cli@0\.88\.0 up --workspace-folder \./u);
