@@ -1,6 +1,7 @@
 # Cashu Fault Lab CLI
 
-Run deterministic Cashu payment-delivery fault scenarios without cloning the repository.
+Reproduce ambiguous Cashu payment delivery, test exact retries and collect redacted recovery
+evidence without cloning the repository.
 
 ## Requirements
 
@@ -14,24 +15,21 @@ npx cashu-fault-lab doctor
 npx cashu-fault-lab demo
 ```
 
-The demo starts an isolated local stack, injects a lost HTTP response, retries the exact
-delivery, verifies recovery and writes redacted JSON and HTML evidence. The stack is removed
-when the run finishes unless `--keep` is supplied.
+The demo starts an isolated stack, loses an HTTP response, retries the exact delivery and checks
+that recovery converges to one durable credit. It writes redacted JSON and HTML evidence, then
+removes the stack unless you pass `--keep`.
 
-Explore the bundled scenarios:
+Useful commands:
 
 ```bash
 npx cashu-fault-lab ls
 npx cashu-fault-lab inspect retry/response-lost
-npx cashu-fault-lab validate retry/response-lost
-```
-
-Scaffold an adapter:
-
-```bash
 npx cashu-fault-lab adapter init --language typescript --name my-wallet
 ```
 
-Documentation: <https://cashu-fault-lab.vercel.app/docs>
+Cashu Fault Lab 0.1 is an experimental developer preview, not a certification that a wallet is
+production-safe.
+
+Full documentation: <https://cashu-fault-lab.vercel.app/>
 
 Source and issues: <https://github.com/GautamBytes/cashu-fault-lab>

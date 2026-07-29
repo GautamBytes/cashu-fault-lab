@@ -59,6 +59,30 @@ test('publishing is blocked until the runtime images support anonymous pulls', a
   assert.match(workflow, /CFL_NPM_E2E_DEMO: '1'/u);
 });
 
+test('the npm README stays concise and sends developers to the full website', async () => {
+  const readme = await readFile(new URL('apps/npm-cli/README.md', root), 'utf8');
+  const words = readme.trim().split(/\s+/u);
+
+  assert.ok(words.length <= 220, `npm README should stay under 220 words; found ${words.length}`);
+  assert.match(readme, /npx cashu-fault-lab doctor/u);
+  assert.match(readme, /npx cashu-fault-lab demo/u);
+  assert.match(readme, /https:\/\/cashu-fault-lab\.vercel\.app\//u);
+  assert.match(readme, /experimental developer preview/iu);
+  assert.match(readme, /not a certification/iu);
+});
+
+test('successful npm publication creates one idempotent GitHub Release', async () => {
+  const workflow = await readFile(new URL('.github/workflows/publish.yml', root), 'utf8');
+
+  assert.match(workflow, /^\s{2}github-release:/mu);
+  assert.match(workflow, /needs: npm/u);
+  assert.match(workflow, /contents: write/u);
+  assert.match(workflow, /gh release view "\$\{GITHUB_REF_NAME\}"/u);
+  assert.match(workflow, /gh release create "\$\{GITHUB_REF_NAME\}"/u);
+  assert.match(workflow, /--verify-tag/u);
+  assert.match(workflow, /--notes-file "\$\{notes\}"/u);
+});
+
 test('pull request CI runs the installed npm tarball through the real Docker demo', async () => {
   const workflow = await readFile(new URL('.github/workflows/ci.yml', root), 'utf8');
 
