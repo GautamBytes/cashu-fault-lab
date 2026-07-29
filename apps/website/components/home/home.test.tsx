@@ -72,6 +72,11 @@ describe('home components', () => {
     render(await HomePage());
 
     const hero = screen.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
+    expect(within(hero).getByRole('link', { name: 'Open in Codespaces' })).toHaveAttribute(
+      'href',
+      'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
+    );
+    expect(within(hero).getByText('./scripts/quickstart')).toBeVisible();
     expect(within(hero).getByRole('link', { name: /View on GitHub/ })).toHaveAttribute(
       'href',
       'https://github.com/GautamBytes/cashu-fault-lab',

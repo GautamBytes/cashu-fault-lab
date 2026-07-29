@@ -6,6 +6,19 @@ This is an experimental v0.1 developer preview, not certification. The strict ga
 
 The lab implements an experimental `cashu-delivery-v1` application profile on existing Cashu and Nostr protocols. Harness operation does not require a new NUT. See [ADR 001](docs/adrs/001-delivery-semantics.md) for the standardization boundary.
 
+## Quickstart
+
+[Open Cashu Fault Lab in GitHub Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1)
+to use the pinned Node.js, pnpm, and isolated Docker environment without configuring them locally.
+Then run:
+
+```bash
+./scripts/quickstart
+```
+
+For a local clone, install Node.js 24 and Docker, then run the same command. Use
+`./scripts/quickstart --check` for a non-mutating prerequisite check.
+
 ## Requirements
 
 - Node.js 24

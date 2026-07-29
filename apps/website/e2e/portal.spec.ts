@@ -107,7 +107,11 @@ test('home is accessible, has one visible title, and fits the viewport', async (
       level: 1,
       name: 'Make Cashu delivery fail safely.',
     });
-    const primaryAction = hero.getByRole('link', { name: 'Run the deterministic demo' });
+    const primaryAction = hero.getByRole('link', { name: 'Open in Codespaces' });
+    await expect(primaryAction).toHaveAttribute(
+      'href',
+      'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
+    );
     const githubAction = hero.getByRole('link', { name: /View on GitHub/ });
     const commandBlock = hero.getByLabel('Demo command');
     const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
@@ -169,7 +173,7 @@ test('user laptop viewport shows the complete hero and next section cue', async 
   const requiredElements = [
     hero.getByRole('heading', { level: 1, name: 'Make Cashu delivery fail safely.' }),
     hero.locator('h1 + p'),
-    hero.getByRole('link', { name: 'Run the deterministic demo' }),
+    hero.getByRole('link', { name: 'Open in Codespaces' }),
     hero.getByRole('link', { name: /View on GitHub/ }),
     hero.getByLabel('Demo command'),
     hero.getByRole('complementary', { name: 'Deterministic demo run' }),
@@ -318,10 +322,10 @@ test('tablet hero stacks without clipping command metadata or run evidence', asy
     level: 1,
     name: 'Make Cashu delivery fail safely.',
   });
-  const primaryAction = hero.getByRole('link', { name: 'Run the deterministic demo' });
+  const primaryAction = hero.getByRole('link', { name: 'Open in Codespaces' });
   const actions = primaryAction.locator('..');
   const command = hero.getByLabel('Demo command');
-  const commandMetadata = hero.getByText('seeded · local · secret-redacted', { exact: true });
+  const commandMetadata = hero.getByText('pinned · isolated · secret-redacted', { exact: true });
   const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
 
   for (const element of [heading, actions, command, commandMetadata, runPanel]) {

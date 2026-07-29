@@ -18,4 +18,16 @@ describe('developer environment', () => {
     assert.deepEqual(config.forwardPorts, [3000]);
     assert.equal(config.remoteUser, 'node');
   });
+
+  it('documents the same Codespaces and local quickstart paths', async () => {
+    const readme = await readFile('README.md', 'utf8');
+
+    assert.match(
+      readme,
+      /https:\/\/codespaces\.new\/GautamBytes\/cashu-fault-lab\?quickstart=1/u,
+    );
+    assert.match(readme, /\.\/scripts\/quickstart\n/u);
+    assert.match(readme, /\.\/scripts\/quickstart --check/u);
+    assert.match(readme, /experimental v0\.1 developer preview/u);
+  });
 });

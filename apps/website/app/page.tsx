@@ -77,9 +77,11 @@ export default async function HomePage() {
             <div className={styles.heroActions}>
               <a
                 className={styles.primaryAction}
-                href="/docs/getting-started#run-the-deterministic-demo"
+                href="https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1"
+                rel="noreferrer noopener"
+                target="_blank"
               >
-                Run the deterministic demo
+                Open in Codespaces
               </a>
               <a
                 className={styles.secondaryAction}
@@ -92,8 +94,8 @@ export default async function HomePage() {
             </div>
             <div aria-label="Demo command" className={styles.commandBlock}>
               <span aria-hidden="true">$</span>
-              <code>pnpm lab demo</code>
-              <span className={styles.commandNote}>seeded · local · secret-redacted</span>
+              <code>./scripts/quickstart</code>
+              <span className={styles.commandNote}>pinned · isolated · secret-redacted</span>
             </div>
           </div>
           <HeroRunPanel summary={summary} />
