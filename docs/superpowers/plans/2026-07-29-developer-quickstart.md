@@ -48,11 +48,7 @@ Next.js 16, Vitest, Playwright.
 ```js
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  assertSupportedNodeVersion,
-  parseQuickstartArgs,
-  runQuickstart,
-} from './quickstart.mjs';
+import { assertSupportedNodeVersion, parseQuickstartArgs, runQuickstart } from './quickstart.mjs';
 
 describe('developer quickstart', () => {
   it('parses check and skip-install modes', () => {
@@ -199,10 +195,7 @@ git commit -m "feat: add one-command developer quickstart"
 Parse `.devcontainer/devcontainer.json` and assert:
 
 ```js
-assert.equal(
-  config.image,
-  'mcr.microsoft.com/devcontainers/typescript-node:5.0.1-24-bookworm',
-);
+assert.equal(config.image, 'mcr.microsoft.com/devcontainers/typescript-node:5.0.1-24-bookworm');
 assert.deepEqual(config.features, {
   'ghcr.io/devcontainers/features/docker-in-docker:3.0.1': {},
 });
@@ -305,7 +298,7 @@ Expected: FAIL because the current hero and README do not expose the new entry p
 
 Add a `Quickstart` section before the requirements:
 
-```markdown
+````markdown
 ## Quickstart
 
 [Open Cashu Fault Lab in GitHub Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1)
@@ -315,10 +308,12 @@ Then run:
 ```bash
 ./scripts/quickstart
 ```
+````
 
 For a local clone, install Node.js 24 and Docker, then run the same command. Use
 `./scripts/quickstart --check` for a non-mutating prerequisite check.
-```
+
+````
 
 Change the homepage primary action to `Open in Codespaces`, open it in a new tab with
 `rel="noreferrer noopener"`, and render `./scripts/quickstart` in the hero command block. Keep the
@@ -338,7 +333,7 @@ Run:
 pnpm --filter @cashu-fault-lab/website exec vitest run components/home/home.test.tsx
 node --test scripts/developer-environment.test.mjs
 pnpm website:test
-```
+````
 
 Expected: all focused and website unit tests pass.
 

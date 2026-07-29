@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  assertSupportedNodeVersion,
-  parseQuickstartArgs,
-  runQuickstart,
-} from './quickstart.mjs';
+import { assertSupportedNodeVersion, parseQuickstartArgs, runQuickstart } from './quickstart.mjs';
 
 describe('developer quickstart', () => {
   it('parses check and skip-install modes', () => {

@@ -7,9 +7,7 @@ test('every public route runs Axe before the overflow check', async () => {
     path.join(import.meta.dirname, '..', 'e2e', 'portal.spec.ts'),
     'utf8',
   );
-  const publicRouteTest = portalSpec.match(
-    /test\('every public route[\s\S]*?\n}\);/,
-  )?.[0];
+  const publicRouteTest = portalSpec.match(/test\('every public route[\s\S]*?\n}\);/)?.[0];
 
   expect(publicRouteTest).toBeDefined();
   expect(publicRouteTest).toMatch(

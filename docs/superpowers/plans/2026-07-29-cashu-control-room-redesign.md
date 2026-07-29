@@ -27,12 +27,14 @@
 ### Task 1: Simplify global navigation and expand the docs rail
 
 **Files:**
+
 - Modify: `apps/website/components/site-header.tsx`
 - Modify: `apps/website/components/docs/docs-shell.tsx`
 - Modify: `apps/website/test/shell.test.tsx`
 - Modify: `apps/website/app/content-pages.test.tsx`
 
 **Interfaces:**
+
 - Consumes: existing `SiteHeaderProps`, `DocumentPage[]`, and `/architecture` route.
 - Produces: global `navigation` with Home, Docs, Release status; docs navigation link named Architecture pointing to `/architecture`.
 
@@ -61,13 +63,8 @@ it('exposes the compact primary navigation', () => {
 Add a content-page assertion that the docs navigation exposes Architecture:
 
 ```tsx
-expect(screen.getByRole('navigation', { name: 'Documentation' })).toHaveTextContent(
-  'Architecture',
-);
-expect(screen.getByRole('link', { name: 'Architecture' })).toHaveAttribute(
-  'href',
-  '/architecture',
-);
+expect(screen.getByRole('navigation', { name: 'Documentation' })).toHaveTextContent('Architecture');
+expect(screen.getByRole('link', { name: 'Architecture' })).toHaveAttribute('href', '/architecture');
 ```
 
 - [ ] **Step 2: Run the focused tests and confirm they fail**
@@ -96,11 +93,13 @@ Remove the standalone GitHub anchor from `SiteHeader`. In `DocumentationNavigati
 Architecture route after the documents in the `Understand` group:
 
 ```tsx
-{group === 'Understand' ? (
-  <li>
-    <a href="/architecture">Architecture</a>
-  </li>
-) : null}
+{
+  group === 'Understand' ? (
+    <li>
+      <a href="/architecture">Architecture</a>
+    </li>
+  ) : null;
+}
 ```
 
 - [ ] **Step 4: Run the focused tests and confirm they pass**
@@ -125,6 +124,7 @@ git commit -m "feat(website): simplify portal navigation"
 ### Task 2: Establish the dark portal shell and compact header
 
 **Files:**
+
 - Modify: `apps/website/app/globals.css`
 - Modify: `apps/website/components/portal-shell.tsx`
 - Modify: `apps/website/components/site-header.module.css`
@@ -134,6 +134,7 @@ git commit -m "feat(website): simplify portal navigation"
 - Modify: `apps/website/app/site-metadata.test.ts`
 
 **Interfaces:**
+
 - Consumes: current CSS custom properties and existing semantic shell.
 - Produces: shared dark tokens including `--ink`, `--control-surface`, `--elevated-surface`, `--muted-text`, `--hairline`, and `--shell-width`; sticky compact header and dark footer.
 
@@ -236,6 +237,7 @@ git commit -m "feat(website): add Cashu control room shell"
 ### Task 3: Rebuild the hero and promote scenarios
 
 **Files:**
+
 - Modify: `apps/website/app/page.tsx`
 - Create: `apps/website/components/home/hero-run-panel.tsx`
 - Create: `apps/website/components/home/scenario-explorer.tsx`
@@ -244,6 +246,7 @@ git commit -m "feat(website): add Cashu control room shell"
 - Modify: `apps/website/e2e/portal.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `DemoSummary` returned by `getDemoSummary()` and scenario groups returned by `getScenarioGroups()`.
 - Produces: `HeroRunPanel({ summary }: { summary: DemoSummary })` and `ScenarioExplorer({ groups }: { groups: ScenarioGroup[] })`.
 
@@ -353,12 +356,14 @@ git commit -m "feat(website): rebuild home control room hero"
 ### Task 4: Tighten evidence and the remaining home narrative
 
 **Files:**
+
 - Modify: `apps/website/components/home/evidence-report.tsx`
 - Modify: `apps/website/components/home/fault-timeline.tsx`
 - Modify: `apps/website/components/home/home.module.css`
 - Modify: `apps/website/components/home/home.test.tsx`
 
 **Interfaces:**
+
 - Consumes: existing `DemoSummary`, release status, profile steps, and tested-fault content.
 - Produces: the same accessible evidence list and six-stage timeline with denser dark layouts.
 
@@ -419,6 +424,7 @@ git commit -m "feat(website): tighten evidence and fault sections"
 ### Task 5: Apply the Control Room system to docs and generated content pages
 
 **Files:**
+
 - Modify: `apps/website/components/docs/docs.module.css`
 - Modify: `apps/website/components/docs/code-block.tsx`
 - Modify: `apps/website/components/docs/markdown-document.test.tsx`
@@ -426,6 +432,7 @@ git commit -m "feat(website): tighten evidence and fault sections"
 - Modify: `apps/website/app/not-found.module.css`
 
 **Interfaces:**
+
 - Consumes: existing `DocsShell`, Markdown rendering, scenario, architecture, release, and 404 markup.
 - Produces: dark three-column docs shell, compact code controls, and shared dark generated-content surfaces.
 
@@ -493,6 +500,7 @@ git commit -m "feat(website): redesign docs and content surfaces"
 ### Task 6: Verify the portal at production and real viewports
 
 **Files:**
+
 - Modify: `apps/website/e2e/portal.spec.ts`
 - Modify: `apps/website/e2e/screenshots/home-desktop.png`
 - Modify: `apps/website/e2e/screenshots/home-mobile.png`
@@ -502,6 +510,7 @@ git commit -m "feat(website): redesign docs and content surfaces"
 - Modify: `design-qa.md`
 
 **Interfaces:**
+
 - Consumes: completed portal and existing Playwright projects.
 - Produces: current responsive screenshots and verification notes.
 

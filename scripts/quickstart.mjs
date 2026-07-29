@@ -76,9 +76,7 @@ export async function runQuickstart({
   try {
     await runCommand('docker', ['--version'], { cwd: repositoryRoot, quiet: true });
   } catch {
-    throw new Error(
-      'Docker CLI is required; install Docker Desktop or Docker Engine, then retry.',
-    );
+    throw new Error('Docker CLI is required; install Docker Desktop or Docker Engine, then retry.');
   }
 
   try {
