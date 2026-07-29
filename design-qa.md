@@ -16,6 +16,9 @@ Final result: passed on 2026-07-29.
 - Mobile full-page references:
   `apps/website/e2e/screenshots/home-mobile.png` at 390 x 10929 and
   `apps/website/e2e/screenshots/docs-mobile.png` at 390 x 13132.
+- Architecture-in-Docs references:
+  `apps/website/e2e/screenshots/architecture-desktop.png` at 1440 x 3024 and
+  `apps/website/e2e/screenshots/architecture-mobile.png` at 390 x 4474.
 - Additional viewport-only inspection captures covered home and docs at 1905 x 781, 1440 x 900,
   1024 x 768, and 390 x 844. Playwright used Chromium, a device scale factor of 1, reduced motion,
   and disabled screenshot animations.
@@ -30,7 +33,9 @@ conditions, follows Docs, opens Browse documentation, and verifies 44px controls
 
 - 1905 x 781: the 68px header occupies `y=0..68`; the hero occupies `y=68..765`; the trace
   section starts at `y=765`, leaving a 16px next-section cue. The headline ends at `446.92`,
-  description at `528.89`, actions at `604.08`, command at `676.06`, and run panel at `505.86`.
+  description at `528.89`, primary action at `604.08`, command at `676.06`, and run panel at
+  `505.86`. The labeled "Next / deterministic fault trace" link occupies `y=710..754`, at least
+  33.94px below the lowest required hero element and fully inside the viewport.
 - 1440 x 900: the hero ends and trace starts at `y=788`. The trace eyebrow is visible in the
   first viewport; the trace heading starts at `y=909.58`.
 - 1024 x 768: the 60px compact header fits its 44px brand and menu controls. The hero ends and
@@ -49,24 +54,42 @@ conditions, follows Docs, opens Browse documentation, and verifies 44px controls
 - The docs phone H1 uses a fixed 44px responsive step at both 390px and 430px viewport widths.
 - The mobile docs disclosure is 50px high. The inspection scan and Playwright touch-target checks
   found no visible target below 44 x 44.
+- Architecture retains its generated visual topology at `/architecture` while using the same
+  desktop sidebar, mobile disclosure, table of contents, current state, and pagination as Markdown
+  documents. Its desktop and mobile captures pass the same Axe and overflow checks.
 - Gradients stay limited to the restrained hero treatment, primary action emphasis, and trace
   rail. Docs uses no gradients. Full-page inspection found no large empty bands or stretched
   reading lines.
 
 ## Verification
 
-- Website unit tests: 11 files and 53 tests passed.
+- Website unit tests: 11 files and 60 tests passed.
 - Type generation and `tsc --noEmit`: passed.
 - Production build: passed and generated 20 static or SSG routes.
-- Playwright: 13 passed and 7 project-specific cases skipped across desktop and mobile projects.
+- Playwright: 16 passed and 8 project-specific cases skipped across desktop and mobile projects.
 - Axe scanned all 12 listed public routes in both projects, for 24 route/viewport scans. The final
   run found no serious or critical violations.
 - Every public route passed horizontal-overflow checks in both projects.
 - Reduced motion, canonical metadata, discovery endpoints, search focus containment, docs heading
-  navigation, compact navigation, local code scrolling, touch targets, and screenshot capture
-  passed.
+  navigation, generated Architecture navigation/search/pagination, the empty-search recovery
+  target, compact navigation, local code scrolling, touch targets, the exact 1905 x 781 trace cue,
+  and screenshot capture passed.
 
-## Fixes from this pass
+## Final review fixes
+
+1. Made ordered documentation destinations the shared source for Markdown and generated pages,
+   placing Architecture immediately after Adapter guide without duplicating navigation ordering.
+2. Rendered `/architecture` inside the Docs shell with current navigation, search discovery, table
+   of contents, pagination, sitemap discovery, and its existing generated topology intact.
+3. Replaced the primary CTA's low-contrast endpoint, removed its `!important`, and standardized
+   Warm sand focus rings on dark and plum surfaces with focused contrast checks.
+4. Enlarged the mobile empty-search recovery link to a measured 44 x 44 minimum target.
+5. Added a familiar search icon with a desktop label and mobile icon-only presentation while
+   preserving the button's accessible name.
+6. Added the labeled in-page trace cue and exact 1905 x 781 bounds assertion, plus permanent
+   desktop/mobile Architecture integration coverage and captures.
+
+## Earlier responsive fixes retained
 
 1. Updated the stale home-fold, manifest color, and compact-navigation E2E contracts.
 2. Replaced the mobile docs `12vw` heading term with a fixed `2.75rem` responsive step.

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CONTENT_REGISTRY, validateContentRegistry } from './content-registry';
+import {
+  CONTENT_REGISTRY,
+  DOCUMENTATION_DESTINATIONS,
+  validateContentRegistry,
+} from './content-registry';
 import {
   extractHeadingSections,
   extractHeadings,
@@ -13,6 +17,20 @@ describe('canonical content', () => {
   it('uses unique routes and existing canonical sources', async () => {
     expect(new Set(CONTENT_REGISTRY.map((item) => item.slug)).size).toBe(CONTENT_REGISTRY.length);
     await expect(validateContentRegistry()).resolves.toEqual([]);
+  });
+
+  it('orders Architecture immediately after Adapters in documentation destinations', () => {
+    expect(DOCUMENTATION_DESTINATIONS.map((item) => item.slug)).toEqual([
+      'getting-started',
+      'cli',
+      'adapters',
+      'architecture',
+      'delivery-profile',
+      'invariants',
+      'threat-model',
+      'release-notes',
+      'release-checklist',
+    ]);
   });
 
   it('deduplicates GitHub-style heading slugs outside code fences', () => {
@@ -127,5 +145,20 @@ describe('canonical content', () => {
     );
     expect(readme).toBeDefined();
     expect(records.find((record) => record.id === 'getting-started')?.text).not.toContain('<');
+  });
+
+  it('creates a canonical search record for the generated Architecture destination', async () => {
+    const records = await getSearchRecords();
+
+    expect(records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'architecture',
+          href: '/architecture',
+          title: 'Architecture',
+          text: expect.stringContaining('independent oracle'),
+        }),
+      ]),
+    );
   });
 });

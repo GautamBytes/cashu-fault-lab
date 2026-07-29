@@ -104,6 +104,16 @@
   padding: clamp(1.25rem, 3vw, 2.75rem);
 }
 
+.generatedArticle {
+  padding: 0;
+}
+
+.generatedArticle > .mobileToc,
+.generatedArticle > .pagination {
+  margin-left: clamp(1.1rem, 3vw, 2.75rem);
+  margin-right: clamp(1.1rem, 3vw, 2.75rem);
+}
+
 .articleHeader,
 .markdown,
 .pagination,
@@ -299,7 +309,7 @@
 }
 
 .markdown table:focus-visible {
-  outline: 2px solid var(--purple-electric);
+  outline: 2px solid var(--sand-500);
   outline-offset: 3px;
 }
 

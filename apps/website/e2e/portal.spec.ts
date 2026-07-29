@@ -137,6 +137,7 @@ test('user laptop viewport shows the complete hero and next section cue', async 
     hero.getByLabel('Demo command'),
     hero.getByRole('complementary', { name: 'Deterministic demo run' }),
   ];
+  const requiredElementBottoms: number[] = [];
 
   for (const element of requiredElements) {
     const elementBox = await element.boundingBox();
@@ -144,8 +145,16 @@ test('user laptop viewport shows the complete hero and next section cue', async 
     if (elementBox) {
       expect(elementBox.y).toBeGreaterThanOrEqual(0);
       expect(elementBox.y + elementBox.height).toBeLessThanOrEqual(781);
+      requiredElementBottoms.push(elementBox.y + elementBox.height);
     }
   }
+
+  const traceCue = hero.getByText('Next / deterministic fault trace');
+  await expect(traceCue).toBeVisible();
+  const traceCueBox = await traceCue.boundingBox();
+  expect(traceCueBox).not.toBeNull();
+  expect(traceCueBox?.y).toBeGreaterThanOrEqual(Math.max(...requiredElementBottoms) + 12);
+  expect((traceCueBox?.y ?? 0) + (traceCueBox?.height ?? 0)).toBeLessThanOrEqual(781);
 
   const trace = page.getByRole('region', {
     name: 'A lost response is not a lost result.',
@@ -190,6 +199,66 @@ test('documentation is accessible and wide code scrolls locally', async ({ page 
   await saveScreenshot(
     page,
     testInfo.project.name === 'mobile-chromium' ? 'docs-mobile.png' : 'docs-desktop.png',
+  );
+});
+
+test('Architecture participates in docs navigation, search, and pagination', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/docs/adapters');
+  await page
+    .getByRole('navigation', { name: 'Document pagination' })
+    .getByRole('link', { name: /Next\s*Architecture/ })
+    .click();
+
+  await expect(page).toHaveURL(/\/architecture$/);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Faults travel. Trust does not.' }),
+  ).toBeVisible();
+
+  if (testInfo.project.name === 'mobile-chromium') {
+    await page.getByText('Browse documentation', { exact: true }).click();
+  }
+
+  await expect(page.getByRole('link', { name: 'Architecture', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  const pagination = page.getByRole('navigation', { name: 'Document pagination' });
+  await expect(pagination.getByRole('link', { name: /Previous\s*Adapter guide/ })).toHaveAttribute(
+    'href',
+    '/docs/adapters',
+  );
+  await expect(pagination.getByRole('link', { name: /Next\s*Delivery profile/ })).toHaveAttribute(
+    'href',
+    '/docs/delivery-profile',
+  );
+
+  if (testInfo.project.name === 'mobile-chromium') {
+    await page.getByRole('button', { name: 'Toggle primary navigation' }).click();
+  }
+  await page.getByRole('button', { name: 'Search documentation' }).click();
+  await page.getByRole('searchbox', { name: 'Search documentation' }).fill('independent oracle');
+  await expect(
+    page
+      .getByRole('dialog', { name: 'Search documentation' })
+      .getByRole('link', { name: /^Architecture/ }),
+  ).toHaveAttribute('href', '/architecture');
+  await page.getByRole('button', { name: 'Close search' }).click();
+
+  if (testInfo.project.name === 'mobile-chromium') {
+    await page.getByRole('button', { name: 'Toggle primary navigation' }).click();
+    await page.getByText('Browse documentation', { exact: true }).click();
+  }
+
+  await expectNoSeriousAccessibilityViolations(page);
+  await expectNoPageOverflow(page);
+  await saveScreenshot(
+    page,
+    testInfo.project.name === 'mobile-chromium'
+      ? 'architecture-mobile.png'
+      : 'architecture-desktop.png',
   );
 });
 
@@ -259,6 +328,25 @@ test('mobile menu exposes compact navigation and 44px controls', async ({ page }
   await expectNoPageOverflow(page);
 });
 
+test('mobile empty search exposes a 44px recovery link', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium');
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Toggle primary navigation' }).click();
+  await page.getByRole('button', { name: 'Search documentation' }).click();
+  await page
+    .getByRole('searchbox', { name: 'Search documentation' })
+    .fill('cashu-fault-lab-guaranteed-zero-result-7f0f1e');
+
+  const recoveryLink = page.getByRole('link', { name: 'Browse scenarios' });
+  await expect(recoveryLink).toBeVisible();
+  const recoveryBox = await recoveryLink.boundingBox();
+
+  expect(recoveryBox).not.toBeNull();
+  expect(recoveryBox?.width).toBeGreaterThanOrEqual(44);
+  expect(recoveryBox?.height).toBeGreaterThanOrEqual(44);
+});
+
 test('reduced motion is exposed as a timeline data signal', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
 
@@ -311,6 +399,7 @@ test('public routes expose canonical metadata and discovery endpoints', async ({
     page.request.get('/opengraph-image'),
   ]);
   expect(sitemap.ok()).toBe(true);
+  expect(await sitemap.text()).toContain('/architecture');
   expect(await sitemap.text()).toContain('/docs/release-checklist');
   expect(robots.ok()).toBe(true);
   expect(await robots.text()).toContain('Allow: /');

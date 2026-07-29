@@ -1,16 +1,49 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { SiteHeader } from '../components/site-header';
 
 const globalsCss = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8');
 const homeCss = readFileSync(resolve(process.cwd(), 'components/home/home.module.css'), 'utf8');
 const docsCss = readFileSync(resolve(process.cwd(), 'components/docs/docs.module.css'), 'utf8');
+const headerCss = readFileSync(resolve(process.cwd(), 'components/site-header.module.css'), 'utf8');
 const contentPagesCss = readFileSync(
   resolve(process.cwd(), 'app/content-pages.module.css'),
   'utf8',
 );
+const searchCss = readFileSync(
+  resolve(process.cwd(), 'components/search/search.module.css'),
+  'utf8',
+);
+const notFoundCss = readFileSync(resolve(process.cwd(), 'app/not-found.module.css'), 'utf8');
+
+function cssHexToken(token: string): string {
+  const value = globalsCss.match(new RegExp(`--${token}:\\s*(#[0-9a-f]{6})`, 'i'))?.[1];
+  if (!value) throw new Error(`Expected --${token} hex token`);
+  return value;
+}
+
+function relativeLuminance(hex: string): number {
+  const channels = hex
+    .slice(1)
+    .match(/.{2}/g)
+    ?.map((channel) => Number.parseInt(channel, 16) / 255);
+  if (!channels || channels.length !== 3) throw new Error(`Invalid hex color: ${hex}`);
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(left: string, right: string): number {
+  const leftLuminance = relativeLuminance(left);
+  const rightLuminance = relativeLuminance(right);
+  return (
+    (Math.max(leftLuminance, rightLuminance) + 0.05) /
+    (Math.min(leftLuminance, rightLuminance) + 0.05)
+  );
+}
 
 describe('SiteHeader', () => {
   it('exposes the compact primary navigation', () => {
@@ -31,6 +64,18 @@ describe('SiteHeader', () => {
     expect(screen.queryByRole('link', { name: 'Scenarios' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Architecture' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
+  });
+
+  it('composes Search from a visual icon, desktop label, and shortcut hint', () => {
+    render(<SiteHeader />);
+    const search = screen.getByRole('button', { name: 'Search documentation' });
+
+    expect(search.querySelector('[aria-hidden="true"]')).toHaveTextContent('🔍');
+    expect(within(search).getByText('Search').className).toContain('searchLabel');
+    expect(within(search).getByText('⌘K').className).toContain('searchHint');
+    expect(headerCss).toMatch(
+      /@media \(max-width: 1040px\)[\s\S]*\.searchLabel,\s*\.searchHint\s*\{[^}]*clip-path:\s*inset\(50%\)/,
+    );
   });
 });
 
@@ -65,5 +110,25 @@ describe('dark shell contract', () => {
 
     expect(winningRule).toContain('background: var(--elevated-surface);');
     expect(winningRule).toContain('color: var(--sand-100);');
+  });
+
+  it('uses a contrast-safe Warm sand ring on every dark or plum focus surface', () => {
+    const focusSources = [globalsCss, homeCss, docsCss, contentPagesCss, searchCss, notFoundCss];
+    const warmSand = cssHexToken('sand-500');
+
+    expect(globalsCss).toMatch(/:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--sand-500\)/s);
+    for (const source of focusSources) {
+      expect(source).not.toMatch(/outline:[^;]*var\(--purple-(?:500|700|electric)\)/);
+    }
+    for (const surface of [
+      'ink',
+      'control-surface',
+      'elevated-surface',
+      'purple-950',
+      'purple-700',
+      'purple-500',
+    ]) {
+      expect(contrastRatio(warmSand, cssHexToken(surface))).toBeGreaterThanOrEqual(3);
+    }
   });
 });

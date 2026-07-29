@@ -98,6 +98,9 @@ export default async function HomePage() {
           </div>
           <HeroRunPanel summary={summary} />
         </div>
+        <a className={styles.traceCue} href="#fault-trace">
+          Next / deterministic fault trace
+        </a>
       </section>
 
       <FaultTimeline />

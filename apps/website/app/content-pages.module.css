@@ -8,7 +8,7 @@
 }
 
 .contentPage a:focus-visible {
-  outline: 3px solid var(--purple-500);
+  outline: 3px solid var(--sand-500);
   outline-offset: 4px;
 }
 

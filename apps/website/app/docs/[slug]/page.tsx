@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { DocsShell } from '../../../components/docs/docs-shell';
+import { getDocumentationDestinations } from '../../../lib/content-registry';
 import { getAllDocuments, getDocument } from '../../../lib/markdown';
 
 export const dynamicParams = false;
@@ -30,11 +31,11 @@ export async function generateMetadata({ params }: DocsPageProps): Promise<Metad
 
 export default async function DocumentPage({ params }: DocsPageProps) {
   const { slug } = await params;
-  const [document, documents] = await Promise.all([getDocument(slug), getAllDocuments()]);
+  const document = await getDocument(slug);
 
   if (!document) {
     notFound();
   }
 
-  return <DocsShell document={document} documents={documents} />;
+  return <DocsShell destinations={getDocumentationDestinations()} document={document} />;
 }

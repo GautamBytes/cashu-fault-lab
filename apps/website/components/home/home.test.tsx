@@ -19,6 +19,33 @@ function cssRules(source: string, className: string): string[] {
   return rules;
 }
 
+function cssHexToken(source: string, token: string): string {
+  const value = source.match(new RegExp(`--${token}:\\s*(#[0-9a-f]{6})`, 'i'))?.[1];
+  if (!value) throw new Error(`Expected --${token} hex token`);
+  return value;
+}
+
+function relativeLuminance(hex: string): number {
+  const channels = hex
+    .slice(1)
+    .match(/.{2}/g)
+    ?.map((channel) => Number.parseInt(channel, 16) / 255);
+  if (!channels || channels.length !== 3) throw new Error(`Invalid hex color: ${hex}`);
+  const [red, green, blue] = channels.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function contrastRatio(left: string, right: string): number {
+  const leftLuminance = relativeLuminance(left);
+  const rightLuminance = relativeLuminance(right);
+  return (
+    (Math.max(leftLuminance, rightLuminance) + 0.05) /
+    (Math.min(leftLuminance, rightLuminance) + 0.05)
+  );
+}
+
 function stubMotionPreference() {
   vi.stubGlobal(
     'matchMedia',
@@ -49,6 +76,9 @@ describe('home components', () => {
       'href',
       'https://github.com/GautamBytes/cashu-fault-lab',
     );
+    expect(
+      within(hero).getByRole('link', { name: 'Next / deterministic fault trace' }),
+    ).toHaveAttribute('href', '#fault-trace');
     expect(screen.getByRole('heading', { name: 'Explore fault scenarios' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Explore all scenarios' })).toHaveAttribute(
       'href',
@@ -115,6 +145,25 @@ describe('home components', () => {
 
     expect(textLinkRule).toMatch(/min-height:\s*(?:44px|2\.75rem)/);
     expect(textLinkRule).toMatch(/min-width:\s*(?:44px|2\.75rem)/);
+  });
+
+  it('keeps Light sand above 4.5 to 1 across every primary CTA gradient stop', async () => {
+    const [css, globals] = await Promise.all([
+      readFile(homePath('home.module.css'), 'utf8'),
+      readFile(resolve(process.cwd(), 'app/globals.css'), 'utf8'),
+    ]);
+    const primaryActionRule = cssRules(css, 'primaryAction')[0];
+    const lightSand = cssHexToken(globals, 'sand-100');
+
+    expect(primaryActionRule).toMatch(
+      /background:\s*linear-gradient\(110deg,\s*var\(--purple-700\),\s*var\(--purple-500\)\)/,
+    );
+    expect(primaryActionRule).toContain('color: var(--sand-100);');
+    expect(primaryActionRule).not.toContain('!important');
+
+    for (const stop of ['purple-700', 'purple-500']) {
+      expect(contrastRatio(lightSand, cssHexToken(globals, stop))).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('keeps invariant status counts in one four-column strip at every breakpoint', async () => {

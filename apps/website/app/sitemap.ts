@@ -1,14 +1,13 @@
 import type { MetadataRoute } from 'next';
-import { CONTENT_REGISTRY } from '../lib/content-registry';
+import { getDocumentationDestinations } from '../lib/content-registry';
 import { siteUrl } from './site-metadata';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const routes = [
     '',
     '/scenarios',
-    '/architecture',
     '/release-status',
-    ...CONTENT_REGISTRY.map(({ slug }) => `/docs/${slug}`),
+    ...getDocumentationDestinations().map(({ href }) => href),
   ];
 
   return routes.map((route) => ({

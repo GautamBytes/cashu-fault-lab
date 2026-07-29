@@ -85,7 +85,7 @@
 .results a:hover,
 .results a:focus-visible {
   background: var(--control-surface);
-  outline: 2px solid var(--purple-electric);
+  outline: 2px solid var(--sand-500);
   outline-offset: -2px;
 }
 
@@ -112,8 +112,14 @@
 }
 
 .emptyState a {
+  align-items: center;
   color: var(--purple-electric);
+  display: inline-flex;
   font-weight: 700;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.65rem 0.8rem;
   text-underline-offset: 0.2rem;
 }
 

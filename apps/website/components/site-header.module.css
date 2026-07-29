@@ -73,12 +73,15 @@
 
 .searchButton,
 .menuButton {
+  align-items: center;
   background: var(--control-surface);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   color: var(--sand-100);
   cursor: pointer;
+  display: inline-flex;
   font: inherit;
+  justify-content: center;
   min-height: 44px;
   min-width: 44px;
   padding: 0.45rem 0.7rem;
@@ -90,7 +93,13 @@
   border-color: var(--purple-500);
 }
 
-.searchButton span {
+.searchIcon {
+  font-family: sans-serif;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.searchHint {
   color: var(--muted-text);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.75rem;
@@ -138,6 +147,17 @@
   }
 
   .searchButton {
-    align-self: stretch;
+    align-self: flex-start;
+    padding: 0.45rem;
+  }
+
+  .searchLabel,
+  .searchHint {
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
   }
 }

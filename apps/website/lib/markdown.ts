@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import GithubSlugger from 'github-slugger';
-import { CONTENT_REGISTRY } from './content-registry';
+import {
+  getDocumentationDestinations,
+  getDocumentationNeighbors,
+  isMarkdownDestination,
+} from './content-registry';
 import type {
   DocumentDefinition,
   DocumentHeading,
@@ -102,33 +106,24 @@ function searchableText(markdown: string): string {
 }
 
 function sortedRegistry(): DocumentDefinition[] {
-  return [...CONTENT_REGISTRY].sort((left, right) => left.order - right.order);
+  return getDocumentationDestinations().filter(isMarkdownDestination);
 }
 
-async function loadDocument(
-  definition: DocumentDefinition,
-  previous?: DocumentDefinition,
-  next?: DocumentDefinition,
-): Promise<DocumentPage> {
+async function loadDocument(definition: DocumentDefinition): Promise<DocumentPage> {
   const markdown = await readFile(resolveRepositoryPath(definition.sourcePath), 'utf8');
   return {
     ...definition,
+    ...getDocumentationNeighbors(definition.slug),
     markdown,
     headings: extractHeadings(markdown),
     viewUrl: sourceUrl(definition.sourcePath, 'view'),
     editUrl: sourceUrl(definition.sourcePath, 'edit'),
-    previous: previous && { slug: previous.slug, title: previous.title },
-    next: next && { slug: next.slug, title: next.title },
   };
 }
 
 export async function getAllDocuments(): Promise<DocumentPage[]> {
   const definitions = sortedRegistry();
-  return Promise.all(
-    definitions.map((definition, index) =>
-      loadDocument(definition, definitions[index - 1], definitions[index + 1]),
-    ),
-  );
+  return Promise.all(definitions.map((definition) => loadDocument(definition)));
 }
 
 export async function getDocument(slug: string): Promise<DocumentPage | undefined> {
@@ -138,20 +133,39 @@ export async function getDocument(slug: string): Promise<DocumentPage | undefine
 
 export async function getSearchRecords(): Promise<SearchRecord[]> {
   const documents = await getAllDocuments();
-  return documents.flatMap((document) => [
-    {
-      id: document.slug,
-      title: document.title,
-      description: document.description,
-      href: `/docs/${document.slug}`,
-      text: searchableText(document.markdown),
-    },
-    ...extractHeadingSections(document.markdown).map((heading) => ({
-      id: `${document.slug}#${heading.id}`,
-      title: heading.text,
-      description: document.title,
-      href: `/docs/${document.slug}#${heading.id}`,
-      text: heading.searchableText,
-    })),
-  ]);
+  const documentsBySlug = new Map(documents.map((document) => [document.slug, document]));
+
+  return getDocumentationDestinations().flatMap((destination) => {
+    if (destination.kind === 'generated') {
+      return [
+        {
+          id: destination.slug,
+          title: destination.title,
+          description: destination.description,
+          href: destination.href,
+          text: destination.searchText,
+        },
+      ];
+    }
+
+    const document = documentsBySlug.get(destination.slug);
+    if (!document) return [];
+
+    return [
+      {
+        id: document.slug,
+        title: document.title,
+        description: document.description,
+        href: document.href,
+        text: searchableText(document.markdown),
+      },
+      ...extractHeadingSections(document.markdown).map((heading) => ({
+        id: `${document.slug}#${heading.id}`,
+        title: heading.text,
+        description: document.title,
+        href: `${document.href}#${heading.id}`,
+        text: heading.searchableText,
+      })),
+    ];
+  });
 }

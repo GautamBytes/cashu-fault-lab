@@ -77,7 +77,7 @@
   background: var(--elevated-surface);
   border-color: var(--purple-electric);
   color: var(--sand-100);
-  outline: 2px solid var(--purple-electric);
+  outline: 2px solid var(--sand-500);
   outline-offset: 3px;
 }
 

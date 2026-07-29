@@ -1,7 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { PortalShell } from '../portal-shell';
+
+const searchCss = readFileSync(
+  resolve(process.cwd(), 'components/search/search.module.css'),
+  'utf8',
+);
 
 describe('documentation search', () => {
   it('opens with the keyboard shortcut and filters canonical records', async () => {
@@ -45,6 +52,15 @@ describe('documentation search', () => {
       'href',
       '/scenarios',
     );
+  });
+
+  it('gives the empty-search recovery link an inline 44 by 44 pixel target', () => {
+    const recoveryRule = searchCss.match(/\.emptyState a\s*\{([^}]*)}/)?.[1];
+
+    expect(recoveryRule).toContain('display: inline-flex');
+    expect(recoveryRule).toMatch(/min-height:\s*44px/);
+    expect(recoveryRule).toMatch(/min-width:\s*44px/);
+    expect(recoveryRule).toMatch(/padding:\s*0\.[5-9]\d*rem\s+0\.[5-9]\d*rem/);
   });
 
   it('closes on Escape and restores focus to the search trigger', async () => {

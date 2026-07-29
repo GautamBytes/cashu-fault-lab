@@ -1,9 +1,11 @@
-export interface DocumentDefinition {
+export type DocumentationGroup = 'Start' | 'Operate' | 'Integrate' | 'Understand' | 'Release';
+
+export interface DocumentationDestinationBase {
   slug: string;
-  sourcePath: string;
+  href: string;
   title: string;
   description: string;
-  group: 'Start' | 'Operate' | 'Integrate' | 'Understand' | 'Release';
+  group: DocumentationGroup;
   order: number;
 }
 
@@ -13,14 +15,35 @@ export interface DocumentHeading {
   depth: 2 | 3;
 }
 
-export interface DocumentPage extends DocumentDefinition {
+export interface MarkdownDocumentDefinition extends DocumentationDestinationBase {
+  kind: 'markdown';
+  sourcePath: string;
+}
+
+export interface GeneratedDocumentDefinition extends DocumentationDestinationBase {
+  kind: 'generated';
+  headings: readonly DocumentHeading[];
+  searchText: string;
+}
+
+export type DocumentationDestination = MarkdownDocumentDefinition | GeneratedDocumentDefinition;
+export type DocumentDefinition = MarkdownDocumentDefinition;
+export type DocumentationLink = Pick<DocumentationDestinationBase, 'href' | 'slug' | 'title'>;
+
+interface DocumentationPageNavigation {
+  previous?: DocumentationLink;
+  next?: DocumentationLink;
+}
+
+export interface DocumentPage extends MarkdownDocumentDefinition, DocumentationPageNavigation {
   markdown: string;
   headings: DocumentHeading[];
   viewUrl: string;
   editUrl: string;
-  previous?: Pick<DocumentDefinition, 'slug' | 'title'>;
-  next?: Pick<DocumentDefinition, 'slug' | 'title'>;
 }
+
+export type GeneratedDocumentPage = GeneratedDocumentDefinition & DocumentationPageNavigation;
+export type DocumentationPage = DocumentPage | GeneratedDocumentPage;
 
 export interface SearchRecord {
   id: string;

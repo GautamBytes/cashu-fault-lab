@@ -58,7 +58,11 @@ export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
             onClick={onOpenSearch}
             type="button"
           >
-            Search <span aria-hidden="true">⌘K</span>
+            <span aria-hidden="true" className={styles.searchIcon}>
+              🔍
+            </span>
+            <span className={styles.searchLabel}>Search</span>
+            <span className={styles.searchHint}>⌘K</span>
           </button>
         </nav>
       </div>

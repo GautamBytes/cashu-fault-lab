@@ -6,7 +6,8 @@ import ArchitecturePage from './architecture/page';
 import ReleaseStatusPage from './release-status/page';
 import ScenariosPage from './scenarios/page';
 import { DocsShell } from '../components/docs/docs-shell';
-import { getAllDocuments, getDocument } from '../lib/markdown';
+import { getDocumentationDestinations } from '../lib/content-registry';
+import { getDocument } from '../lib/markdown';
 
 vi.mock('../components/docs/markdown-document', () => ({
   MarkdownDocument: () => null,
@@ -27,10 +28,25 @@ describe('generated content pages', () => {
     );
   });
 
-  it('preserves the delivery branches, oracle convergence, and evidence output in the DOM', () => {
-    render(<ArchitecturePage />);
+  it('renders Architecture in the docs shell with its generated topology and current state', async () => {
+    render(await ArchitecturePage());
+
+    const documentationNavigation = screen.getAllByRole('navigation', {
+      name: 'Documentation',
+    })[0];
+    const architectureLink = within(documentationNavigation).getByRole('link', {
+      name: 'Architecture',
+    });
+    const architectureArticle = screen
+      .getByRole('heading', { level: 1, name: 'Faults travel. Trust does not.' })
+      .closest('article');
+
+    expect(architectureLink).toHaveAttribute('href', '/architecture');
+    expect(architectureLink).toHaveAttribute('aria-current', 'page');
+    expect(architectureArticle).not.toBeNull();
 
     const deliveryPath = screen.getByRole('list', { name: 'Primary delivery path' });
+    expect(architectureArticle).toContainElement(deliveryPath);
     expect(within(deliveryPath).getAllByRole('listitem')).toHaveLength(3);
     expect(within(deliveryPath).getByText('Durable sender')).toBeInTheDocument();
     expect(within(deliveryPath).getByText('HTTP/Nostr faults')).toBeInTheDocument();
@@ -61,23 +77,55 @@ describe('generated content pages', () => {
     );
   });
 
-  it('exposes Architecture in the documentation navigation', async () => {
-    const [document, documents] = await Promise.all([
-      getDocument('getting-started'),
-      getAllDocuments(),
-    ]);
-    if (!document) throw new Error('Expected getting started document');
+  it('orders Architecture after Adapters and includes it in document pagination', async () => {
+    const document = await getDocument('adapters');
+    if (!document) throw new Error('Expected adapters document');
 
-    render(<DocsShell document={document} documents={documents} />);
+    render(<DocsShell destinations={getDocumentationDestinations()} document={document} />);
 
     const documentationNavigation = screen.getAllByRole('navigation', {
       name: 'Documentation',
     })[0];
 
-    expect(documentationNavigation).toHaveTextContent('Architecture');
+    const links = within(documentationNavigation).getAllByRole('link');
+    const adaptersIndex = links.findIndex((link) => link.textContent === 'Adapter guide');
+    const architectureIndex = links.findIndex((link) => link.textContent === 'Architecture');
+
+    expect(architectureIndex).toBe(adaptersIndex + 1);
+    expect(links[architectureIndex]).toHaveAttribute('href', '/architecture');
     expect(
-      within(documentationNavigation).getByRole('link', { name: 'Architecture' }),
+      within(screen.getByRole('navigation', { name: 'Document pagination' })).getByRole('link', {
+        name: /Next\s*Architecture/,
+      }),
     ).toHaveAttribute('href', '/architecture');
+  });
+
+  it('derives documentation group order from the ordered destination source', async () => {
+    const document = await getDocument('getting-started');
+    if (!document) throw new Error('Expected getting started document');
+
+    const destinations = getDocumentationDestinations();
+    const releaseNotes = destinations.find((item) => item.slug === 'release-notes');
+    if (!releaseNotes) throw new Error('Expected release notes destination');
+
+    render(
+      <DocsShell
+        destinations={[
+          releaseNotes,
+          ...destinations.filter((item) => item.slug !== releaseNotes.slug),
+        ]}
+        document={document}
+      />,
+    );
+
+    const documentationNavigation = screen.getAllByRole('navigation', {
+      name: 'Documentation',
+    })[0];
+    expect(
+      within(documentationNavigation)
+        .getAllByRole('heading', { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['Release', 'Start', 'Operate', 'Integrate', 'Understand']);
   });
 
   it('shows the blocked gate and links to every governing release source', async () => {

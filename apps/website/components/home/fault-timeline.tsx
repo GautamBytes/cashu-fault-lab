@@ -37,6 +37,7 @@ export function FaultTimeline() {
     <section
       aria-labelledby="fault-timeline-title"
       className={`${styles.section} ${styles.traceSection}`}
+      id="fault-trace"
     >
       <div className={styles.sectionHeading}>
         <p className={styles.eyebrow}>Deterministic fault trace</p>

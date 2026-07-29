@@ -1,20 +1,25 @@
-import type { DocumentHeading, DocumentPage } from '../../lib/content-types';
+import type { ReactNode } from 'react';
+import type {
+  DocumentationDestination,
+  DocumentationPage,
+  DocumentHeading,
+} from '../../lib/content-types';
 import { MarkdownDocument } from './markdown-document';
 import styles from './docs.module.css';
 
-const groups: DocumentPage['group'][] = ['Start', 'Operate', 'Integrate', 'Understand', 'Release'];
-
 function DocumentationNavigation({
   document,
-  documents,
+  destinations,
 }: {
-  document: DocumentPage;
-  documents: DocumentPage[];
+  document: DocumentationPage;
+  destinations: readonly DocumentationDestination[];
 }) {
+  const groups = [...new Set(destinations.map((destination) => destination.group))];
+
   return (
     <nav aria-label="Documentation">
       {groups.map((group) => {
-        const groupDocuments = documents.filter((item) => item.group === group);
+        const groupDocuments = destinations.filter((item) => item.group === group);
         if (groupDocuments.length === 0) return null;
 
         return (
@@ -24,18 +29,13 @@ function DocumentationNavigation({
               {groupDocuments.map((item) => (
                 <li key={item.slug}>
                   <a
-                    aria-current={item.slug === document.slug ? 'page' : undefined}
-                    href={`/docs/${item.slug}`}
+                    aria-current={item.href === document.href ? 'page' : undefined}
+                    href={item.href}
                   >
                     {item.title}
                   </a>
                 </li>
               ))}
-              {group === 'Understand' ? (
-                <li>
-                  <a href="/architecture">Architecture</a>
-                </li>
-              ) : null}
             </ul>
           </section>
         );
@@ -49,7 +49,7 @@ function TableOfContents({
   headings,
 }: {
   className: string;
-  headings: DocumentHeading[];
+  headings: readonly DocumentHeading[];
 }) {
   if (headings.length === 0) {
     return null;
@@ -70,44 +70,54 @@ function TableOfContents({
 }
 
 export function DocsShell({
+  children,
   document,
-  documents,
+  destinations,
 }: {
-  document: DocumentPage;
-  documents: DocumentPage[];
+  children?: ReactNode;
+  document: DocumentationPage;
+  destinations: readonly DocumentationDestination[];
 }) {
+  const isGenerated = document.kind === 'generated';
+
   return (
     <div className={styles.docsShell}>
       <aside className={styles.sidebar}>
-        <DocumentationNavigation document={document} documents={documents} />
+        <DocumentationNavigation destinations={destinations} document={document} />
       </aside>
 
       <details className={styles.mobileDocsNav}>
         <summary>Browse documentation</summary>
-        <DocumentationNavigation document={document} documents={documents} />
+        <DocumentationNavigation destinations={destinations} document={document} />
       </details>
 
-      <article className={styles.article}>
-        <header className={styles.articleHeader}>
-          <p className={styles.eyebrow}>{document.group}</p>
-          <h1>{document.title}</h1>
-          <p className={styles.description}>{document.description}</p>
-          <div className={styles.sourceActions}>
-            <a href={document.viewUrl} rel="noreferrer noopener" target="_blank">
-              View source
-            </a>
-            <a href={document.editUrl} rel="noreferrer noopener" target="_blank">
-              Edit on GitHub
-            </a>
-          </div>
-        </header>
+      <article className={`${styles.article} ${isGenerated ? styles.generatedArticle : ''}`}>
+        {!isGenerated ? (
+          <header className={styles.articleHeader}>
+            <p className={styles.eyebrow}>{document.group}</p>
+            <h1>{document.title}</h1>
+            <p className={styles.description}>{document.description}</p>
+            <div className={styles.sourceActions}>
+              <a href={document.viewUrl} rel="noreferrer noopener" target="_blank">
+                View source
+              </a>
+              <a href={document.editUrl} rel="noreferrer noopener" target="_blank">
+                Edit on GitHub
+              </a>
+            </div>
+          </header>
+        ) : null}
 
         <TableOfContents className={styles.mobileToc} headings={document.headings} />
-        <MarkdownDocument markdown={document.markdown} sourcePath={document.sourcePath} />
+        {isGenerated ? (
+          children
+        ) : (
+          <MarkdownDocument markdown={document.markdown} sourcePath={document.sourcePath} />
+        )}
 
         <nav aria-label="Document pagination" className={styles.pagination}>
           {document.previous ? (
-            <a href={`/docs/${document.previous.slug}`}>
+            <a href={document.previous.href}>
               <span>Previous</span>
               {document.previous.title}
             </a>
@@ -115,7 +125,7 @@ export function DocsShell({
             <span />
           )}
           {document.next ? (
-            <a href={`/docs/${document.next.slug}`}>
+            <a href={document.next.href}>
               <span>Next</span>
               {document.next.title}
             </a>
