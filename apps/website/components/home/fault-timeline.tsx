@@ -13,12 +13,12 @@ const stages = [
 ] as const;
 
 const stageStyles = {
-  prepared: styles.stagePrepared,
-  active: styles.stageActive,
-  fault: styles.stageFault,
-  retry: styles.stageRetry,
-  recovery: styles.stageRecovery,
-  converged: styles.stageConverged,
+  prepared: styles.stagePrepared!,
+  active: styles.stageActive!,
+  fault: styles.stageFault!,
+  retry: styles.stageRetry!,
+  recovery: styles.stageRecovery!,
+  converged: styles.stageConverged!,
 } satisfies Record<(typeof stages)[number]['kind'], string>;
 
 export function FaultTimeline() {

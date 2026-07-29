@@ -11,6 +11,7 @@ describe('manifest', () => {
     expect(manifest()).toMatchObject({
       background_color: '#09070d',
       theme_color: '#2b0c4a',
+      icons: [{ sizes: '200x200', src: '/icon.png', type: 'image/png' }],
     });
   });
 

@@ -21,10 +21,15 @@ For a local clone, install Node.js 24 and Docker, then run the same command. Use
 
 ## Requirements
 
+The quickstart path requires:
+
 - Node.js 24
+- Docker
+
+Full workspace development additionally requires:
+
 - pnpm 11.15.0
 - Rust 1.97.0 for the CDK adapter
-- Docker for PostgreSQL and real-mint lanes
 
 ## Install and verify
 

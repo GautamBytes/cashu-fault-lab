@@ -34,12 +34,10 @@ describe('canonical content', () => {
     ]);
   });
 
-  it('deduplicates GitHub-style heading slugs outside code fences', () => {
-    expect(extractHeadings('## Retry\n```md\n## ignored\n```\n## Retry\n### NUT-19')).toEqual([
-      { depth: 2, id: 'retry', text: 'Retry' },
-      { depth: 2, id: 'retry-1', text: 'Retry' },
-      { depth: 3, id: 'nut-19', text: 'NUT-19' },
-    ]);
+  it('rejects duplicate GitHub-style heading IDs outside code fences', () => {
+    expect(() => extractHeadings('## Retry\n```md\n## ignored\n```\n## Retry\n### NUT-19')).toThrow(
+      'Duplicate heading ID: retry',
+    );
   });
 
   it('keeps headings hidden after a backtick fence marker with trailing text', () => {
@@ -113,11 +111,11 @@ describe('canonical content', () => {
     );
     expect(documents[0]).toMatchObject({
       slug: 'getting-started',
-      previous: undefined,
       next: { slug: 'contributing' },
       viewUrl: 'https://github.com/GautamBytes/cashu-fault-lab/blob/main/README.md',
+      editUrl: 'https://github.com/GautamBytes/cashu-fault-lab/edit/main/README.md',
     });
-    expect(documents[0]).not.toHaveProperty('editUrl');
+    expect(documents[0]).not.toHaveProperty('previous');
   });
 
   it('returns undefined for an unregistered document', async () => {

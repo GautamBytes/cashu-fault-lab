@@ -160,9 +160,11 @@ export function getDocumentationNeighbors(slug: string): {
   const index = destinations.findIndex((destination) => destination.slug === slug);
   if (index < 0) return {};
 
+  const previous = navigationLink(destinations[index - 1]);
+  const next = navigationLink(destinations[index + 1]);
   return {
-    previous: navigationLink(destinations[index - 1]),
-    next: navigationLink(destinations[index + 1]),
+    ...(previous ? { previous } : {}),
+    ...(next ? { next } : {}),
   };
 }
 

@@ -177,6 +177,41 @@ jobs:
             fi
           done
 
+  website-e2e:
+    name: Website browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm website:test:e2e
+
+  developer-environment:
+    name: Codespaces and quickstart smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Build the pinned developer container
+        run: npx --yes @devcontainers/cli@0.88.0 up --workspace-folder .
+      - name: Run the quickstart inside Docker-in-Docker
+        run: npx --yes @devcontainers/cli@0.88.0 exec --workspace-folder . ./scripts/quickstart --skip-install
+
   reference-lab-demo:
     name: Reference lab startup and demo
     runs-on: ubuntu-latest
@@ -193,12 +228,12 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Build lab CLI
-        run: pnpm exec turbo run build --filter=@cashu-fault-lab/lab-cli
-      - name: Start reference lab with generated runtime secrets
-        run: node apps/lab-cli/dist/bin.js up
-      - name: Run packaged response-loss demo
-        run: node apps/lab-cli/dist/bin.js demo --seed ci-demo
+      - name: Run the developer quickstart
+        run: ./scripts/quickstart --skip-install
+      - name: Validate secret-redacted quickstart artifacts
+        run: |
+          node -e "const artifact=require('./artifacts/quickstart.json'); if(artifact.status!=='passed') process.exit(1)"
+          test -s artifacts/quickstart.html
       - name: Stop reference lab
         if: always()
         run: node apps/lab-cli/dist/bin.js down

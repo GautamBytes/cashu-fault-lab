@@ -32,7 +32,7 @@ function relativeLuminance(hex: string): number {
   if (!channels || channels.length !== 3) throw new Error(`Invalid hex color: ${hex}`);
   const [red, green, blue] = channels.map((channel) =>
     channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
-  );
+  ) as [number, number, number];
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
@@ -90,7 +90,7 @@ describe('SiteHeader', () => {
 describe('dark shell contract', () => {
   it('defines a complete light Cashu theme without changing layout tokens', () => {
     expect(globalsCss).toMatch(
-      /html\[data-theme='light'\]\s*\{[^}]*--ink:\s*#f7f8fc;[^}]*--control-surface:\s*#eef0f6;[^}]*--sand-100:\s*#211527;[^}]*--success:\s*#236b49;[^}]*color-scheme:\s*light/s,
+      /html\[data-theme='light'\]\s*\{[^}]*--ink:\s*#f7f8fc;[^}]*--control-surface:\s*#eef0f6;[^}]*--sand-100:\s*#211527;[^}]*--success:\s*var\(--sand-500\);[^}]*color-scheme:\s*light/s,
     );
   });
 

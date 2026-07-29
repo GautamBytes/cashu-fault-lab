@@ -9,8 +9,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command:
-      'PATH=/Users/gautammanch/.nvm/versions/node/v24.14.1/bin:$PATH corepack pnpm build && PATH=/Users/gautammanch/.nvm/versions/node/v24.14.1/bin:$PATH corepack pnpm start --port 4317',
+    command: 'corepack pnpm build && corepack pnpm start --port 4317',
     port: 4317,
     reuseExistingServer: false,
     timeout: 180_000,

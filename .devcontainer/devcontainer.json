@@ -12,9 +12,9 @@
   },
   "mounts": [
     "source=${localWorkspaceFolderBasename}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
-    "source=${localWorkspaceFolderBasename}-pnpm-store,target=${containerWorkspaceFolder}/.pnpm-store,type=volume"
+    "source=${localWorkspaceFolderBasename}-pnpm-store,target=/home/node/.local/share/pnpm/store,type=volume"
   ],
-  "postCreateCommand": "sudo chown -R node:node node_modules .pnpm-store && CI=true corepack pnpm install --frozen-lockfile",
+  "postCreateCommand": "sudo chown -R node:node node_modules && CI=true corepack pnpm install --frozen-lockfile",
   "forwardPorts": [3000],
   "portsAttributes": {
     "3000": {

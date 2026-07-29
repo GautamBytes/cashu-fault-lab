@@ -24,12 +24,9 @@ describe('developer environment', () => {
     assert.match(config.postCreateCommand, /pnpm install --frozen-lockfile/u);
     assert.deepEqual(config.mounts, [
       'source=${localWorkspaceFolderBasename}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume',
-      'source=${localWorkspaceFolderBasename}-pnpm-store,target=${containerWorkspaceFolder}/.pnpm-store,type=volume',
+      'source=${localWorkspaceFolderBasename}-pnpm-store,target=/home/node/.local/share/pnpm/store,type=volume',
     ]);
-    assert.match(
-      config.postCreateCommand,
-      /^sudo chown -R node:node node_modules \.pnpm-store && /u,
-    );
+    assert.match(config.postCreateCommand, /^sudo chown -R node:node node_modules && /u);
     assert.deepEqual(config.forwardPorts, [3000]);
     assert.equal(config.remoteUser, 'node');
     assert.deepEqual(Object.keys(lock.features).sort(), Object.keys(config.features).sort());
@@ -50,5 +47,29 @@ describe('developer environment', () => {
     assert.match(readme, /\.\/scripts\/quickstart\n/u);
     assert.match(readme, /\.\/scripts\/quickstart --check/u);
     assert.match(readme, /experimental v0\.1 developer preview/u);
+  });
+
+  it('keeps the portal toolchain portable and exercises user entry paths in CI', async () => {
+    const [ci, contributing, playwright, tsconfig] = await Promise.all([
+      readFile('.github/workflows/ci.yml', 'utf8'),
+      readFile('CONTRIBUTING.md', 'utf8'),
+      readFile('apps/website/playwright.config.ts', 'utf8'),
+      readFile('apps/website/tsconfig.json', 'utf8').then(JSON.parse),
+    ]);
+
+    assert.equal(tsconfig.extends, '../../tsconfig.base.json');
+    assert.doesNotMatch(playwright, /\/Users\//u);
+    assert.match(
+      playwright,
+      /command:\s*'corepack pnpm build && corepack pnpm start --port 4317'/u,
+    );
+    assert.match(contributing, /Next\.js website uses bundler-resolved extensionless imports/u);
+    assert.match(ci, /pnpm website:test:e2e/u);
+    assert.match(ci, /\.\/scripts\/quickstart --skip-install/u);
+    assert.match(ci, /@devcontainers\/cli@0\.88\.0 up --workspace-folder \./u);
+    assert.match(
+      ci,
+      /@devcontainers\/cli@0\.88\.0 exec --workspace-folder \. \.\/scripts\/quickstart --skip-install/u,
+    );
   });
 });

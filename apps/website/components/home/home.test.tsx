@@ -33,7 +33,7 @@ function relativeLuminance(hex: string): number {
   if (!channels || channels.length !== 3) throw new Error(`Invalid hex color: ${hex}`);
   const [red, green, blue] = channels.map((channel) =>
     channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
-  );
+  ) as [number, number, number];
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
@@ -72,6 +72,7 @@ describe('home components', () => {
     render(await HomePage());
 
     const hero = screen.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
+    expect(within(hero).getByText('Experimental developer preview')).toBeVisible();
     expect(within(hero).getByRole('link', { name: 'Open in Codespaces' })).toHaveAttribute(
       'href',
       'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',

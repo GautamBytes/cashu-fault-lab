@@ -56,7 +56,7 @@ Open `http://localhost:3000`. Website-specific checks are available through
 
 - **TypeScript strict mode** — `strict: true`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`
 - **Formatting** — Prettier (`pnpm format:check`). No manual formatting needed.
-- **Imports** — Use `.js` extensions for ESM imports. Import types with `type` keyword.
+- **Imports** — Use `.js` extensions for Node-targeted ESM imports. The Next.js website uses bundler-resolved extensionless imports. Import types with `type` keyword.
 - **No unused imports** — `verbatimModuleSyntax` enforces this.
 - **No sensitive data in tests** — Use fake tokens only. Secrets are redacted in artifacts.
 

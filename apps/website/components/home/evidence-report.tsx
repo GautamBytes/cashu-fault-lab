@@ -13,10 +13,10 @@ const statusLabels: Record<InvariantStatus, { icon: string; label: string }> = {
 };
 
 const statusStyles: Record<InvariantStatus, string> = {
-  passed: styles.statusPassed,
-  failed: styles.statusFailed,
-  not_observable: styles.statusNotObservable,
-  not_applicable: styles.statusNotApplicable,
+  passed: styles.statusPassed!,
+  failed: styles.statusFailed!,
+  not_observable: styles.statusNotObservable!,
+  not_applicable: styles.statusNotApplicable!,
 };
 
 function invariantTitle(id: string): string {

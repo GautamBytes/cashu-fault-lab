@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import GithubSlugger from 'github-slugger';
+import { slug as githubSlug } from 'github-slugger';
 import {
   getDocumentationDestinations,
   getDocumentationNeighbors,
@@ -29,7 +29,7 @@ interface HeadingSection extends DocumentHeading {
 }
 
 export function extractHeadingSections(markdown: string): HeadingSection[] {
-  const slugger = new GithubSlugger();
+  const headingIds = new Set<string>();
   const sections: Array<DocumentHeading & { body: string[] }> = [];
   let currentSection: (typeof sections)[number] | undefined;
   let fence: { marker: '`' | '~'; length: number } | undefined;
@@ -37,15 +37,17 @@ export function extractHeadingSections(markdown: string): HeadingSection[] {
   for (const line of markdown.split(/\r?\n/)) {
     const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
     if (fenceMatch) {
-      const marker = fenceMatch[1][0] as '`' | '~';
+      const fenceToken = fenceMatch[1];
+      if (!fenceToken) continue;
+      const marker = fenceToken[0] as '`' | '~';
       if (!fence) {
-        fence = { marker, length: fenceMatch[1].length };
+        fence = { marker, length: fenceToken.length };
         currentSection?.body.push(line);
         continue;
       }
       if (
         fence.marker === marker &&
-        fenceMatch[1].length >= fence.length &&
+        fenceToken.length >= fence.length &&
         /^[ \t]*$/.test(line.slice(fenceMatch[0].length))
       ) {
         fence = undefined;
@@ -69,12 +71,20 @@ export function extractHeadingSections(markdown: string): HeadingSection[] {
       continue;
     }
 
-    const text = headingText(match[2]);
+    const headingMarker = match[1];
+    const rawText = match[2];
+    if (!headingMarker || rawText === undefined) continue;
+    const text = headingText(rawText);
     if (!text) continue;
+    const id = githubSlug(text);
+    if (headingIds.has(id)) {
+      throw new Error(`Duplicate heading ID: ${id}`);
+    }
+    headingIds.add(id);
     currentSection = {
       body: [],
-      depth: match[1].length as 2 | 3,
-      id: slugger.slug(text),
+      depth: headingMarker.length as 2 | 3,
+      id,
       text,
     };
     sections.push(currentSection);
@@ -117,6 +127,7 @@ async function loadDocument(definition: DocumentDefinition): Promise<DocumentPag
     markdown,
     headings: extractHeadings(markdown),
     viewUrl: sourceUrl(definition.sourcePath, 'view'),
+    editUrl: sourceUrl(definition.sourcePath, 'edit'),
   };
 }
 

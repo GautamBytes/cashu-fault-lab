@@ -58,7 +58,7 @@ html[data-theme='light'] {
   --control-glint: rgb(255 255 255 / 78%);
   --control-glint-strong: rgb(100 36 169 / 10%);
   --shadow-color: rgb(46 25 58 / 13%);
-  --success: #236b49;
+  --success: var(--sand-500);
   --purple-border-soft: rgb(100 36 169 / 18%);
   --purple-border: rgb(100 36 169 / 28%);
   --sand-border-soft: rgb(149 89 18 / 16%);

@@ -4,8 +4,7 @@ Final result: passed on 2026-07-29.
 
 ## Sources and captures
 
-- Supplied visual source recorded by the prior QA pass:
-  `/var/folders/22/w1y7jxm926g_k50fq9wt1j5m0000gn/T/TemporaryItems/NSIRD_screencaptureui_3HCh76/Screenshot 2026-07-29 at 12.17.35 AM.png`
+- Supplied visual source: the user-provided 100%-zoom laptop screenshot attached to the design task.
 - Source dimensions: 3840 x 2160 Retina pixels, approximately a 1920 CSS-pixel browser
   viewport at 100% zoom.
 - Exact laptop reference:

@@ -101,11 +101,14 @@ export function DocsShell({
               <a href={document.viewUrl} rel="noreferrer noopener" target="_blank">
                 View source
               </a>
+              <a href={document.editUrl} rel="noreferrer noopener" target="_blank">
+                Edit on GitHub
+              </a>
             </div>
           </header>
         ) : null}
 
-        <TableOfContents className={styles.mobileToc} headings={document.headings} />
+        <TableOfContents className={styles.mobileToc!} headings={document.headings} />
         {isGenerated ? (
           children
         ) : (
@@ -133,7 +136,7 @@ export function DocsShell({
       </article>
 
       <aside className={styles.toc}>
-        <TableOfContents className={styles.desktopToc} headings={document.headings} />
+        <TableOfContents className={styles.desktopToc!} headings={document.headings} />
       </aside>
     </div>
   );

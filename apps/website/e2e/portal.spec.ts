@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
-const screenshotDirectory = path.join(import.meta.dirname, 'screenshots');
+const screenshotDirectory = path.join(process.cwd(), 'test-results/website/screenshots');
 const publicRoutes = [
   '/',
   '/scenarios',

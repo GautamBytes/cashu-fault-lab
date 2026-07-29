@@ -68,7 +68,11 @@ export default async function HomePage() {
       <section aria-labelledby="home-title" className={styles.hero}>
         <div className={styles.heroGrid}>
           <div className={styles.heroCopy}>
-            <p className={styles.eyebrow}>Cashu delivery fault injection and recovery evidence</p>
+            <p className={styles.eyebrow}>
+              <span>{releaseStatus.label}</span>
+              <span aria-hidden="true"> / </span>
+              <span>Cashu delivery fault injection and recovery evidence</span>
+            </p>
             <h1 id="home-title">Make Cashu delivery fail safely.</h1>
             <p className={styles.heroDescription}>
               Inject response loss, retries, duplicates, and process crashes across real wallets and

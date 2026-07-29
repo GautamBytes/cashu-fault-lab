@@ -34,6 +34,7 @@ describe('generated content pages', () => {
     const documentationNavigation = screen.getAllByRole('navigation', {
       name: 'Documentation',
     })[0];
+    if (!documentationNavigation) throw new Error('Expected documentation navigation');
     const architectureLink = within(documentationNavigation).getByRole('link', {
       name: 'Architecture',
     });
@@ -86,13 +87,16 @@ describe('generated content pages', () => {
     const documentationNavigation = screen.getAllByRole('navigation', {
       name: 'Documentation',
     })[0];
+    if (!documentationNavigation) throw new Error('Expected documentation navigation');
 
     const links = within(documentationNavigation).getAllByRole('link');
     const adaptersIndex = links.findIndex((link) => link.textContent === 'Adapter guide');
     const architectureIndex = links.findIndex((link) => link.textContent === 'Architecture');
 
     expect(architectureIndex).toBe(adaptersIndex + 1);
-    expect(links[architectureIndex]).toHaveAttribute('href', '/architecture');
+    const architectureLink = links[architectureIndex];
+    if (!architectureLink) throw new Error('Expected Architecture navigation link');
+    expect(architectureLink).toHaveAttribute('href', '/architecture');
     expect(
       within(screen.getByRole('navigation', { name: 'Document pagination' })).getByRole('link', {
         name: /Next\s*Architecture/,
@@ -100,14 +104,17 @@ describe('generated content pages', () => {
     ).toHaveAttribute('href', '/architecture');
   });
 
-  it('keeps public docs read-only and links contributors to the contribution guide', async () => {
+  it('keeps public docs sourced from GitHub and links contributors to the canonical file', async () => {
     const document = await getDocument('getting-started');
     if (!document) throw new Error('Expected getting started document');
 
     render(<DocsShell destinations={getDocumentationDestinations()} document={document} />);
 
     expect(screen.getByRole('link', { name: 'View source' })).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'Edit on GitHub' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Edit on GitHub' })).toHaveAttribute(
+      'href',
+      'https://github.com/GautamBytes/cashu-fault-lab/edit/main/README.md',
+    );
     expect(
       screen.getAllByRole('link', { name: 'Contribution guide' }).some((link) => {
         return link.getAttribute('href') === '/docs/contributing';
@@ -136,6 +143,7 @@ describe('generated content pages', () => {
     const documentationNavigation = screen.getAllByRole('navigation', {
       name: 'Documentation',
     })[0];
+    if (!documentationNavigation) throw new Error('Expected documentation navigation');
     expect(
       within(documentationNavigation)
         .getAllByRole('heading', { level: 2 })
