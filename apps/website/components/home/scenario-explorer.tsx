@@ -45,6 +45,8 @@ export function ScenarioExplorer({ groups }: ScenarioExplorerProps) {
     <section
       aria-labelledby="scenario-explorer-title"
       className={`${styles.section} ${styles.scenarioExplorer}`}
+      data-trace-label="Explore"
+      data-trace-step="03"
     >
       <header className={styles.scenarioExplorerHeader}>
         <div className={styles.sectionHeading}>

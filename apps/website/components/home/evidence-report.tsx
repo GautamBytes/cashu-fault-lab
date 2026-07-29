@@ -73,9 +73,7 @@ function InvariantList({
 }
 
 export function EvidenceReport({ summary }: EvidenceReportProps) {
-  const contextInvariants = summary.invariants.filter(
-    (invariant) => invariant.status !== 'passed',
-  );
+  const contextInvariants = summary.invariants.filter((invariant) => invariant.status !== 'passed');
   const supportedInvariants = summary.invariants.filter(
     (invariant) => invariant.status === 'passed',
   );
@@ -84,6 +82,8 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
     <section
       aria-labelledby="evidence-report-title"
       className={`${styles.section} ${styles.evidenceSection}`}
+      data-trace-label="Prove"
+      data-trace-step="02"
     >
       <div aria-label="Reviewed evidence summary" className={styles.evidenceOverview} role="group">
         <div className={styles.sectionHeading}>

@@ -85,24 +85,23 @@
   gap: clamp(2rem, 5vw, 5rem);
   grid-template-columns: minmax(0, 1.12fr) minmax(26rem, 0.88fr);
   margin: auto 0;
+  position: relative;
   width: 100%;
 }
 
 .traceCue {
   align-items: center;
-  bottom: 0.625rem;
+  border-right: 1px solid var(--hairline);
   color: var(--sand-500);
   display: inline-flex;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.66rem;
   font-weight: 700;
   gap: 0.6rem;
-  left: clamp(1rem, 4vw, 4rem);
   min-height: 44px;
-  position: absolute;
+  padding: 0.72rem clamp(1rem, 2vw, 2rem);
   text-decoration: none;
   text-transform: uppercase;
-  z-index: 1;
 }
 
 .traceCue::before {
@@ -231,6 +230,129 @@
   max-width: 34rem;
   overflow: hidden;
   width: 100%;
+}
+
+.heroSignalPath {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--purple-electric) 16%,
+    var(--sand-500) 78%,
+    transparent
+  );
+  height: 1px;
+  left: 43%;
+  pointer-events: none;
+  position: absolute;
+  right: 17%;
+  top: 55%;
+  z-index: 0;
+}
+
+.heroSignalPath::before,
+.heroSignalPath::after {
+  border-color: var(--purple-border);
+  border-style: solid;
+  content: '';
+  height: 2.4rem;
+  position: absolute;
+  width: 2.4rem;
+}
+
+.heroSignalPath::before {
+  border-width: 1px 0 0 1px;
+  left: 0;
+  top: 0;
+}
+
+.heroSignalPath::after {
+  border-width: 0 1px 1px 0;
+  bottom: 0;
+  right: 0;
+}
+
+.heroSignalPath span {
+  color: var(--purple-electric);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  left: 18%;
+  position: absolute;
+  text-transform: uppercase;
+  top: -1.45rem;
+  white-space: nowrap;
+}
+
+.heroSignalPath i {
+  align-items: center;
+  animation: heroSignal 4.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  background: var(--purple-700);
+  color: var(--on-purple);
+  display: flex;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
+  font-style: normal;
+  height: 1.15rem;
+  inset: -0.55rem auto auto 0;
+  justify-content: center;
+  position: absolute;
+  width: 1.15rem;
+}
+
+.heroGrid > :not(.heroSignalPath) {
+  position: relative;
+  z-index: 1;
+}
+
+.heroTelemetry {
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  background: var(--panel-translucent);
+  border-top: 1px solid var(--hairline);
+  bottom: 0;
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.8fr) minmax(0, 3.2fr);
+  left: 0;
+  position: absolute;
+  right: 0;
+  z-index: 2;
+}
+
+.heroTelemetryData {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) minmax(0, 0.75fr) minmax(0, 0.75fr);
+  margin: 0;
+}
+
+.heroTelemetryData > div {
+  border-right: 1px solid var(--hairline);
+  min-width: 0;
+  padding: 0.72rem clamp(1rem, 2vw, 2rem);
+}
+
+.heroTelemetryData > div:last-child {
+  border-right: 0;
+}
+
+.heroTelemetryData dt {
+  color: var(--muted-text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.56rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.heroTelemetryData dd {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin: 0.3rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.telemetryPassed {
+  color: var(--success);
+  text-transform: capitalize;
 }
 
 .runPanelHeader {
@@ -372,6 +494,66 @@
   line-height: 1.65;
   margin: 1.3rem 0 0;
   max-width: 45rem;
+}
+
+.storySequence {
+  grid-column: 1 / -1;
+  position: relative;
+}
+
+.storySequence::before {
+  background: linear-gradient(
+    to bottom,
+    var(--purple-500),
+    var(--purple-electric) 48%,
+    var(--sand-500)
+  );
+  bottom: 0;
+  content: '';
+  left: 2.15rem;
+  opacity: 0.75;
+  position: absolute;
+  top: 0;
+  width: 1px;
+  z-index: 4;
+}
+
+.storySequence > section {
+  padding-left: clamp(5rem, 6vw, 6.5rem);
+  position: relative;
+}
+
+.storySequence > section::before {
+  align-items: center;
+  background: var(--purple-950);
+  border: 1px solid var(--purple-border);
+  color: var(--sand-100);
+  content: attr(data-trace-step);
+  display: flex;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.64rem;
+  font-weight: 700;
+  height: 2rem;
+  justify-content: center;
+  left: 1.15rem;
+  position: absolute;
+  top: clamp(4rem, 6vw, 6rem);
+  width: 2rem;
+  z-index: 5;
+}
+
+.storySequence > section::after {
+  color: var(--sand-500);
+  content: attr(data-trace-label);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.56rem;
+  font-weight: 700;
+  left: 1.08rem;
+  position: absolute;
+  text-transform: uppercase;
+  top: calc(clamp(4rem, 6vw, 6rem) + 2.75rem);
+  writing-mode: vertical-rl;
+  z-index: 5;
 }
 
 .traceSection {
@@ -1310,6 +1492,34 @@
   }
 }
 
+@keyframes heroSignal {
+  0%,
+  10% {
+    inset-inline-start: 0%;
+    opacity: 0;
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  48% {
+    inset-inline-start: 52%;
+    opacity: 1;
+  }
+
+  82% {
+    inset-inline-start: calc(100% - 1.15rem);
+    opacity: 1;
+  }
+
+  92%,
+  100% {
+    inset-inline-start: calc(100% - 1.15rem);
+    opacity: 0;
+  }
+}
+
 @media (min-width: 761px) and (max-height: 900px) {
   .hero {
     min-height: min(45rem, calc(100svh - 5.25rem));
@@ -1318,6 +1528,10 @@
 }
 
 @media (max-width: 1100px) {
+  .heroSignalPath {
+    display: none;
+  }
+
   .releaseSection {
     grid-template-columns: 1fr;
   }
@@ -1386,6 +1600,40 @@
 @media (max-width: 760px) {
   .home {
     grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding-bottom: 10.5rem;
+  }
+
+  .heroTelemetry {
+    grid-template-columns: 1fr;
+  }
+
+  .heroTelemetryData {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .heroTelemetryData > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .heroTelemetryData > div:nth-child(n + 3) {
+    border-top: 1px solid var(--hairline);
+  }
+
+  .traceCue {
+    display: none;
+  }
+
+  .storySequence::before,
+  .storySequence > section::before,
+  .storySequence > section::after {
+    display: none;
+  }
+
+  .storySequence > section {
+    padding-left: clamp(1.25rem, 2.8vw, 2rem);
   }
 
   .hero::after {
@@ -1612,6 +1860,10 @@
     font-size: clamp(3.2rem, 17vw, 5rem);
   }
 
+  .traceCue {
+    display: none;
+  }
+
   .heroActions,
   .contributeActions {
     align-items: stretch;
@@ -1711,6 +1963,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .heroSignalPath i {
+    animation: none;
+    inset-inline-start: calc(100% - 1.15rem);
+  }
+
   .timelineFrame {
     padding-left: 0.6rem;
     padding-top: 0;

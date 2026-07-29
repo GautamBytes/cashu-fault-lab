@@ -37,6 +37,8 @@ export function FaultTimeline() {
     <section
       aria-labelledby="fault-timeline-title"
       className={`${styles.section} ${styles.traceSection}`}
+      data-trace-label="Break"
+      data-trace-step="01"
       id="fault-trace"
     >
       <div className={styles.sectionHeading}>

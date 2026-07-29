@@ -101,6 +101,7 @@ describe('home components', () => {
 
     const hero = screen.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
     const runPanel = screen.getByRole('complementary', { name: 'Deterministic demo run' });
+    const telemetry = screen.getByLabelText('Checked-in demo telemetry');
     const panelHeader = runPanel.querySelector('header');
     const facts = runPanel.querySelector('dl');
 
@@ -119,6 +120,27 @@ describe('home components', () => {
     expect(within(facts).getByText(String(summary.commandCount))).toBeVisible();
     expect(within(facts).getByText(String(summary.invariantCount))).toBeVisible();
     expect(within(facts).getByText(new RegExp(summary.status, 'i'))).toBeVisible();
+    expect(within(telemetry).getByText(summary.seed)).toBeVisible();
+    expect(within(telemetry).getByText(summary.scenarioId)).toBeVisible();
+    expect(within(telemetry).getByText(`${summary.invariantCount} invariants`)).toBeVisible();
+    expect(within(telemetry).getByText(new RegExp(summary.status, 'i'))).toBeVisible();
+  });
+
+  it('connects the primary homepage story with an ordered trace spine', async () => {
+    stubMotionPreference();
+    render(await HomePage());
+
+    const steps = [
+      ['A lost response is not a lost result.', '01', 'Break'],
+      ['Evidence, not a success boolean.', '02', 'Prove'],
+      ['Explore fault scenarios', '03', 'Explore'],
+    ] as const;
+
+    for (const [heading, step, label] of steps) {
+      const section = screen.getByRole('region', { name: heading });
+      expect(section).toHaveAttribute('data-trace-step', step);
+      expect(section).toHaveAttribute('data-trace-label', label);
+    }
   });
 
   it('keeps full-width home bands on the dark surface baseline', async () => {

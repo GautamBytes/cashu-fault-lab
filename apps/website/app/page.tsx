@@ -97,15 +97,41 @@ export default async function HomePage() {
             </div>
           </div>
           <HeroRunPanel summary={summary} />
+          <div aria-hidden="true" className={styles.heroSignalPath}>
+            <span>inject / response_lost</span>
+            <i>×</i>
+          </div>
         </div>
-        <a className={styles.traceCue} href="#fault-trace">
-          Next / deterministic fault trace
-        </a>
+        <div className={styles.heroTelemetry}>
+          <a className={styles.traceCue} href="#fault-trace">
+            Next / deterministic fault trace
+          </a>
+          <dl aria-label="Checked-in demo telemetry" className={styles.heroTelemetryData}>
+            <div>
+              <dt>Seed</dt>
+              <dd>{summary.seed}</dd>
+            </div>
+            <div>
+              <dt>Fault program</dt>
+              <dd>{summary.scenarioId}</dd>
+            </div>
+            <div>
+              <dt>Evidence</dt>
+              <dd>{summary.invariantCount} invariants</dd>
+            </div>
+            <div>
+              <dt>Outcome</dt>
+              <dd className={styles.telemetryPassed}>✓ {summary.status}</dd>
+            </div>
+          </dl>
+        </div>
       </section>
 
-      <FaultTimeline />
-      <EvidenceReport summary={summary} />
-      <ScenarioExplorer groups={scenarioGroups} />
+      <div className={styles.storySequence}>
+        <FaultTimeline />
+        <EvidenceReport summary={summary} />
+        <ScenarioExplorer groups={scenarioGroups} />
+      </div>
 
       <section aria-labelledby="tested-title" className={styles.section}>
         <div className={styles.sectionHeading}>
