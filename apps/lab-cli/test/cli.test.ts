@@ -207,6 +207,18 @@ describe('lab CLI', () => {
       commands: [{ type: 'assert_quiescent' }],
     }),
   };
+
+  it('prints its version with a successful exit code', async () => {
+    const setup = fixture();
+    const outcome = await runCli(['node', 'cashu-fault-lab', '--version'], {
+      io: setup.io,
+      runtime: new FakeRuntime(),
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(setup.stdout().trim()).toBe('0.1.0');
+  });
+
   it('scaffolds an adapter project through adapter init', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'cashu-cli-adapter-init-'));
     const output = join(directory, 'my-wallet');
@@ -944,6 +956,50 @@ describe('lab CLI', () => {
     expect(report.ok).toBe(true);
     expect(report.checks.some((c) => c.name === 'node')).toBe(true);
     expect(report.checks.some((c) => c.name === 'testcontainers')).toBe(true);
+  });
+
+  it('checks only end-user runtime prerequisites in the npm distribution', async () => {
+    const setup = fixture();
+    const commands: string[] = [];
+    const probes: DoctorProbes = {
+      env: {},
+      execFile: async (command, args) => {
+        commands.push(`${command} ${args.join(' ')}`);
+        if (command === 'node') return { stdout: 'v24.0.0\n', stderr: '' };
+        if (command === 'docker' && args[0] === '--version') {
+          return { stdout: 'Docker version 27.0.0, build abc\n', stderr: '' };
+        }
+        if (command === 'docker' && args[0] === 'info') {
+          return { stdout: '27.0.0\n', stderr: '' };
+        }
+        if (command === 'docker' && args.join(' ') === 'compose version --short') {
+          return { stdout: '2.40.0\n', stderr: '' };
+        }
+        throw new Error(`unexpected probe ${command} ${args.join(' ')}`);
+      },
+      isPortFree: async () => true,
+    };
+
+    const outcome = await runCli(['node', 'cashu-fault-lab', 'doctor', '--json'], {
+      distribution: 'package',
+      io: setup.io,
+      doctorProbes: probes,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    const report = JSON.parse(setup.stdout()) as { ok: boolean; checks: { name: string }[] };
+    expect(report.ok).toBe(true);
+    expect(report.checks.map(({ name }) => name)).not.toContain('pnpm');
+    expect(report.checks.map(({ name }) => name)).not.toContain('cargo (CDK adapter)');
+    expect(report.checks.map(({ name }) => name)).not.toContain('testcontainers');
+    expect(report.checks).toContainEqual({
+      name: 'docker compose',
+      status: 'ok',
+      detail: '2.40.0',
+    });
+    expect(report.checks.some(({ name }) => name.startsWith('CFL_'))).toBe(false);
+    expect(commands.some((command) => command.startsWith('pnpm '))).toBe(false);
+    expect(commands.some((command) => command.startsWith('cargo '))).toBe(false);
   });
 
   it('emits a machine-readable diagnostic for command errors when global --json is set', async () => {

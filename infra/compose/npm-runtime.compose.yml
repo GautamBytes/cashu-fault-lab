@@ -1,0 +1,191 @@
+name: cashu-fault-lab-npm
+
+x-node-runtime: &node-runtime
+  image: ${CFL_NODE_WALLETS_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-node-wallets:0.1.0}
+  pull_policy: missing
+  init: true
+  network_mode: service:lab-netns
+
+services:
+  nutshell-redis:
+    extends:
+      file: nutshell.compose.yml
+      service: nutshell-redis
+
+  nutshell:
+    extends:
+      file: nutshell.compose.yml
+      service: nutshell
+    ports: !reset []
+    depends_on:
+      nutshell-redis:
+        condition: service_healthy
+
+  lab-netns:
+    image: ${CFL_NETNS_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-netns:0.1.0}
+    pull_policy: missing
+    depends_on:
+      nutshell:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '3338']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    networks: [cashu-fault-lab-mints]
+    ports:
+      - '127.0.0.1:${CFL_NUTSHELL_PORT:-3338}:3338'
+      - '127.0.0.1:${CFL_CASHU_TS_PORT:-4101}:4101'
+      - '127.0.0.1:${CFL_CDK_ADAPTER_PORT:-4102}:4102'
+      - '127.0.0.1:${CFL_REFERENCE_RECEIVER_PORT:-4200}:4200'
+      - '127.0.0.1:${CFL_HTTP_FAULT_GATEWAY_PORT:-4300}:4300'
+      - '127.0.0.1:${CFL_NOSTR_FAULT_RELAY_PORT:-4400}:4400'
+
+  reference-receiver:
+    <<: *node-runtime
+    command: ['node', 'apps/reference-receiver/dist/bin.js']
+    environment:
+      CFL_REFERENCE_RECEIVER_CLAIM_KEY: ${CFL_REFERENCE_RECEIVER_CLAIM_KEY:?set CFL_REFERENCE_RECEIVER_CLAIM_KEY}
+      CFL_REFERENCE_RECEIVER_CONTROL_TOKEN: ${CFL_REFERENCE_RECEIVER_TOKEN:?set CFL_REFERENCE_RECEIVER_TOKEN}
+      CFL_REFERENCE_RECEIVER_HOST: 0.0.0.0
+      CFL_REFERENCE_RECEIVER_MINT_URL: http://127.0.0.1:3338
+      CFL_REFERENCE_RECEIVER_PAYMENT_TARGET: http://127.0.0.1:4300/pay
+      CFL_REFERENCE_RECEIVER_PORT: 4200
+    depends_on:
+      lab-netns:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4200/v1/capabilities',{headers:{authorization:'Bearer '+process.env.CFL_REFERENCE_RECEIVER_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  http-fault-gateway:
+    <<: *node-runtime
+    command: ['node', 'apps/http-fault-gateway/dist/bin.js']
+    environment:
+      CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN: ${CFL_HTTP_FAULT_GATEWAY_TOKEN:?set CFL_HTTP_FAULT_GATEWAY_TOKEN}
+      CFL_HTTP_FAULT_GATEWAY_DOWNSTREAM: http://127.0.0.1:4200
+      CFL_HTTP_FAULT_GATEWAY_HOST: 0.0.0.0
+      CFL_HTTP_FAULT_GATEWAY_PORT: 4300
+    depends_on:
+      reference-receiver:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4300/__faults/v1/evidence',{headers:{authorization:'Bearer '+process.env.CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  cashu-ts-postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: cashu_fault_lab
+      POSTGRES_USER: cashu
+      POSTGRES_PASSWORD: ${CFL_POSTGRES_PASSWORD:-cashu-local-development-only}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cashu -d cashu_fault_lab']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    networks: [cashu-fault-lab-mints]
+    volumes:
+      - cashu-fault-lab-cashu-ts-postgres:/var/lib/postgresql
+
+  nostr-fault-relay:
+    <<: *node-runtime
+    command: ['node', 'apps/nostr-fault-relay/dist/bin.js']
+    environment:
+      CFL_NOSTR_FAULT_RELAY_HOST: 0.0.0.0
+      CFL_NOSTR_FAULT_RELAY_PORT: 4400
+    depends_on:
+      lab-netns:
+        condition: service_started
+
+  cashu-ts:
+    <<: *node-runtime
+    command: ['node', 'adapters/cashu-ts/dist/bin.js']
+    environment:
+      CFL_CASHU_TS_CONTROL_TOKEN: ${CFL_CASHU_TS_TOKEN:?set CFL_CASHU_TS_TOKEN}
+      CFL_CASHU_TS_CRASH_TENANT_ID: cashu-ts-funded-crash
+      CFL_CASHU_TS_CLAIM_KEY: ${CFL_CASHU_TS_CLAIM_KEY:?set CFL_CASHU_TS_CLAIM_KEY}
+      CFL_CASHU_TS_FUNDING_AMOUNT: ${CFL_WALLET_FUNDING_AMOUNT:-64}
+      CFL_CASHU_TS_HOST: 0.0.0.0
+      CFL_CASHU_TS_MINT_URL: http://127.0.0.1:3338
+      CFL_CASHU_TS_NOSTR_RECEIVER_KEY: ${CFL_CASHU_TS_NOSTR_RECEIVER_KEY:?set CFL_CASHU_TS_NOSTR_RECEIVER_KEY}
+      CFL_CASHU_TS_NOSTR_RELAYS: ws://127.0.0.1:4400
+      CFL_CASHU_TS_NOSTR_SENDER_KEY: ${CFL_CASHU_TS_NOSTR_SENDER_KEY:?set CFL_CASHU_TS_NOSTR_SENDER_KEY}
+      CFL_CASHU_TS_PAYMENT_TARGET: http://127.0.0.1:4101/pay
+      CFL_CASHU_TS_PORT: 4101
+      CFL_CASHU_TS_RECEIVER_DATABASE_URL: postgresql://cashu:${CFL_POSTGRES_PASSWORD:?set CFL_POSTGRES_PASSWORD}@cashu-ts-postgres:5432/cashu_fault_lab
+      CFL_CASHU_TS_RECEIVER_STATE_KEY: ${CFL_CASHU_TS_RECEIVER_STATE_KEY:?set CFL_CASHU_TS_RECEIVER_STATE_KEY}
+      CFL_CASHU_TS_RECEIVER_TENANT_ID: cashu-ts-local
+      CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION: ${CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION:?set CFL_CASHU_TS_SENDER_ACTIVE_KEY_VERSION}
+      CFL_CASHU_TS_SENDER_DATABASE_URL: postgresql://cashu:${CFL_POSTGRES_PASSWORD:?set CFL_POSTGRES_PASSWORD}@cashu-ts-postgres:5432/cashu_fault_lab
+      CFL_CASHU_TS_SENDER_RUN_ID: ${CFL_CASHU_TS_SENDER_RUN_ID:?set CFL_CASHU_TS_SENDER_RUN_ID}
+      CFL_CASHU_TS_SENDER_STATE_KEYS: ${CFL_CASHU_TS_SENDER_STATE_KEYS:?set CFL_CASHU_TS_SENDER_STATE_KEYS}
+      CFL_CASHU_TS_SENDER_TENANT_ID: cashu-ts-local
+      CFL_CASHU_TS_TEST_CRASH_CONTROL: '1'
+    depends_on:
+      http-fault-gateway:
+        condition: service_healthy
+      cashu-ts-postgres:
+        condition: service_healthy
+      nostr-fault-relay:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4101/v1/capabilities',{headers:{authorization:'Bearer '+process.env.CFL_CASHU_TS_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    restart: 'on-failure:10'
+
+  cdk:
+    image: ${CFL_CDK_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter:0.1.0}
+    pull_policy: missing
+    environment:
+      CASHU_FAULT_LAB_CDK_FUNDING_AMOUNT: ${CFL_WALLET_FUNDING_AMOUNT:-64}
+      CASHU_FAULT_LAB_CDK_FUNDING_TIMEOUT_SECONDS: 30
+      CASHU_FAULT_LAB_CDK_LISTEN: 0.0.0.0:4102
+      CASHU_FAULT_LAB_CDK_MINT_URL: http://127.0.0.1:3338
+      CASHU_FAULT_LAB_CONTROL_TOKEN: ${CFL_CDK_TOKEN:?set CFL_CDK_TOKEN}
+    depends_on:
+      http-fault-gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl --fail --silent --header "Authorization: Bearer $$CASHU_FAULT_LAB_CONTROL_TOKEN" http://127.0.0.1:4102/v1/capabilities >/dev/null',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    init: true
+    network_mode: service:lab-netns
+
+networks:
+  cashu-fault-lab-mints:
+
+volumes:
+  cashu-fault-lab-nutshell:
+  cashu-fault-lab-redis:
+  cashu-fault-lab-cashu-ts-postgres:

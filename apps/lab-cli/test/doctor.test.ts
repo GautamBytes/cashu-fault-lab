@@ -272,6 +272,27 @@ describe('runDoctor', () => {
     });
   });
 
+  it('requires a Compose version that supports the packaged merge directives', async () => {
+    const report = await runDoctor(
+      {
+        env: healthyEnv,
+        execFile: healthyExec({
+          ...toolVersions,
+          'docker compose version --short': { stdout: '2.24.3\n', stderr: '' },
+        }),
+        isPortFree: async () => true,
+      },
+      { dockerCompose: true },
+    );
+
+    expect(report.ok).toBe(false);
+    expect(report.checks).toContainEqual({
+      name: 'docker compose',
+      status: 'fail',
+      detail: 'requires Docker Compose 2.24.4 or newer; found 2.24.3',
+    });
+  });
+
   it('reports cashu-ts sender durability readiness from explicit PostgreSQL key config', async () => {
     const stateKey = Buffer.alloc(32, 4).toString('base64url');
     const report = await runDoctor({

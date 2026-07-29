@@ -8,9 +8,20 @@ The lab implements an experimental `cashu-delivery-v1` application profile on ex
 
 ## Quickstart
 
-[Open Cashu Fault Lab in GitHub Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1)
-to use the pinned Node.js, pnpm, and isolated Docker environment without configuring them locally.
-Then run:
+To run the developer preview without cloning the repository or installing pnpm and Rust:
+
+```bash
+npx cashu-fault-lab doctor
+npx cashu-fault-lab demo
+```
+
+This requires Node.js 24 and Docker. The npm package contains the CLI, scenarios, schemas, and
+Compose definitions. The demo pulls versioned runtime images, generates private local credentials,
+writes redacted JSON and HTML evidence, and removes the stack when it finishes.
+
+For workspace development, [open Cashu Fault Lab in GitHub
+Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1) to use the pinned
+Node.js, pnpm, Rust, and isolated Docker environment without configuring them locally. Then run:
 
 ```bash
 ./scripts/quickstart

@@ -46,6 +46,7 @@ jobs:
         run: pnpm --filter @cashu-fault-lab/scenario-runner exec vitest run test/release-policy.test.ts -t "accepts two independent cross-language pairs backed by two mints"
       - run: pnpm test:integration
       - run: pnpm build
+      - run: pnpm test:npm-package
       - run: pnpm test:consumer
       - run: pnpm audit --prod
       - run: cargo fmt --manifest-path adapters/cdk/Cargo.toml --check

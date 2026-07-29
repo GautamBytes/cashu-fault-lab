@@ -8,6 +8,8 @@ test-results/
 *.tsbuildinfo
 coverage/
 dist/
+apps/npm-cli/runtime/
+apps/npm-cli/LICENSE
 adapters/cdk/target/
 artifacts/
 graphify-out/
