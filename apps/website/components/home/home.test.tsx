@@ -182,6 +182,13 @@ describe('home components', () => {
     expect(textLinkRule).toMatch(/min-width:\s*(?:44px|2\.75rem)/);
   });
 
+  it('removes the inner outline from the hero quickstart command', async () => {
+    const css = await readFile(homePath('home.module.css'), 'utf8');
+    const commandCodeRule = css.match(/\.commandBlock code\s*{([^}]*)}/)?.[1];
+
+    expect(commandCodeRule).toMatch(/border:\s*0/);
+  });
+
   it('keeps CTA text above 4.5 to 1 across every primary gradient stop', async () => {
     const [css, globals] = await Promise.all([
       readFile(homePath('home.module.css'), 'utf8'),
