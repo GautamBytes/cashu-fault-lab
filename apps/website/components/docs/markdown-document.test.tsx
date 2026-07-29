@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +9,8 @@ import {
   resolveMarkdownHref,
   SafeMarkdownLink,
 } from './markdown-document';
+
+const docsCss = readFileSync(resolve(process.cwd(), 'components/docs/docs.module.css'), 'utf8');
 
 describe('repository Markdown links', () => {
   it('maps a canonical document linked from the repository root to its docs route', () => {
@@ -46,6 +50,12 @@ describe('repository Markdown links', () => {
 });
 
 describe('Markdown component props', () => {
+  it('renders inline code as annotated prose instead of bordered UI boxes', () => {
+    expect(docsCss).toMatch(
+      /\.markdown :not\(pre\) > code\s*\{[^}]*background:\s*linear-gradient\([^}]*border:\s*0;[^}]*border-radius:\s*0;[^}]*font-size:\s*0\.92em;[^}]*padding:\s*0 0\.08em/s,
+    );
+  });
+
   it('removes only the canonical leading title before rendering inside the page shell', () => {
     const markdown =
       '# Canonical title\n\nIntroduction.\n\n## Details\n\nBody.\n\n# Deliberate later heading\n';
