@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { assertSupportedNodeVersion, parseQuickstartArgs, runQuickstart } from './quickstart.mjs';
+import {
+  assertSupportedNodeVersion,
+  executeCommand,
+  exitCodeForQuickstartError,
+  parseQuickstartArgs,
+  runQuickstart,
+} from './quickstart.mjs';
 
 describe('developer quickstart', () => {
   it('parses check and skip-install modes', () => {
@@ -139,5 +145,21 @@ describe('developer quickstart', () => {
       ['docker', ['--version']],
       ['docker', ['info', '--format', '{{.ServerVersion}}']],
     ]);
+  });
+
+  it('preserves a failed child command exit status', async () => {
+    await assert.rejects(
+      executeCommand(process.execPath, ['-e', 'process.exit(42)'], {
+        cwd: process.cwd(),
+        quiet: true,
+      }),
+      (error) => {
+        assert.match(error.message, /Command failed \(exit 42\)/u);
+        assert.equal(exitCodeForQuickstartError(error), 42);
+        return true;
+      },
+    );
+
+    assert.equal(exitCodeForQuickstartError(new Error('unclassified failure')), 1);
   });
 });

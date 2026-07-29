@@ -14,6 +14,14 @@ const quickstartDemoArguments = [
   'artifacts/quickstart.html',
 ];
 
+class QuickstartCommandError extends Error {
+  constructor(message, exitCode = 1) {
+    super(message);
+    this.name = 'QuickstartCommandError';
+    this.exitCode = exitCode;
+  }
+}
+
 export function parseQuickstartArgs(argv) {
   const options = {
     checkOnly: false,
@@ -40,7 +48,11 @@ export function assertSupportedNodeVersion(version) {
   }
 }
 
-function executeCommand(file, args, options) {
+export function exitCodeForQuickstartError(error) {
+  return error instanceof QuickstartCommandError ? error.exitCode : 1;
+}
+
+export function executeCommand(file, args, options) {
   return new Promise((resolveCommand, rejectCommand) => {
     const child = spawn(file, args, {
       cwd: options.cwd,
@@ -48,8 +60,10 @@ function executeCommand(file, args, options) {
       stdio: options.quiet ? 'ignore' : 'inherit',
     });
 
-    child.once('error', () => {
-      rejectCommand(new Error(`Unable to run ${file}: executable not found`));
+    child.once('error', (error) => {
+      const errorCode =
+        error !== null && typeof error === 'object' && 'code' in error ? ` (${error.code})` : '';
+      rejectCommand(new QuickstartCommandError(`Unable to run ${file}${errorCode}`));
     });
     child.once('close', (code, signal) => {
       if (code === 0) {
@@ -57,7 +71,12 @@ function executeCommand(file, args, options) {
         return;
       }
       const outcome = code === null ? `signal ${signal ?? 'unknown'}` : `exit ${code}`;
-      rejectCommand(new Error(`Command failed (${outcome}): ${file} ${args.join(' ')}`));
+      rejectCommand(
+        new QuickstartCommandError(
+          `Command failed (${outcome}): ${file} ${args.join(' ')}`,
+          code ?? 1,
+        ),
+      );
     });
   });
 }
@@ -132,6 +151,6 @@ if (invokedPath !== undefined && import.meta.url === pathToFileURL(invokedPath).
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown quickstart failure';
     process.stderr.write(`quickstart: ${message}\n`);
-    process.exitCode = 1;
+    process.exitCode = exitCodeForQuickstartError(error);
   }
 }

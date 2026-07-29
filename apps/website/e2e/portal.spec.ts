@@ -100,6 +100,17 @@ test('home is accessible, has one visible title, and fits the viewport', async (
 }, testInfo) => {
   await page.goto('/');
 
+  const quickstartAction = page.getByRole('link', { name: 'Open in Codespaces' });
+  await expect(quickstartAction).toBeVisible();
+  await expect(quickstartAction).toHaveAttribute(
+    'href',
+    'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
+  );
+  await quickstartAction.focus();
+  await expect(quickstartAction).toBeFocused();
+  await quickstartAction.evaluate((element) => element.blur());
+  await expect(page.getByLabel('Demo command').getByText('./scripts/quickstart')).toBeVisible();
+
   if (testInfo.project.name === 'desktop-chromium') {
     const viewportHeight = page.viewportSize()?.height ?? 900;
     const hero = page.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
@@ -107,11 +118,7 @@ test('home is accessible, has one visible title, and fits the viewport', async (
       level: 1,
       name: 'Make Cashu delivery fail safely.',
     });
-    const primaryAction = hero.getByRole('link', { name: 'Open in Codespaces' });
-    await expect(primaryAction).toHaveAttribute(
-      'href',
-      'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
-    );
+    const primaryAction = quickstartAction;
     const githubAction = hero.getByRole('link', { name: /View on GitHub/ });
     const commandBlock = hero.getByLabel('Demo command');
     const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
