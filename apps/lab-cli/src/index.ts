@@ -97,6 +97,7 @@ export interface RunCliDependencies {
   readonly io?: CliIo;
   readonly doctorProbes?: import('./doctor.js').DoctorProbes;
   readonly distribution?: 'workspace' | 'package';
+  readonly version?: string;
 }
 
 export interface CliOutcome {
@@ -257,7 +258,7 @@ export async function runCli(
   const program = new Command()
     .name('cashu-fault-lab')
     .description('Deterministic Cashu payment delivery fault laboratory')
-    .version('0.1.0')
+    .version(dependencies.version ?? '0.1.0')
     .exitOverride()
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr });
 

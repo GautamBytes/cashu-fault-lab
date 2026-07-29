@@ -98,7 +98,7 @@ export default async function HomePage() {
               <span aria-hidden="true">$</span>
               <code>npx cashu-fault-lab demo</code>
               <span className={styles.commandNote}>
-                available with v0.1.0 · isolated · secret-redacted
+                available with v0.1.1 · isolated · secret-redacted
               </span>
             </div>
           </div>

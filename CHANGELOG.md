@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 — 2026-07-30
+
+- Published the self-contained npm CLI with npm 12-compatible executable metadata.
+- Moved automated releases to npm Trusted Publishing with GitHub provenance.
+- Kept the real installed-package Docker demo as a publication gate.
+
 ## 0.1.0 — 2026-07-28
 
 First experimental v0.1 developer preview.
