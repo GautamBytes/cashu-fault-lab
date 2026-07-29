@@ -6,12 +6,30 @@ This is an experimental v0.1 developer preview, not certification. The strict ga
 
 The lab implements an experimental `cashu-delivery-v1` application profile on existing Cashu and Nostr protocols. Harness operation does not require a new NUT. See [ADR 001](docs/adrs/001-delivery-semantics.md) for the standardization boundary.
 
+## Quickstart
+
+[Open Cashu Fault Lab in GitHub Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1)
+to use the pinned Node.js, pnpm, and isolated Docker environment without configuring them locally.
+Then run:
+
+```bash
+./scripts/quickstart
+```
+
+For a local clone, install Node.js 24 and Docker, then run the same command. Use
+`./scripts/quickstart --check` for a non-mutating prerequisite check.
+
 ## Requirements
 
+The quickstart path requires:
+
 - Node.js 24
+- Docker
+
+Full workspace development additionally requires:
+
 - pnpm 11.15.0
 - Rust 1.97.0 for the CDK adapter
-- Docker for PostgreSQL and real-mint lanes
 
 ## Install and verify
 
@@ -25,6 +43,23 @@ pnpm test:funded      # strict real-mint and funded-wallet lanes
 pnpm build
 pnpm test:consumer
 ```
+
+## Website
+
+```bash
+pnpm website:dev
+pnpm website:test
+pnpm website:build
+pnpm website:test:e2e
+```
+
+The site reads `README.md`, `docs/`, `spec/`, `scenarios/`, and the reviewed demo artifact during
+its build. Preview URLs are deployment outputs returned to the user rather than committed as
+canonical project URLs.
+
+For Vercel, set the project Root Directory to `apps/website` and keep “Include files outside the
+root directory in the Build Step” enabled. The deployment contract lives beside the Next.js app in
+`apps/website/vercel.json`; canonical repository docs remain the website's single content source.
 
 ## Run the deterministic demo
 

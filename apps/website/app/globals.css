@@ -1,0 +1,179 @@
+:root {
+  --ink: #09070d;
+  --control-surface: #121018;
+  --elevated-surface: #1a1422;
+  --purple-950: #2b0c4a;
+  --purple-700: #5b2099;
+  --purple-500: #7f38ca;
+  --purple-electric: #a855f7;
+  --sand-500: #dcc099;
+  --sand-300: #e9d4ae;
+  --sand-100: #f6ebd6;
+  --muted-text: #a99cae;
+  --hairline: rgb(220 192 153 / 16%);
+  --header-surface: rgb(9 7 13 / 88%);
+  --overlay-surface: rgb(9 7 13 / 82%);
+  --panel-translucent: rgb(18 16 24 / 72%);
+  --panel-strong: rgb(18 16 24 / 94%);
+  --row-tint: rgb(255 255 255 / 1%);
+  --control-glint: rgb(255 255 255 / 5%);
+  --control-glint-strong: rgb(255 255 255 / 8%);
+  --shadow-color: rgb(0 0 0 / 30%);
+  --on-purple: #fff8ed;
+  --success: var(--sand-300);
+  --purple-border-soft: rgb(168 85 247 / 30%);
+  --purple-border: rgb(168 85 247 / 42%);
+  --sand-border-soft: rgb(220 192 153 / 24%);
+  --sand-border: rgb(220 192 153 / 38%);
+  --hero-violet: rgb(127 56 202 / 24%);
+  --hero-depth: rgb(43 12 74 / 14%);
+  --hero-electric: rgb(168 85 247 / 11%);
+  --hero-sweep: rgb(43 12 74 / 16%);
+  --shell-width: 97.5rem;
+  --content-width: var(--shell-width);
+  --docs-width: 95rem;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  color-scheme: dark;
+}
+
+html[data-theme='light'] {
+  --ink: #f7f8fc;
+  --control-surface: #eef0f6;
+  --elevated-surface: #ffffff;
+  --purple-950: #f0e8fa;
+  --purple-700: #6424a9;
+  --purple-500: #8242c3;
+  --purple-electric: #7226b4;
+  --sand-500: #955912;
+  --sand-300: #44364b;
+  --sand-100: #211527;
+  --muted-text: #69616f;
+  --hairline: rgb(46 25 58 / 15%);
+  --header-surface: rgb(255 255 255 / 90%);
+  --overlay-surface: rgb(33 21 39 / 34%);
+  --panel-translucent: rgb(255 255 255 / 82%);
+  --panel-strong: rgb(255 255 255 / 96%);
+  --row-tint: rgb(100 36 169 / 2.5%);
+  --control-glint: rgb(255 255 255 / 78%);
+  --control-glint-strong: rgb(100 36 169 / 10%);
+  --shadow-color: rgb(46 25 58 / 13%);
+  --success: var(--sand-500);
+  --purple-border-soft: rgb(100 36 169 / 18%);
+  --purple-border: rgb(100 36 169 / 28%);
+  --sand-border-soft: rgb(149 89 18 / 16%);
+  --sand-border: rgb(149 89 18 / 26%);
+  --hero-violet: rgb(130 66 195 / 16%);
+  --hero-depth: rgb(100 36 169 / 7%);
+  --hero-electric: rgb(149 89 18 / 7%);
+  --hero-sweep: rgb(100 36 169 / 5%);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--ink);
+}
+
+body {
+  background: var(--ink);
+  color: var(--sand-100);
+  font-family: 'IBM Plex Sans Variable', sans-serif;
+  margin: 0;
+  min-height: 100vh;
+}
+
+main {
+  background: var(--ink);
+  color: var(--sand-100);
+  margin: 0 auto;
+  max-width: var(--shell-width);
+  min-height: calc(100vh - 8rem);
+  padding: 4rem 1.25rem;
+}
+
+section {
+  max-width: 44rem;
+}
+
+[data-scroll-reveal='pending'] {
+  filter: blur(10px);
+  opacity: 0;
+  transform: translate3d(0, 1.75rem, 0);
+}
+
+[data-scroll-reveal='visible'] {
+  filter: blur(0);
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 680ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+h1 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(2.5rem, 8vw, 5.5rem);
+  letter-spacing: 0;
+  line-height: 0.95;
+  margin: 0.5rem 0 1.5rem;
+}
+
+::selection {
+  background: var(--purple-700);
+  color: var(--on-purple);
+}
+
+:focus-visible {
+  outline: 2px solid var(--sand-500);
+  outline-offset: 3px;
+}
+
+code {
+  background: var(--elevated-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  color: var(--sand-300);
+  font-family: 'IBM Plex Mono', monospace;
+  padding: 0.3rem 0.45rem;
+}
+
+footer {
+  background: var(--control-surface);
+  border-top: 1px solid var(--hairline);
+  color: var(--muted-text);
+  font-size: 0.875rem;
+}
+
+.footer-inner {
+  margin: 0 auto;
+  max-width: var(--shell-width);
+  padding: 1.5rem 1.25rem;
+}
+
+.skip-link {
+  background: var(--sand-100);
+  color: var(--purple-950);
+  left: 1rem;
+  padding: 0.75rem 1rem;
+  position: fixed;
+  top: -5rem;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-scroll-reveal] {
+    filter: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,138 @@
+.overlay {
+  align-items: flex-start;
+  background: var(--overlay-surface);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: min(12vh, 6rem) 1rem 1rem;
+  position: fixed;
+  z-index: 100;
+}
+
+.dialog {
+  background: var(--elevated-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 48%);
+  color: var(--sand-100);
+  max-height: min(42rem, calc(100vh - 7rem));
+  max-width: 42rem;
+  overflow: auto;
+  padding: 1rem;
+  width: 100%;
+}
+
+.dialogHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.dialogHeader label {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 1rem;
+}
+
+.dialogHeader button {
+  background: var(--control-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  color: var(--sand-300);
+  cursor: pointer;
+  font: inherit;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.35rem 0.6rem;
+}
+
+.dialog input {
+  background: var(--control-surface);
+  border: 1px solid var(--purple-700);
+  border-radius: var(--radius-sm);
+  caret-color: var(--purple-electric);
+  color: var(--sand-100);
+  font: inherit;
+  min-height: 3rem;
+  padding: 0.65rem 0.8rem;
+  width: 100%;
+}
+
+.dialog input::placeholder {
+  color: var(--muted-text);
+}
+
+.results {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.results li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.results a {
+  color: var(--sand-100);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-height: 44px;
+  padding: 0.8rem;
+  text-decoration: none;
+}
+
+.results a:hover,
+.results a:focus-visible {
+  background: var(--control-surface);
+  outline: 2px solid var(--sand-500);
+  outline-offset: -2px;
+}
+
+.results span {
+  color: var(--muted-text);
+  font-size: 0.85rem;
+}
+
+.emptyState {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.emptyState img {
+  image-rendering: pixelated;
+}
+
+.emptyState p {
+  font-weight: 700;
+  margin: 0.75rem 0 0.4rem;
+}
+
+.emptyState a {
+  align-items: center;
+  color: var(--purple-electric);
+  display: inline-flex;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.65rem 0.8rem;
+  text-underline-offset: 0.2rem;
+}
+
+@media (max-width: 560px) {
+  .overlay {
+    padding: 0;
+  }
+
+  .dialog {
+    border-radius: 0;
+    max-height: 100vh;
+    max-height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}

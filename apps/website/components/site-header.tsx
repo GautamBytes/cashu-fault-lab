@@ -1,0 +1,73 @@
+'use client';
+
+import { useState } from 'react';
+import styles from './site-header.module.css';
+import { ThemeToggle } from './theme-toggle';
+
+export interface SiteHeaderProps {
+  onOpenSearch?: () => void;
+}
+
+const navigation = [
+  { href: '/', label: 'Home' },
+  { href: '/docs/getting-started', label: 'Docs' },
+  { href: '/release-status', label: 'Release status' },
+];
+
+export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  return (
+    <header className={styles.header}>
+      <div className={styles.inner}>
+        <a className={styles.brand} href="/">
+          <img
+            alt=""
+            className={styles.brandMark}
+            height="28"
+            src="/cashu-fault-lab.png"
+            width="28"
+          />
+          Cashu Fault Lab
+        </a>
+        <button
+          aria-controls="primary-navigation"
+          aria-expanded={isMenuOpen}
+          aria-label="Toggle primary navigation"
+          className={styles.menuButton}
+          onClick={() => setIsMenuOpen((open) => !open)}
+          type="button"
+        >
+          Menu
+        </button>
+        <nav
+          aria-label="Primary"
+          className={`${styles.navigation} ${isMenuOpen ? styles.navigationOpen : ''}`}
+          id="primary-navigation"
+        >
+          <div className={styles.links}>
+            {navigation.map((item) => (
+              <a href={item.href} key={item.href}>
+                {item.label}
+              </a>
+            ))}
+          </div>
+          <div className={styles.headerActions}>
+            <ThemeToggle />
+            <button
+              aria-haspopup="dialog"
+              aria-label="Search documentation"
+              className={styles.searchButton}
+              onClick={onOpenSearch}
+              type="button"
+            >
+              <span aria-hidden="true" className={styles.searchIcon} />
+              <span className={styles.searchLabel}>Search</span>
+              <kbd className={styles.searchHint}>⌘K</kbd>
+            </button>
+          </div>
+        </nav>
+      </div>
+    </header>
+  );
+}

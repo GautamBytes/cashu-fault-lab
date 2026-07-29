@@ -1,0 +1,26 @@
+{
+  "name": "Cashu Fault Lab",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:5.0.1-24-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:2.1.0": {
+      "version": "none",
+      "npmVersion": "none",
+      "pnpmVersion": "11.15.0",
+      "nodeGypDependencies": false
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:3.0.1": {}
+  },
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-node-modules,target=${containerWorkspaceFolder}/node_modules,type=volume",
+    "source=${localWorkspaceFolderBasename}-pnpm-store,target=/home/node/.local/share/pnpm/store,type=volume"
+  ],
+  "postCreateCommand": "sudo chown -R node:node node_modules /home/node/.local/share/pnpm/store && CI=true corepack pnpm install --frozen-lockfile",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Cashu Fault Lab website",
+      "onAutoForward": "notify"
+    }
+  },
+  "remoteUser": "node"
+}
