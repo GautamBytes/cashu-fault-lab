@@ -386,6 +386,7 @@ test('keyboard search navigates directly to a matching docs heading', async ({
   test.skip(testInfo.project.name !== 'desktop-chromium');
 
   await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-search-shortcut-ready', 'true');
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
   await page.getByRole('searchbox', { name: 'Search documentation' }).fill('NUT-19');
   const dialog = page.getByRole('dialog', { name: 'Search documentation' });
