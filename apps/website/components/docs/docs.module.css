@@ -336,7 +336,7 @@
 
 .codeBlock {
   background: var(--purple-950);
-  border: 1px solid rgb(168 85 247 / 36%);
+  border: 1px solid var(--purple-border-soft);
   border-radius: var(--radius-md);
   margin: 1.5rem 0;
   max-width: 100%;

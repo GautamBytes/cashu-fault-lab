@@ -259,7 +259,7 @@
 .runCommand {
   align-items: start;
   background: var(--purple-950);
-  border: 1px solid rgb(168 85 247 / 30%);
+  border: 1px solid var(--purple-border-soft);
   border-radius: var(--radius-sm);
   color: var(--sand-100);
   display: flex;
@@ -321,7 +321,7 @@
 .boundaryNote {
   align-items: center;
   background: var(--panel-translucent);
-  border: 1px solid rgb(220 192 153 / 24%);
+  border: 1px solid var(--sand-border-soft);
   border-radius: var(--radius-sm);
   display: grid;
   gap: 1rem;
@@ -715,7 +715,7 @@
 }
 
 .emptyMeter i {
-  border: 1px dashed rgb(168 85 247 / 42%);
+  border: 1px dashed var(--purple-border);
   height: 1.3rem;
 }
 

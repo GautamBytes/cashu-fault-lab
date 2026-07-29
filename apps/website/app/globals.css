@@ -20,6 +20,15 @@
   --control-glint-strong: rgb(255 255 255 / 8%);
   --shadow-color: rgb(0 0 0 / 30%);
   --on-purple: #fff8ed;
+  --success: var(--sand-300);
+  --purple-border-soft: rgb(168 85 247 / 30%);
+  --purple-border: rgb(168 85 247 / 42%);
+  --sand-border-soft: rgb(220 192 153 / 24%);
+  --sand-border: rgb(220 192 153 / 38%);
+  --hero-violet: rgb(127 56 202 / 24%);
+  --hero-depth: rgb(43 12 74 / 14%);
+  --hero-electric: rgb(168 85 247 / 11%);
+  --hero-sweep: rgb(43 12 74 / 16%);
   --shell-width: 97.5rem;
   --content-width: var(--shell-width);
   --docs-width: 95rem;
@@ -29,26 +38,35 @@
 }
 
 html[data-theme='light'] {
-  --ink: #fbf8f1;
-  --control-surface: #f1eaf3;
-  --elevated-surface: #fffdf8;
-  --purple-950: #eee2f5;
-  --purple-700: #5b2099;
-  --purple-500: #7f38ca;
-  --purple-electric: #6f249f;
-  --sand-500: #79532f;
-  --sand-300: #4b3850;
-  --sand-100: #25172b;
-  --muted-text: #6d6170;
-  --hairline: rgb(43 12 74 / 18%);
-  --header-surface: rgb(251 248 241 / 92%);
-  --overlay-surface: rgb(37 23 43 / 36%);
-  --panel-translucent: rgb(255 253 248 / 84%);
-  --panel-strong: rgb(255 253 248 / 96%);
-  --row-tint: rgb(43 12 74 / 2%);
-  --control-glint: rgb(255 255 255 / 64%);
-  --control-glint-strong: rgb(43 12 74 / 12%);
-  --shadow-color: rgb(43 12 74 / 16%);
+  --ink: #f7f8fc;
+  --control-surface: #eef0f6;
+  --elevated-surface: #ffffff;
+  --purple-950: #f0e8fa;
+  --purple-700: #6424a9;
+  --purple-500: #8242c3;
+  --purple-electric: #7226b4;
+  --sand-500: #955912;
+  --sand-300: #44364b;
+  --sand-100: #211527;
+  --muted-text: #69616f;
+  --hairline: rgb(46 25 58 / 15%);
+  --header-surface: rgb(255 255 255 / 90%);
+  --overlay-surface: rgb(33 21 39 / 34%);
+  --panel-translucent: rgb(255 255 255 / 82%);
+  --panel-strong: rgb(255 255 255 / 96%);
+  --row-tint: rgb(100 36 169 / 2.5%);
+  --control-glint: rgb(255 255 255 / 78%);
+  --control-glint-strong: rgb(100 36 169 / 10%);
+  --shadow-color: rgb(46 25 58 / 13%);
+  --success: #236b49;
+  --purple-border-soft: rgb(100 36 169 / 18%);
+  --purple-border: rgb(100 36 169 / 28%);
+  --sand-border-soft: rgb(149 89 18 / 16%);
+  --sand-border: rgb(149 89 18 / 26%);
+  --hero-violet: rgb(130 66 195 / 16%);
+  --hero-depth: rgb(100 36 169 / 7%);
+  --hero-electric: rgb(149 89 18 / 7%);
+  --hero-sweep: rgb(100 36 169 / 5%);
   color-scheme: light;
 }
 
