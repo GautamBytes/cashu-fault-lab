@@ -39,7 +39,9 @@ export function PortalShell({ children, records }: PortalShellProps) {
 
     window.addEventListener('keydown', openWithKeyboard);
     window.addEventListener('cashu-fault-lab:open-search', openWithAction);
+    document.documentElement.dataset.searchShortcutReady = 'true';
     return () => {
+      delete document.documentElement.dataset.searchShortcutReady;
       window.removeEventListener('keydown', openWithKeyboard);
       window.removeEventListener('cashu-fault-lab:open-search', openWithAction);
     };
