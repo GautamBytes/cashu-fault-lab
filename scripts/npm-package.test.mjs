@@ -16,8 +16,9 @@ test('the public npm package exposes only the bundled CLI and runtime assets', a
 
   assert.equal(workspace.name, '@cashu-fault-lab/workspace');
   assert.equal(packageManifest.name, 'cashu-fault-lab');
+  assert.equal(packageManifest.version, '0.1.1');
   assert.equal(packageManifest.private, false);
-  assert.deepEqual(packageManifest.bin, { 'cashu-fault-lab': './dist/bin.js' });
+  assert.deepEqual(packageManifest.bin, { 'cashu-fault-lab': 'dist/bin.js' });
   assert.deepEqual(packageManifest.files, ['dist', 'runtime', 'README.md', 'LICENSE']);
   assert.deepEqual(packageManifest.dependencies, {});
 });
@@ -74,6 +75,7 @@ test('the npm README stays concise and sends developers to the full website', as
 test('successful npm publication creates one idempotent GitHub Release', async () => {
   const workflow = await readFile(new URL('.github/workflows/publish.yml', root), 'utf8');
 
+  assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN/u);
   assert.match(workflow, /^\s{2}github-release:/mu);
   assert.match(workflow, /needs: npm/u);
   assert.match(workflow, /contents: write/u);
@@ -81,6 +83,15 @@ test('successful npm publication creates one idempotent GitHub Release', async (
   assert.match(workflow, /gh release create "\$\{GITHUB_REF_NAME\}"/u);
   assert.match(workflow, /--verify-tag/u);
   assert.match(workflow, /--notes-file "\$\{notes\}"/u);
+});
+
+test('the package-only patch has concise release notes', async () => {
+  const notes = await readFile(new URL('docs/releases/v0.1.1.md', root), 'utf8');
+  const words = notes.trim().split(/\s+/u);
+
+  assert.ok(words.length <= 180, `v0.1.1 notes should stay under 180 words; found ${words.length}`);
+  assert.match(notes, /npm 12/iu);
+  assert.match(notes, /npx cashu-fault-lab demo/u);
 });
 
 test('pull request CI runs the installed npm tarball through the real Docker demo', async () => {

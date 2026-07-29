@@ -36,6 +36,9 @@ await build({
   bundle: true,
   sourcemap: false,
   legalComments: 'eof',
+  define: {
+    CFL_NPM_PACKAGE_VERSION: JSON.stringify(packageVersion),
+  },
   banner: {
     js: '#!/usr/bin/env node\nimport { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
   },

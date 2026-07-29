@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 const repositoryRoot = new URL('../', import.meta.url);
 const packageRoot = new URL('../apps/npm-cli/', import.meta.url);
 const npm = join(dirname(process.execPath), 'npm');
+const packageVersion = JSON.parse(
+  await readFile(new URL('../apps/npm-cli/package.json', import.meta.url), 'utf8'),
+).version;
 
 function run(file, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -76,7 +79,7 @@ test('the packed CLI installs and works outside the monorepo', async () => {
 
     const version = await run(process.execPath, [cli, '--version'], { cwd: installRoot });
     assert.equal(version.exitCode, 0, version.stderr);
-    assert.equal(version.stdout.trim(), '0.1.0');
+    assert.equal(version.stdout.trim(), packageVersion);
 
     const scenarios = await run(process.execPath, [cli, 'ls', '--json'], { cwd: installRoot });
     assert.equal(scenarios.exitCode, 0, scenarios.stderr);
