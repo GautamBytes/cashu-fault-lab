@@ -1,7 +1,7 @@
 # Cashu Fault Lab developer portal
 
-**Date:** 2026-07-28  
-**Status:** Approved for implementation planning  
+**Date:** 2026-07-28
+**Status:** Approved for implementation planning
 **Audience:** Cashu wallet, mint, protocol, and infrastructure developers
 
 ## 1. Purpose
