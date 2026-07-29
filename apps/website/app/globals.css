@@ -48,6 +48,22 @@ section {
   max-width: 44rem;
 }
 
+[data-scroll-reveal='pending'] {
+  filter: blur(4px);
+  opacity: 0;
+  transform: translate3d(0, 1.5rem, 0);
+}
+
+[data-scroll-reveal='visible'] {
+  filter: blur(0);
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity 480ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 480ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 h1 {
   font-family: 'Archivo Black', sans-serif;
   font-size: clamp(2.5rem, 8vw, 5.5rem);
@@ -100,4 +116,13 @@ footer {
 
 .skip-link:focus {
   top: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-scroll-reveal] {
+    filter: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
 }

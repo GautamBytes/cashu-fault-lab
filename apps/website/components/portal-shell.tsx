@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from 'react';
 import type { SearchRecord } from '../lib/content-types';
+import { ScrollReveal } from './scroll-reveal';
 import { SearchDialog } from './search/search-dialog';
 import { SiteHeader } from './site-header';
 
@@ -52,6 +53,7 @@ export function PortalShell({ children, records }: PortalShellProps) {
       <SiteHeader onOpenSearch={() => setOpen(true)} />
       <SearchDialog onOpenChange={setOpen} open={open} records={records} />
       <main id="main-content">{children}</main>
+      <ScrollReveal />
       <footer>
         <div className="footer-inner">Experimental developer preview.</div>
       </footer>
