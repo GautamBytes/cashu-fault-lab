@@ -9,8 +9,6 @@
   --sand-500: #dcc099;
   --sand-300: #e9d4ae;
   --sand-100: #f6ebd6;
-  --brand-cream: #dcc099;
-  --brand-cream-soft: #f6ebd6;
   --muted-text: #a99cae;
   --hairline: rgb(220 192 153 / 16%);
   --header-surface: rgb(9 7 13 / 88%);
@@ -40,24 +38,22 @@
 }
 
 html[data-theme='light'] {
-  --ink: #fbfaf7;
-  --control-surface: #f5e8d2;
+  --ink: #f7f8fc;
+  --control-surface: #eef0f6;
   --elevated-surface: #ffffff;
-  --purple-950: #eee5f7;
+  --purple-950: #f0e8fa;
   --purple-700: #6424a9;
   --purple-500: #8242c3;
   --purple-electric: #7226b4;
-  --sand-500: #88500f;
-  --sand-300: #493648;
-  --sand-100: #241528;
-  --brand-cream: #e8c58d;
-  --brand-cream-soft: #f5e8d2;
-  --muted-text: #6d5f68;
+  --sand-500: #955912;
+  --sand-300: #44364b;
+  --sand-100: #211527;
+  --muted-text: #69616f;
   --hairline: rgb(46 25 58 / 15%);
-  --header-surface: rgb(255 253 249 / 92%);
+  --header-surface: rgb(255 255 255 / 90%);
   --overlay-surface: rgb(33 21 39 / 34%);
-  --panel-translucent: rgb(255 252 247 / 86%);
-  --panel-strong: rgb(255 255 255 / 97%);
+  --panel-translucent: rgb(255 255 255 / 82%);
+  --panel-strong: rgb(255 255 255 / 96%);
   --row-tint: rgb(100 36 169 / 2.5%);
   --control-glint: rgb(255 255 255 / 78%);
   --control-glint-strong: rgb(100 36 169 / 10%);
@@ -67,10 +63,10 @@ html[data-theme='light'] {
   --purple-border: rgb(100 36 169 / 28%);
   --sand-border-soft: rgb(149 89 18 / 16%);
   --sand-border: rgb(149 89 18 / 26%);
-  --hero-violet: rgb(130 66 195 / 21%);
-  --hero-depth: rgb(100 36 169 / 10%);
-  --hero-electric: rgb(232 197 141 / 32%);
-  --hero-sweep: rgb(100 36 169 / 7%);
+  --hero-violet: rgb(130 66 195 / 16%);
+  --hero-depth: rgb(100 36 169 / 7%);
+  --hero-electric: rgb(149 89 18 / 7%);
+  --hero-sweep: rgb(100 36 169 / 5%);
   color-scheme: light;
 }
 

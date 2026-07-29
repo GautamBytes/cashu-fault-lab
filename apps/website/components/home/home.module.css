@@ -79,10 +79,6 @@
   z-index: -1;
 }
 
-:global(html[data-theme='light']) .hero {
-  background: var(--brand-cream-soft);
-}
-
 .heroGrid {
   align-items: center;
   display: grid;
