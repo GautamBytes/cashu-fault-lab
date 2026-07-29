@@ -90,7 +90,7 @@ describe('SiteHeader', () => {
 describe('dark shell contract', () => {
   it('defines a complete light Cashu theme without changing layout tokens', () => {
     expect(globalsCss).toMatch(
-      /html\[data-theme='light'\]\s*\{[^}]*--ink:\s*#f7f8fc;[^}]*--control-surface:\s*#eef0f6;[^}]*--sand-100:\s*#211527;[^}]*--success:\s*#236b49;[^}]*color-scheme:\s*light/s,
+      /html\[data-theme='light'\]\s*\{[^}]*--ink:\s*#fbfaf7;[^}]*--control-surface:\s*#f5e8d2;[^}]*--sand-100:\s*#241528;[^}]*--brand-cream:\s*#e8c58d;[^}]*--success:\s*#236b49;[^}]*color-scheme:\s*light/s,
     );
   });
 
