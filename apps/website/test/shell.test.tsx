@@ -64,13 +64,12 @@ describe('SiteHeader', () => {
     expect(screen.queryByRole('link', { name: 'Scenarios' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Architecture' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Toggle color theme' })).toBeVisible();
   });
 
   it('spaces primary navigation labels consistently', () => {
     expect(headerCss).toMatch(/\.links\s*\{[^}]*column-gap:\s*1\.25rem/s);
-    expect(headerCss).toMatch(
-      /\.links a\s*\{[^}]*min-width:\s*auto;[^}]*padding:\s*0 0\.25rem/s,
-    );
+    expect(headerCss).toMatch(/\.links a\s*\{[^}]*min-width:\s*auto;[^}]*padding:\s*0 0\.25rem/s);
   });
 
   it('composes Search from a visual icon, desktop label, and shortcut hint', () => {
@@ -89,6 +88,12 @@ describe('SiteHeader', () => {
 });
 
 describe('dark shell contract', () => {
+  it('defines a complete light Cashu theme without changing layout tokens', () => {
+    expect(globalsCss).toMatch(
+      /html\[data-theme='light'\]\s*\{[^}]*--ink:\s*#fbf8f1;[^}]*--control-surface:\s*#f1eaf3;[^}]*--sand-100:\s*#25172b;[^}]*color-scheme:\s*light/s,
+    );
+  });
+
   it('gives main and every current route root a readable dark baseline', () => {
     const mainRule = globalsCss.match(/^main\s*\{([\s\S]*?)^\}/m)?.[1];
     const homeRule = homeCss.match(/^\.home\s*\{([\s\S]*?)^\}/m)?.[1];

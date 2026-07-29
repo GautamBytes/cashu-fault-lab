@@ -11,12 +11,45 @@
   --sand-100: #f6ebd6;
   --muted-text: #a99cae;
   --hairline: rgb(220 192 153 / 16%);
+  --header-surface: rgb(9 7 13 / 88%);
+  --overlay-surface: rgb(9 7 13 / 82%);
+  --panel-translucent: rgb(18 16 24 / 72%);
+  --panel-strong: rgb(18 16 24 / 94%);
+  --row-tint: rgb(255 255 255 / 1%);
+  --control-glint: rgb(255 255 255 / 5%);
+  --control-glint-strong: rgb(255 255 255 / 8%);
+  --shadow-color: rgb(0 0 0 / 30%);
+  --on-purple: #fff8ed;
   --shell-width: 97.5rem;
   --content-width: var(--shell-width);
   --docs-width: 95rem;
   --radius-sm: 4px;
   --radius-md: 6px;
   color-scheme: dark;
+}
+
+html[data-theme='light'] {
+  --ink: #fbf8f1;
+  --control-surface: #f1eaf3;
+  --elevated-surface: #fffdf8;
+  --purple-950: #eee2f5;
+  --purple-700: #5b2099;
+  --purple-500: #7f38ca;
+  --purple-electric: #6f249f;
+  --sand-500: #79532f;
+  --sand-300: #4b3850;
+  --sand-100: #25172b;
+  --muted-text: #6d6170;
+  --hairline: rgb(43 12 74 / 18%);
+  --header-surface: rgb(251 248 241 / 92%);
+  --overlay-surface: rgb(37 23 43 / 36%);
+  --panel-translucent: rgb(255 253 248 / 84%);
+  --panel-strong: rgb(255 253 248 / 96%);
+  --row-tint: rgb(43 12 74 / 2%);
+  --control-glint: rgb(255 255 255 / 64%);
+  --control-glint-strong: rgb(43 12 74 / 12%);
+  --shadow-color: rgb(43 12 74 / 16%);
+  color-scheme: light;
 }
 
 * {
@@ -74,7 +107,7 @@ h1 {
 
 ::selection {
   background: var(--purple-700);
-  color: var(--sand-100);
+  color: var(--on-purple);
 }
 
 :focus-visible {

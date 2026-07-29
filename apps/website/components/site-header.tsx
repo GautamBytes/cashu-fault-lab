@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import styles from './site-header.module.css';
+import { ThemeToggle } from './theme-toggle';
 
 export interface SiteHeaderProps {
   onOpenSearch?: () => void;
@@ -51,17 +52,20 @@ export function SiteHeader({ onOpenSearch }: SiteHeaderProps) {
               </a>
             ))}
           </div>
-          <button
-            aria-haspopup="dialog"
-            aria-label="Search documentation"
-            className={styles.searchButton}
-            onClick={onOpenSearch}
-            type="button"
-          >
-            <span aria-hidden="true" className={styles.searchIcon} />
-            <span className={styles.searchLabel}>Search</span>
-            <kbd className={styles.searchHint}>⌘K</kbd>
-          </button>
+          <div className={styles.headerActions}>
+            <ThemeToggle />
+            <button
+              aria-haspopup="dialog"
+              aria-label="Search documentation"
+              className={styles.searchButton}
+              onClick={onOpenSearch}
+              type="button"
+            >
+              <span aria-hidden="true" className={styles.searchIcon} />
+              <span className={styles.searchLabel}>Search</span>
+              <kbd className={styles.searchHint}>⌘K</kbd>
+            </button>
+          </div>
         </nav>
       </div>
     </header>

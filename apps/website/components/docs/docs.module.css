@@ -327,7 +327,7 @@
 }
 
 .markdown tr:nth-child(even) td {
-  background: rgb(18 16 24 / 48%);
+  background: var(--panel-translucent);
 }
 
 .markdown :not(pre) > code {

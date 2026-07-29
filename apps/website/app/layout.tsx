@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { PortalShell } from '../components/portal-shell';
 import { getSearchRecords } from '../lib/markdown';
+import { themeBootstrapScript } from '../lib/theme';
 import './globals.css';
 import { siteUrl } from './site-metadata';
 
@@ -34,7 +35,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const records = await getSearchRecords();
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+      </head>
       <body>
         <PortalShell records={records}>{children}</PortalShell>
       </body>

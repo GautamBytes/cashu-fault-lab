@@ -151,22 +151,22 @@ describe('home components', () => {
     expect(textLinkRule).toMatch(/min-width:\s*(?:44px|2\.75rem)/);
   });
 
-  it('keeps Light sand above 4.5 to 1 across every primary CTA gradient stop', async () => {
+  it('keeps CTA text above 4.5 to 1 across every primary gradient stop', async () => {
     const [css, globals] = await Promise.all([
       readFile(homePath('home.module.css'), 'utf8'),
       readFile(resolve(process.cwd(), 'app/globals.css'), 'utf8'),
     ]);
     const primaryActionRule = cssRules(css, 'primaryAction')[0];
-    const lightSand = cssHexToken(globals, 'sand-100');
+    const onPurple = cssHexToken(globals, 'on-purple');
 
     expect(primaryActionRule).toMatch(
       /background:\s*linear-gradient\(110deg,\s*var\(--purple-700\),\s*var\(--purple-500\)\)/,
     );
-    expect(primaryActionRule).toContain('color: var(--sand-100);');
+    expect(primaryActionRule).toContain('color: var(--on-purple);');
     expect(primaryActionRule).not.toContain('!important');
 
     for (const stop of ['purple-700', 'purple-500']) {
-      expect(contrastRatio(lightSand, cssHexToken(globals, stop))).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(onPurple, cssHexToken(globals, stop))).toBeGreaterThanOrEqual(4.5);
     }
   });
 

@@ -320,7 +320,7 @@
 
 .boundaryNote {
   align-items: center;
-  background: rgb(18 16 24 / 72%);
+  background: var(--panel-translucent);
   border: 1px solid rgb(220 192 153 / 24%);
   border-radius: var(--radius-sm);
   display: grid;

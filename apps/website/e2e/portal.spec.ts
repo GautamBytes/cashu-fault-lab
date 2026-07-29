@@ -10,6 +10,7 @@ const publicRoutes = [
   '/architecture',
   '/release-status',
   '/docs/getting-started',
+  '/docs/contributing',
   '/docs/cli',
   '/docs/adapters',
   '/docs/delivery-profile',
@@ -441,6 +442,22 @@ test('reduced motion is exposed as a timeline data signal', async ({ page }, tes
     'data-motion',
     'reduced',
   );
+});
+
+test('color theme follows the system and persists an explicit choice', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+  await page.getByRole('button', { name: 'Toggle color theme' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
 test('every public route is accessible and fits desktop and mobile viewports', async ({ page }) => {

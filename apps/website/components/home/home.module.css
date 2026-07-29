@@ -171,7 +171,7 @@
 .primaryAction {
   background: linear-gradient(110deg, var(--purple-700), var(--purple-500));
   border: 1px solid var(--purple-500);
-  color: var(--sand-100);
+  color: var(--on-purple);
 }
 
 .primaryAction:hover {
@@ -179,7 +179,7 @@
 }
 
 .secondaryAction {
-  background: rgb(18 16 24 / 72%);
+  background: var(--panel-translucent);
   border: 1px solid var(--hairline);
   gap: 0.5rem;
 }
@@ -191,7 +191,7 @@
 
 .commandBlock {
   align-items: center;
-  background: rgb(18 16 24 / 92%);
+  background: var(--panel-strong);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   color: var(--sand-100);
@@ -223,10 +223,10 @@
 }
 
 .heroRunPanel {
-  background: rgb(18 16 24 / 94%);
+  background: var(--panel-strong);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 30%);
+  box-shadow: 0 1.5rem 4rem var(--shadow-color);
   justify-self: end;
   max-width: 34rem;
   overflow: hidden;
@@ -749,7 +749,7 @@
 
 .invariantItem {
   align-items: center;
-  background: rgb(255 255 255 / 1%);
+  background: var(--row-tint);
   border-bottom: 1px solid var(--hairline);
   display: grid;
   gap: 1rem;
@@ -764,9 +764,7 @@
 }
 
 .invariantItemContext {
-  background:
-    linear-gradient(90deg, rgb(91 32 153 / 12%), transparent 32%),
-    rgb(255 255 255 / 1%);
+  background: linear-gradient(90deg, rgb(91 32 153 / 12%), transparent 32%), var(--row-tint);
 }
 
 .invariantSignal {

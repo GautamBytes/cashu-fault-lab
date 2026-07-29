@@ -1,6 +1,6 @@
 .overlay {
   align-items: flex-start;
-  background: rgb(9 7 13 / 82%);
+  background: var(--overlay-surface);
   display: flex;
   inset: 0;
   justify-content: center;
