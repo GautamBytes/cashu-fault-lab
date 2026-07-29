@@ -1,0 +1,16 @@
+{
+  "name": "Cashu Fault Lab",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:5.0.1-24-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:3.0.1": {}
+  },
+  "postCreateCommand": "corepack enable && corepack pnpm install --frozen-lockfile",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Cashu Fault Lab website",
+      "onAutoForward": "notify"
+    }
+  },
+  "remoteUser": "node"
+}

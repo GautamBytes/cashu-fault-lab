@@ -12,7 +12,7 @@
     "lab": "turbo run build --filter=@cashu-fault-lab/lab-cli && node apps/lab-cli/dist/bin.js",
     "quickstart": "./scripts/quickstart",
     "test": "pnpm test:unit",
-    "test:unit": "node --test scripts/test-tiers.test.mjs scripts/docker-context.test.mjs scripts/quickstart.test.mjs scripts/release-metadata.test.mjs && pnpm test:unit:packages",
+    "test:unit": "node --test scripts/test-tiers.test.mjs scripts/developer-environment.test.mjs scripts/docker-context.test.mjs scripts/quickstart.test.mjs scripts/release-metadata.test.mjs && pnpm test:unit:packages",
     "test:unit:packages": "turbo run test -- --exclude 'test/postgres-state.test.ts' --exclude 'test/postgres-store.test.ts' --exclude 'test/crash-recovery.test.ts' --exclude 'test/postgres-receiver-store.test.ts' --exclude 'test/docker-mint-e2e.test.ts' --exclude 'test/docker-funded-e2e.test.ts' --exclude 'test/nostr-relay-e2e.test.ts' --exclude 'test/cross-language-docker.test.ts'",
     "test:integration": "node scripts/test-environment.mjs docker --skip-unavailable -- pnpm test:integration:run",
     "test:integration:run": "pnpm --filter @cashu-fault-lab/reference-sender exec vitest run test/postgres-state.test.ts && pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/postgres-store.test.ts test/crash-recovery.test.ts && pnpm --filter @cashu-fault-lab/adapter-cashu-ts exec vitest run test/postgres-receiver-store.test.ts",
