@@ -69,10 +69,12 @@ describe('SiteHeader', () => {
   it('composes Search from a visual icon, desktop label, and shortcut hint', () => {
     render(<SiteHeader />);
     const search = screen.getByRole('button', { name: 'Search documentation' });
+    const icon = search.querySelector('[aria-hidden="true"]');
 
-    expect(search.querySelector('[aria-hidden="true"]')).toHaveTextContent('🔍');
+    expect(icon).toBeEmptyDOMElement();
+    expect(icon?.className).toContain('searchIcon');
     expect(within(search).getByText('Search').className).toContain('searchLabel');
-    expect(within(search).getByText('⌘K').className).toContain('searchHint');
+    expect(within(search).getByText('⌘K').tagName).toBe('KBD');
     expect(headerCss).toMatch(
       /@media \(max-width: 1040px\)[\s\S]*\.searchLabel,\s*\.searchHint\s*\{[^}]*clip-path:\s*inset\(50%\)/,
     );
