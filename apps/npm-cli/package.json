@@ -5,7 +5,7 @@
   "private": false,
   "type": "module",
   "bin": {
-    "cashu-fault-lab": "./dist/bin.js"
+    "cashu-fault-lab": "dist/bin.js"
   },
   "files": [
     "dist",

@@ -17,7 +17,7 @@ test('the public npm package exposes only the bundled CLI and runtime assets', a
   assert.equal(workspace.name, '@cashu-fault-lab/workspace');
   assert.equal(packageManifest.name, 'cashu-fault-lab');
   assert.equal(packageManifest.private, false);
-  assert.deepEqual(packageManifest.bin, { 'cashu-fault-lab': './dist/bin.js' });
+  assert.deepEqual(packageManifest.bin, { 'cashu-fault-lab': 'dist/bin.js' });
   assert.deepEqual(packageManifest.files, ['dist', 'runtime', 'README.md', 'LICENSE']);
   assert.deepEqual(packageManifest.dependencies, {});
 });
