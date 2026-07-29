@@ -115,3 +115,30 @@ jobs:
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  github-release:
+    name: GitHub Release
+    needs: npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Publish release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          test -f "${notes}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1
+          then
+            echo "release ${GITHUB_REF_NAME} already exists"
+            exit 0
+          fi
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --title "Cashu Fault Lab ${version}" \
+            --notes-file "${notes}"
