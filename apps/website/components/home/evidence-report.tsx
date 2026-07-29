@@ -1,4 +1,4 @@
-import type { DemoSummary, InvariantStatus } from '../../lib/demo';
+import type { DemoInvariant, DemoSummary, InvariantStatus } from '../../lib/demo';
 import styles from './home.module.css';
 
 interface EvidenceReportProps {
@@ -19,7 +19,67 @@ const statusStyles: Record<InvariantStatus, string> = {
   not_applicable: styles.statusNotApplicable,
 };
 
+function invariantTitle(id: string): string {
+  const title = id.replaceAll('-', ' ');
+  return `${title.charAt(0).toUpperCase()}${title.slice(1)}`;
+}
+
+function confidenceLabel(confidence: string): string {
+  const label = confidence.replaceAll('_', ' ');
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+}
+
+function InvariantList({
+  ariaLabel,
+  emphasizeContext,
+  invariants,
+}: {
+  ariaLabel: string;
+  emphasizeContext?: boolean;
+  invariants: DemoInvariant[];
+}) {
+  return (
+    <ul aria-label={ariaLabel} className={styles.invariantList}>
+      {invariants.map((invariant) => (
+        <li
+          className={`${styles.invariantItem} ${
+            emphasizeContext ? styles.invariantItemContext : ''
+          }`}
+          key={invariant.id}
+        >
+          <span
+            aria-hidden="true"
+            className={`${styles.invariantSignal} ${statusStyles[invariant.status]}`}
+          >
+            {statusLabels[invariant.status].icon}
+          </span>
+          <div className={styles.invariantIdentity}>
+            <strong className={styles.invariantTitle}>{invariantTitle(invariant.id)}</strong>
+            <code>{invariant.id}</code>
+          </div>
+          <div className={styles.invariantEvidenceBasis}>
+            <span>Evidence basis</span>
+            <strong>{confidenceLabel(invariant.confidence)}</strong>
+            {invariant.reason ? <p>{invariant.reason}</p> : null}
+          </div>
+          <span className={`${styles.invariantStatus} ${statusStyles[invariant.status]}`}>
+            <span aria-hidden="true">{statusLabels[invariant.status].icon}</span>
+            {statusLabels[invariant.status].label}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function EvidenceReport({ summary }: EvidenceReportProps) {
+  const contextInvariants = summary.invariants.filter(
+    (invariant) => invariant.status !== 'passed',
+  );
+  const supportedInvariants = summary.invariants.filter(
+    (invariant) => invariant.status === 'passed',
+  );
+
   return (
     <section
       aria-labelledby="evidence-report-title"
@@ -85,27 +145,46 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           ))}
         </ul>
 
-        <div className={styles.invariantEvidence}>
+        <div
+          aria-label="Invariant evidence states"
+          className={styles.invariantEvidence}
+          role="group"
+        >
           <h3>Invariant evidence states</h3>
           <p>
             Every evaluated invariant remains visible; unsupported observations are never promoted
             to passes.
           </p>
-          <ul aria-label="Invariant evidence states" className={styles.invariantList}>
-            {summary.invariants.map((invariant) => (
-              <li className={styles.invariantItem} key={invariant.id}>
-                <code>{invariant.id}</code>
-                <span className={`${styles.invariantStatus} ${statusStyles[invariant.status]}`}>
-                  <span aria-hidden="true">{statusLabels[invariant.status].icon}</span>
-                  {statusLabels[invariant.status].label}
-                </span>
-                <span className={styles.invariantConfidence}>{invariant.confidence}</span>
-                {invariant.reason ? (
-                  <span className={styles.invariantReason}>{invariant.reason}</span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          <div className={styles.invariantGroups}>
+            <div className={styles.invariantGroup}>
+              <header className={styles.invariantGroupHeader}>
+                <div>
+                  <h4>Requires context</h4>
+                  <p>Unavailable or out-of-scope observations, with the reason kept visible.</p>
+                </div>
+                <strong>{contextInvariants.length}</strong>
+              </header>
+              <InvariantList
+                ariaLabel="Invariants requiring context"
+                emphasizeContext
+                invariants={contextInvariants}
+              />
+            </div>
+
+            <div className={styles.invariantGroup}>
+              <header className={styles.invariantGroupHeader}>
+                <div>
+                  <h4>Supported by reviewed evidence</h4>
+                  <p>Checks supported by the artifact’s declared evidence basis.</p>
+                </div>
+                <strong>{supportedInvariants.length}</strong>
+              </header>
+              <InvariantList
+                ariaLabel="Invariants supported by reviewed evidence"
+                invariants={supportedInvariants}
+              />
+            </div>
+          </div>
         </div>
 
         <div className={styles.reportLinks}>

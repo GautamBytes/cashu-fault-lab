@@ -182,17 +182,42 @@ describe('home components', () => {
     render(<EvidenceReport summary={summary} />);
 
     const overview = screen.getByRole('group', { name: 'Reviewed evidence summary' });
-    const list = screen.getByRole('list', { name: 'Invariant evidence states' });
-    const items = within(list).getAllByRole('listitem');
+    const evidence = screen.getByRole('group', { name: 'Invariant evidence states' });
+    const contextList = within(evidence).getByRole('list', {
+      name: 'Invariants requiring context',
+    });
+    const supportedList = within(evidence).getByRole('list', {
+      name: 'Invariants supported by reviewed evidence',
+    });
+    const items = [
+      ...within(contextList).getAllByRole('listitem'),
+      ...within(supportedList).getAllByRole('listitem'),
+    ];
 
     expect(within(overview).getByText(summary.scenarioId)).toBeVisible();
     expect(within(overview).getByText(new RegExp(`Run ${summary.status}`, 'i'))).toBeVisible();
-    expect(list).toBeVisible();
+    expect(contextList).toBeVisible();
+    expect(supportedList).toBeVisible();
     expect(screen.getByText('18', { selector: 'dd, strong' })).toBeVisible();
     expect(screen.getByRole('link', { name: /Inspect the reviewed artifact/ })).toBeVisible();
     expect(items).toHaveLength(18);
-    expect(within(list).getByText('at-most-once-redemption-start')).toBeVisible();
-    expect(within(list).getAllByText('Not observable').length).toBeGreaterThan(0);
-    expect(within(list).getByText('no-unsupported-pass')).toBeVisible();
+    expect(within(contextList).getByText('At most once redemption start')).toBeVisible();
+    expect(within(contextList).getByText('at-most-once-redemption-start')).toBeVisible();
+    expect(within(contextList).getAllByText('Not observable').length).toBeGreaterThan(0);
+    expect(within(supportedList).getByText('No unsupported pass')).toBeVisible();
+    expect(within(supportedList).getByText('no-unsupported-pass')).toBeVisible();
+  });
+
+  it('uses full-width evidence rows with readable type', async () => {
+    const css = await readFile(homePath('home.module.css'), 'utf8');
+    const invariantListRule = cssRules(css, 'invariantList')[0];
+    const invariantItemRule = cssRules(css, 'invariantItem')[0];
+    const invariantTitleRule = cssRules(css, 'invariantTitle')[0];
+
+    expect(invariantListRule).toContain('grid-template-columns: 1fr;');
+    expect(invariantItemRule).toMatch(
+      /grid-template-columns:\s*2rem minmax\(15rem,\s*1\.1fr\) minmax\(12rem,\s*0\.9fr\) auto/,
+    );
+    expect(invariantTitleRule).toMatch(/font-size:\s*0\.9rem/);
   });
 });

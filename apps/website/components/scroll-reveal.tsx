@@ -39,7 +39,7 @@ export function ScrollReveal() {
         },
         {
           rootMargin: '0px 0px -15% 0px',
-          threshold: 0.18,
+          threshold: 0.01,
         },
       );
 

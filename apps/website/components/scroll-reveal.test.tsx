@@ -7,14 +7,16 @@ import { ScrollReveal } from './scroll-reveal';
 const globalsCss = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8');
 
 let intersectionCallback: IntersectionObserverCallback | undefined;
+let intersectionOptions: IntersectionObserverInit | undefined;
 
 class IntersectionObserverStub {
   disconnect = vi.fn();
   observe = vi.fn();
   unobserve = vi.fn();
 
-  constructor(callback: IntersectionObserverCallback) {
+  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
     intersectionCallback = callback;
+    intersectionOptions = options;
   }
 }
 
@@ -45,6 +47,7 @@ function position(element: HTMLElement, top: number) {
 
 afterEach(() => {
   intersectionCallback = undefined;
+  intersectionOptions = undefined;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -84,6 +87,10 @@ describe('ScrollReveal', () => {
     expect(first).toHaveAttribute('data-scroll-reveal', 'visible');
     expect(belowFold).toHaveAttribute('data-scroll-reveal', 'pending');
     expect(navigation).not.toHaveAttribute('data-scroll-reveal');
+    expect(intersectionOptions).toMatchObject({
+      rootMargin: '0px 0px -15% 0px',
+      threshold: 0.01,
+    });
 
     act(() => {
       const bounds = belowFold.getBoundingClientRect();
