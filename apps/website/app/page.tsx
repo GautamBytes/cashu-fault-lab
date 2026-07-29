@@ -69,8 +69,6 @@ export default async function HomePage() {
         <div className={styles.heroGrid}>
           <div className={styles.heroCopy}>
             <p className={styles.eyebrow}>
-              <span>{releaseStatus.label}</span>
-              <span aria-hidden="true"> / </span>
               <span>Cashu delivery fault injection and recovery evidence</span>
             </p>
             <h1 id="home-title">Make Cashu delivery fail safely.</h1>

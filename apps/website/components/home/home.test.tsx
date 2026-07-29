@@ -72,7 +72,10 @@ describe('home components', () => {
     render(await HomePage());
 
     const hero = screen.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
-    expect(within(hero).getByText('Experimental developer preview')).toBeVisible();
+    expect(within(hero).queryByText('Experimental developer preview')).not.toBeInTheDocument();
+    expect(
+      within(hero).getByText('Cashu delivery fault injection and recovery evidence'),
+    ).toBeVisible();
     expect(within(hero).getByRole('link', { name: 'Open in Codespaces' })).toHaveAttribute(
       'href',
       'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
