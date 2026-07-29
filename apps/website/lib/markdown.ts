@@ -145,6 +145,13 @@ export async function getSearchRecords(): Promise<SearchRecord[]> {
           href: destination.href,
           text: destination.searchText,
         },
+        ...destination.headings.map((heading) => ({
+          id: `${destination.slug}#${heading.id}`,
+          title: heading.text,
+          description: destination.title,
+          href: `${destination.href}#${heading.id}`,
+          text: heading.searchText,
+        })),
       ];
     }
 

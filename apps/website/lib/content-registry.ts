@@ -48,11 +48,19 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
     group: 'Integrate',
     order: 40,
     headings: [
-      { depth: 2, id: 'flow-title', text: 'One delivery. Separate authorities.' },
+      {
+        depth: 2,
+        id: 'flow-title',
+        text: 'One delivery. Separate authorities.',
+        searchText:
+          'Durable sender, HTTP and Nostr faults, and durable receiver evidence branch through exact payload and mint recovery before converging at the independent oracle and JSON, JUnit, and HTML evidence.',
+      },
       {
         depth: 2,
         id: 'separation-title',
         text: 'Recovery behavior is not release evidence.',
+        searchText:
+          'A sender may converge and a receiver may avoid duplicate credit while the release gate remains blocked. Qualification additionally requires independent implementations, mints, authorities, and review.',
       },
     ],
     searchText:

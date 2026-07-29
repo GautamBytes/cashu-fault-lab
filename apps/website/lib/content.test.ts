@@ -161,4 +161,20 @@ describe('canonical content', () => {
       ]),
     );
   });
+
+  it('creates section search records for generated Architecture headings', async () => {
+    const records = await getSearchRecords();
+
+    expect(records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'architecture#separation-title',
+          href: '/architecture#separation-title',
+          title: 'Recovery behavior is not release evidence.',
+          description: 'Architecture',
+          text: expect.stringContaining('release gate'),
+        }),
+      ]),
+    );
+  });
 });

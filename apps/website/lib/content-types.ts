@@ -15,6 +15,10 @@ export interface DocumentHeading {
   depth: 2 | 3;
 }
 
+export interface GeneratedDocumentHeading extends DocumentHeading {
+  searchText: string;
+}
+
 export interface MarkdownDocumentDefinition extends DocumentationDestinationBase {
   kind: 'markdown';
   sourcePath: string;
@@ -22,7 +26,7 @@ export interface MarkdownDocumentDefinition extends DocumentationDestinationBase
 
 export interface GeneratedDocumentDefinition extends DocumentationDestinationBase {
   kind: 'generated';
-  headings: readonly DocumentHeading[];
+  headings: readonly GeneratedDocumentHeading[];
   searchText: string;
 }
 

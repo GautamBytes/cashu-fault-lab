@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -56,6 +56,42 @@ async function expectMinimumTouchTargets(page: Page, selector: string) {
       expect(box.height).toBeGreaterThanOrEqual(44);
     }
   }
+}
+
+async function expectNoElementClipping(element: Locator) {
+  await expect(element).toBeVisible();
+  const dimensions = await element.evaluate((node) => ({
+    clientHeight: node.clientHeight,
+    clientWidth: node.clientWidth,
+    overflowY: getComputedStyle(node).overflowY,
+    scrollHeight: node.scrollHeight,
+    scrollWidth: node.scrollWidth,
+  }));
+
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+  if (['auto', 'clip', 'hidden', 'scroll'].includes(dimensions.overflowY)) {
+    expect(dimensions.scrollHeight).toBeLessThanOrEqual(dimensions.clientHeight + 1);
+  }
+}
+
+async function expectElementInside(element: Locator, container: Locator) {
+  const [elementBox, containerBox] = await Promise.all([
+    element.boundingBox(),
+    container.boundingBox(),
+  ]);
+
+  expect(elementBox).not.toBeNull();
+  expect(containerBox).not.toBeNull();
+  if (!elementBox || !containerBox) return;
+
+  expect(elementBox.x).toBeGreaterThanOrEqual(containerBox.x - 1);
+  expect(elementBox.x + elementBox.width).toBeLessThanOrEqual(
+    containerBox.x + containerBox.width + 1,
+  );
+  expect(elementBox.y).toBeGreaterThanOrEqual(containerBox.y - 1);
+  expect(elementBox.y + elementBox.height).toBeLessThanOrEqual(
+    containerBox.y + containerBox.height + 1,
+  );
 }
 
 test('home is accessible, has one visible title, and fits the viewport', async ({
@@ -239,18 +275,23 @@ test('Architecture participates in docs navigation, search, and pagination', asy
     await page.getByRole('button', { name: 'Toggle primary navigation' }).click();
   }
   await page.getByRole('button', { name: 'Search documentation' }).click();
-  await page.getByRole('searchbox', { name: 'Search documentation' }).fill('independent oracle');
+  await page
+    .getByRole('searchbox', { name: 'Search documentation' })
+    .fill('Recovery behavior is not release evidence');
+  const architectureHeadingResult = page
+    .getByRole('dialog', { name: 'Search documentation' })
+    .getByRole('link', { name: /^Recovery behavior is not release evidence\./ });
+  await expect(architectureHeadingResult).toHaveAttribute('href', '/architecture#separation-title');
+  await architectureHeadingResult.click();
+  await expect(page).toHaveURL(/\/architecture#separation-title$/);
   await expect(
-    page
-      .getByRole('dialog', { name: 'Search documentation' })
-      .getByRole('link', { name: /^Architecture/ }),
-  ).toHaveAttribute('href', '/architecture');
-  await page.getByRole('button', { name: 'Close search' }).click();
+    page.getByRole('heading', {
+      level: 2,
+      name: 'Recovery behavior is not release evidence.',
+    }),
+  ).toBeVisible();
 
-  if (testInfo.project.name === 'mobile-chromium') {
-    await page.getByRole('button', { name: 'Toggle primary navigation' }).click();
-    await page.getByText('Browse documentation', { exact: true }).click();
-  }
+  await page.goto('/architecture');
 
   await expectNoSeriousAccessibilityViolations(page);
   await expectNoPageOverflow(page);
@@ -260,6 +301,50 @@ test('Architecture participates in docs navigation, search, and pagination', asy
       ? 'architecture-mobile.png'
       : 'architecture-desktop.png',
   );
+});
+
+test('tablet hero stacks without clipping command metadata or run evidence', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+
+  const hero = page.getByRole('region', { name: 'Make Cashu delivery fail safely.' });
+  const heading = hero.getByRole('heading', {
+    level: 1,
+    name: 'Make Cashu delivery fail safely.',
+  });
+  const primaryAction = hero.getByRole('link', { name: 'Run the deterministic demo' });
+  const actions = primaryAction.locator('..');
+  const command = hero.getByLabel('Demo command');
+  const commandMetadata = hero.getByText('seeded · local · secret-redacted', { exact: true });
+  const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
+
+  for (const element of [heading, actions, command, commandMetadata, runPanel]) {
+    await expectNoElementClipping(element);
+    await expectElementInside(element, hero);
+  }
+
+  const [commandBox, runPanelBox] = await Promise.all([
+    command.boundingBox(),
+    runPanel.boundingBox(),
+  ]);
+  expect(commandBox).not.toBeNull();
+  expect(runPanelBox).not.toBeNull();
+  if (commandBox && runPanelBox) {
+    expect(runPanelBox.y).toBeGreaterThanOrEqual(commandBox.y + commandBox.height + 24);
+  }
+
+  await expectNoPageOverflow(page);
+  await mkdir(screenshotDirectory, { recursive: true });
+  await page.screenshot({
+    animations: 'disabled',
+    fullPage: false,
+    path: path.join(screenshotDirectory, 'home-tablet.png'),
+  });
 });
 
 test('mobile documentation heading uses a fixed responsive step', async ({ page }, testInfo) => {

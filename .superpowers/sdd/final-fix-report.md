@@ -75,19 +75,19 @@ All commands used Node 24.14.1 with:
 PATH=/Users/gautammanch/.nvm/versions/node/v24.14.1/bin:$PATH CI=true
 ```
 
-| Gate | Result |
-| --- | --- |
-| Focused website tests | 5 files, 40 tests passed |
-| Full website unit suite | 11 files, 60 tests passed |
-| Website typecheck | `next typegen` and `tsc --noEmit` passed |
-| Production build | Passed; 20 static/SSG routes generated |
-| Full Playwright matrix | 16 passed, 8 intentional project-specific skips |
-| Route-wide Axe/overflow | 12 public routes in desktop and mobile; 24 scans passed |
-| Exact 1905 x 781 | Labeled cue, complete hero, reduced motion, and overflow checks passed |
-| Empty mobile search | Zero-result recovery target measured at least 44 x 44 |
+| Gate                     | Result                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| Focused website tests    | 5 files, 40 tests passed                                                        |
+| Full website unit suite  | 11 files, 60 tests passed                                                       |
+| Website typecheck        | `next typegen` and `tsc --noEmit` passed                                        |
+| Production build         | Passed; 20 static/SSG routes generated                                          |
+| Full Playwright matrix   | 16 passed, 8 intentional project-specific skips                                 |
+| Route-wide Axe/overflow  | 12 public routes in desktop and mobile; 24 scans passed                         |
+| Exact 1905 x 781         | Labeled cue, complete hero, reduced motion, and overflow checks passed          |
+| Empty mobile search      | Zero-result recovery target measured at least 44 x 44                           |
 | Architecture integration | Desktop/mobile nav, current state, search, pagination, Axe, and overflow passed |
-| Formatting | All touched text files passed Prettier check |
-| Patch integrity | `git diff --check` passed |
+| Formatting               | All touched text files passed Prettier check                                    |
+| Patch integrity          | `git diff --check` passed                                                       |
 
 The production build and Playwright web server emit the existing linked-worktree workspace-root/NFT
 trace warning. Compilation, static generation, server startup, and all browser tests still complete
@@ -173,3 +173,62 @@ overlap or clipping.
 - The original supplied comparison image is in a macOS temporary directory and may be purged; the
   repository screenshots are the durable evidence.
 - No unresolved functional or accessibility concerns were found in this fix wave.
+
+## Final re-review follow-up
+
+Date: 2026-07-29
+
+Two Important findings were received after commit `94e808f` and fixed without disturbing the
+previous review work.
+
+### Generated Architecture heading search
+
+- Added section-specific `searchText` to generated document headings.
+- `getSearchRecords()` now emits generated heading records with the same shape as Markdown heading
+  records: section title, parent document description, section text, and direct anchor href.
+- "Recovery behavior is not release evidence." now resolves to
+  `/architecture#separation-title`.
+- Desktop and mobile Playwright search for that heading, activate the result, assert the anchored
+  URL, and verify the destination H2 is visible.
+
+### 768 x 1024 hero composition
+
+- Moved hero stacking, full-width run-panel layout, and command metadata wrapping from the 760px
+  breakpoint to 900px.
+- Added element-level tablet assertions for the heading, actions, command, command metadata, and
+  run panel. Each element must remain visible, horizontally un-clipped, and inside the hero; the
+  run panel must start at least 24px below the command.
+- Added and visually inspected `apps/website/e2e/screenshots/home-tablet.png` at 768 x 1024.
+- Exact production measurements:
+  - Hero: `x=20..748`, `y=60..880.84`
+  - Heading: `y=155.63..302.48`, `clientWidth=381`, `scrollWidth=381`
+  - Actions: `y=402.45..450.45`, `clientWidth=667`, `scrollWidth=667`
+  - Command: `y=472.84..558.22`, `clientWidth=590`, `scrollWidth=590`
+  - Metadata: `y=519.83..544.42`, `clientWidth=539`, `scrollWidth=539`
+  - Run panel: `y=594.22..797.94`, `clientWidth=665`, `scrollWidth=665`
+
+### TDD evidence
+
+- Unit RED: the new generated-section test failed because no
+  `architecture#separation-title` record existed.
+- Browser RED: desktop and mobile could not find the generated heading search result.
+- Tablet RED: after refining the assertion to account for visible Archivo glyph overhang, the
+  command region reported `scrollWidth=321` against `clientWidth=277`, confirming real horizontal
+  clipping.
+- Unit GREEN: focused content suite passed 14/14.
+- Browser GREEN: focused Architecture and tablet run passed 3 tests with 1 intentional
+  project-specific skip.
+
+### Follow-up verification
+
+| Gate                    | Result                                                       |
+| ----------------------- | ------------------------------------------------------------ |
+| Full website unit suite | 11 files, 61 tests passed                                    |
+| Website typecheck       | `next typegen` and `tsc --noEmit` passed                     |
+| Production build        | Passed; 20 static/SSG routes generated                       |
+| Full Playwright matrix  | 17 passed, 9 intentional project-specific skips              |
+| Route-wide Axe/overflow | 12 routes in desktop and mobile remained clean               |
+| Tablet capture          | 768 x 1024 inspected; no clipping, overlap, or command split |
+
+The existing Chromium-only coverage limitation and linked-worktree/NFT build warning remain the
+only known concerns.

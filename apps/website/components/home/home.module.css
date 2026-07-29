@@ -1243,30 +1243,9 @@
   }
 }
 
-@media (max-width: 760px) {
-  .home {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 900px) {
   .hero {
     min-height: auto;
-  }
-
-  .hero::after {
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      rgb(0 0 0 / 72%) 22%,
-      rgb(0 0 0 / 28%) 82%,
-      transparent 100%
-    );
-    mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      rgb(0 0 0 / 72%) 22%,
-      rgb(0 0 0 / 28%) 82%,
-      transparent 100%
-    );
   }
 
   .heroGrid {
@@ -1290,6 +1269,29 @@
     margin-left: 1.2rem;
     padding-left: 0;
     padding-top: 0.6rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .home {
+    grid-template-columns: 1fr;
+  }
+
+  .hero::after {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgb(0 0 0 / 72%) 22%,
+      rgb(0 0 0 / 28%) 82%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      rgb(0 0 0 / 72%) 22%,
+      rgb(0 0 0 / 28%) 82%,
+      transparent 100%
+    );
   }
 
   .timelineFrame {
