@@ -235,9 +235,21 @@ jobs:
         run: |
           node -e "const artifact=require('./artifacts/quickstart.json'); if(artifact.status!=='passed') process.exit(1)"
           test -s artifacts/quickstart.html
+      - name: Stop workspace reference lab
+        run: node apps/lab-cli/dist/bin.js down
+      - name: Build version-matched npm runtime images
+        run: |
+          version="$(node -p "require('./apps/npm-cli/package.json').version")"
+          docker build --target node-wallets --tag "ghcr.io/gautambytes/cashu-fault-lab-node-wallets:${version}" --file infra/docker/wallet-adapters.Dockerfile .
+          docker build --target cdk-adapter --tag "ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter:${version}" --file infra/docker/wallet-adapters.Dockerfile .
+          docker build --target lab-netns --tag "ghcr.io/gautambytes/cashu-fault-lab-netns:${version}" --file infra/docker/wallet-adapters.Dockerfile .
+      - name: Run installed npm tarball through the Docker demo
+        run: pnpm test:npm-package
+        env:
+          CFL_NPM_E2E_DEMO: '1'
       - name: Stop reference lab
         if: always()
-        run: node apps/lab-cli/dist/bin.js down
+        run: node apps/lab-cli/dist/bin.js down || true
 
   funded-wallet-matrix:
     name: Funded external wallet matrix

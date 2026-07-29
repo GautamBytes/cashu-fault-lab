@@ -343,6 +343,7 @@ describe('PackagedLabRuntime', () => {
       '-f',
       expect.stringMatching(/infra\/compose\/wallet-adapters\.compose\.yml$/u),
       'up',
+      '--build',
       '-d',
       '--wait',
     ]);

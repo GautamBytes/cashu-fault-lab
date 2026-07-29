@@ -57,6 +57,7 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     assert.ok(paths.includes('dist/bin.js'));
     assert.ok(paths.includes('runtime/scenarios/retry/response-lost.json'));
     assert.ok(paths.includes('runtime/compose/wallet-adapters.compose.yml'));
+    assert.ok(paths.every((path) => !path.endsWith('.map')));
     assert.ok(paths.every((path) => !path.startsWith('src/')));
     assert.ok(paths.every((path) => !path.startsWith('node_modules/')));
 

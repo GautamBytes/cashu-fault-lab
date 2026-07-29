@@ -58,7 +58,7 @@ import type {
 import { ExternalAdapterRegistry } from './adapter-registry.js';
 import type { AdapterManifest } from './adapter-manifest.js';
 import type { LoadedReleaseSuite, LoadedReleaseSuiteScenario } from './release-suite-loader.js';
-import { runtimeAssetPath } from './runtime-assets.js';
+import { IS_PACKAGED_DISTRIBUTION, runtimeAssetPath } from './runtime-assets.js';
 import { ensureReferenceRuntimeEnv } from './runtime-env.js';
 
 const execFileAsync = promisify(execFile);
@@ -116,7 +116,13 @@ export class DockerComposeServiceController implements LabServiceController {
 
   async up(profile: string, options: ServiceControlOptions = {}): Promise<void> {
     const base = this.#composeArgs(profile, options);
-    await this.#execute('docker', [...base, 'up', '-d', ...(profile === 'lab' ? ['--wait'] : [])]);
+    await this.#execute('docker', [
+      ...base,
+      'up',
+      ...(profile === 'lab' && !IS_PACKAGED_DISTRIBUTION ? ['--build'] : []),
+      '-d',
+      ...(profile === 'lab' ? ['--wait'] : []),
+    ]);
   }
 
   async down(profile: string, options: ServiceControlOptions = {}): Promise<void> {

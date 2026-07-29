@@ -97,7 +97,9 @@ export default async function HomePage() {
             <div aria-label="Demo command" className={styles.commandBlock}>
               <span aria-hidden="true">$</span>
               <code>npx cashu-fault-lab demo</code>
-              <span className={styles.commandNote}>one command · isolated · secret-redacted</span>
+              <span className={styles.commandNote}>
+                available with v0.1.0 · isolated · secret-redacted
+              </span>
             </div>
           </div>
           <HeroRunPanel summary={summary} />

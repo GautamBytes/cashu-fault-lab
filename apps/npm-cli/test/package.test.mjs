@@ -42,6 +42,23 @@ test('the bundled executable and runtime assets exist', async () => {
   assert.doesNotMatch(compose, /^\s*build:/mu);
 });
 
+test('the generated runtime uses the npm package version for every lab image', async () => {
+  const manifest = JSON.parse(await readFile(new URL('package.json', packageRoot), 'utf8'));
+  const compose = await readFile(
+    new URL('runtime/compose/wallet-adapters.compose.yml', packageRoot),
+    'utf8',
+  );
+
+  for (const image of [
+    'cashu-fault-lab-node-wallets',
+    'cashu-fault-lab-cdk-adapter',
+    'cashu-fault-lab-netns',
+  ]) {
+    assert.match(compose, new RegExp(`${image}:${manifest.version.replaceAll('.', '\\.')}`, 'u'));
+  }
+  assert.doesNotMatch(compose, /__CFL_PACKAGE_VERSION__/u);
+});
+
 test('the bundled CLI resolves its package-owned scenarios', async () => {
   const listed = await run(['ls', '--json']);
   assert.equal(listed.exitCode, 0, listed.stderr);

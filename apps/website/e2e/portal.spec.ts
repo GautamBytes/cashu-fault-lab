@@ -332,7 +332,7 @@ test('tablet hero stacks without clipping command metadata or run evidence', asy
   const primaryAction = hero.getByRole('link', { name: 'Open in Codespaces' });
   const actions = primaryAction.locator('..');
   const command = hero.getByLabel('Demo command');
-  const commandMetadata = hero.getByText('one command · isolated · secret-redacted', {
+  const commandMetadata = hero.getByText('available with v0.1.0 · isolated · secret-redacted', {
     exact: true,
   });
   const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });

@@ -26,15 +26,29 @@ test('the npm demo compose file pulls versioned runtime images instead of buildi
   const path = new URL('infra/compose/npm-runtime.compose.yml', root);
   assert.equal(existsSync(path), true);
   const compose = await readFile(path, 'utf8');
+  const packageManifest = await manifest('apps/npm-cli/package.json');
 
   assert.doesNotMatch(compose, /^\s*build:/mu);
+  assert.doesNotMatch(
+    compose,
+    new RegExp(`:${packageManifest.version.replaceAll('.', '\\.')}`, 'u'),
+  );
+  assert.match(compose, /__CFL_PACKAGE_VERSION__/u);
   for (const image of [
-    'ghcr.io/gautambytes/cashu-fault-lab-node-wallets:0.1.0',
-    'ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter:0.1.0',
-    'ghcr.io/gautambytes/cashu-fault-lab-netns:0.1.0',
+    'ghcr.io/gautambytes/cashu-fault-lab-node-wallets',
+    'ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter',
+    'ghcr.io/gautambytes/cashu-fault-lab-netns',
   ]) {
     assert.ok(compose.includes(image), `missing ${image}`);
   }
+  assert.match(compose, /postgres:18-alpine@sha256:[a-f0-9]{64}/u);
+});
+
+test('the npm bundle omits source maps and preserves legal notices', async () => {
+  const buildScript = await readFile(new URL('apps/npm-cli/scripts/build.mjs', root), 'utf8');
+
+  assert.match(buildScript, /sourcemap: false/u);
+  assert.match(buildScript, /legalComments: 'eof'/u);
 });
 
 test('publishing is blocked until the runtime images support anonymous pulls', async () => {
@@ -43,4 +57,13 @@ test('publishing is blocked until the runtime images support anonymous pulls', a
   assert.match(workflow, /Verify public runtime images/u);
   assert.match(workflow, /docker manifest inspect/u);
   assert.match(workflow, /CFL_NPM_E2E_DEMO: '1'/u);
+});
+
+test('pull request CI runs the installed npm tarball through the real Docker demo', async () => {
+  const workflow = await readFile(new URL('.github/workflows/ci.yml', root), 'utf8');
+
+  assert.match(workflow, /CFL_NPM_E2E_DEMO: '1'/u);
+  assert.match(workflow, /cashu-fault-lab-node-wallets/u);
+  assert.match(workflow, /cashu-fault-lab-cdk-adapter/u);
+  assert.match(workflow, /cashu-fault-lab-netns/u);
 });

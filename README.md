@@ -8,12 +8,15 @@ The lab implements an experimental `cashu-delivery-v1` application profile on ex
 
 ## Quickstart
 
-To run the developer preview without cloning the repository or installing pnpm and Rust:
+After the `v0.1.0` npm package and matching runtime images are published, run the developer
+preview without cloning the repository or installing pnpm and Rust:
 
 ```bash
 npx cashu-fault-lab doctor
 npx cashu-fault-lab demo
 ```
+
+Until that release is published, use the Codespaces or repository quickstart below.
 
 This requires Node.js 24 and Docker. The npm package contains the CLI, scenarios, schemas, and
 Compose definitions. The demo pulls versioned runtime images, generates private local credentials,

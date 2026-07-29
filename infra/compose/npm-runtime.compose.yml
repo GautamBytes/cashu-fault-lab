@@ -1,7 +1,7 @@
 name: cashu-fault-lab-npm
 
 x-node-runtime: &node-runtime
-  image: ${CFL_NODE_WALLETS_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-node-wallets:0.1.0}
+  image: ${CFL_NODE_WALLETS_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-node-wallets:__CFL_PACKAGE_VERSION__}
   pull_policy: missing
   init: true
   network_mode: service:lab-netns
@@ -22,7 +22,7 @@ services:
         condition: service_healthy
 
   lab-netns:
-    image: ${CFL_NETNS_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-netns:0.1.0}
+    image: ${CFL_NETNS_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-netns:__CFL_PACKAGE_VERSION__}
     pull_policy: missing
     depends_on:
       nutshell:
@@ -90,7 +90,7 @@ services:
       retries: 60
 
   cashu-ts-postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     environment:
       POSTGRES_DB: cashu_fault_lab
       POSTGRES_USER: cashu
@@ -159,7 +159,7 @@ services:
     restart: 'on-failure:10'
 
   cdk:
-    image: ${CFL_CDK_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter:0.1.0}
+    image: ${CFL_CDK_IMAGE:-ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter:__CFL_PACKAGE_VERSION__}
     pull_policy: missing
     environment:
       CASHU_FAULT_LAB_CDK_FUNDING_AMOUNT: ${CFL_WALLET_FUNDING_AMOUNT:-64}

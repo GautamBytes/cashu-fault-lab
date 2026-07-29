@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const PACKAGED_RUNTIME_ROOT = fileURLToPath(new URL('../runtime/', import.meta.url));
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-const IS_PACKAGED_DISTRIBUTION = existsSync(PACKAGED_RUNTIME_ROOT);
+export const IS_PACKAGED_DISTRIBUTION = existsSync(PACKAGED_RUNTIME_ROOT);
 
 export function runtimeAssetPath(...segments: readonly string[]): string {
   const packaged = join(PACKAGED_RUNTIME_ROOT, ...segments);
