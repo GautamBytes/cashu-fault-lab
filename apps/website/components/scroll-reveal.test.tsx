@@ -106,6 +106,15 @@ describe('ScrollReveal', () => {
     expect(belowFold).toHaveAttribute('data-scroll-reveal', 'visible');
   });
 
+  it('uses a perceptible blur-to-focus reveal without animating layout', () => {
+    expect(globalsCss).toMatch(
+      /\[data-scroll-reveal='pending'\]\s*\{[^}]*filter:\s*blur\(10px\);[^}]*opacity:\s*0;[^}]*transform:\s*translate3d\(0, 1\.75rem, 0\)/s,
+    );
+    expect(globalsCss).toMatch(
+      /\[data-scroll-reveal='visible'\]\s*\{[^}]*filter:\s*blur\(0\);[\s\S]*filter 600ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+    );
+  });
+
   it('shows every section immediately when reduced motion is requested', () => {
     stubMotionPreference(true);
     vi.stubGlobal('IntersectionObserver', IntersectionObserverStub);
