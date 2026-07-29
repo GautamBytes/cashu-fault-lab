@@ -66,6 +66,13 @@ describe('SiteHeader', () => {
     expect(screen.queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
   });
 
+  it('spaces primary navigation labels consistently', () => {
+    expect(headerCss).toMatch(/\.links\s*\{[^}]*column-gap:\s*1\.25rem/s);
+    expect(headerCss).toMatch(
+      /\.links a\s*\{[^}]*min-width:\s*auto;[^}]*padding:\s*0 0\.25rem/s,
+    );
+  });
+
   it('composes Search from a visual icon, desktop label, and shortcut hint', () => {
     render(<SiteHeader />);
     const search = screen.getByRole('button', { name: 'Search documentation' });
