@@ -261,8 +261,8 @@ export default async function HomePage() {
           <h2 id="contribute-title">Add an adapter. Break a delivery. Improve the evidence.</h2>
         </div>
         <div className={styles.contributeActions}>
-          <a className={styles.primaryAction} href="/docs/adapters">
-            Start with the adapter guide
+          <a className={styles.primaryAction} href="/docs/contributing">
+            Read the contribution guide
           </a>
           <a
             className={styles.secondaryAction}

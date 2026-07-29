@@ -100,6 +100,21 @@ describe('generated content pages', () => {
     ).toHaveAttribute('href', '/architecture');
   });
 
+  it('keeps public docs read-only and links contributors to the contribution guide', async () => {
+    const document = await getDocument('getting-started');
+    if (!document) throw new Error('Expected getting started document');
+
+    render(<DocsShell destinations={getDocumentationDestinations()} document={document} />);
+
+    expect(screen.getByRole('link', { name: 'View source' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Edit on GitHub' })).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole('link', { name: 'Contribution guide' }).some((link) => {
+        return link.getAttribute('href') === '/docs/contributing';
+      }),
+    ).toBe(true);
+  });
+
   it('derives documentation group order from the ordered destination source', async () => {
     const document = await getDocument('getting-started');
     if (!document) throw new Error('Expected getting started document');

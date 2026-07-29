@@ -101,9 +101,6 @@ export function DocsShell({
               <a href={document.viewUrl} rel="noreferrer noopener" target="_blank">
                 View source
               </a>
-              <a href={document.editUrl} rel="noreferrer noopener" target="_blank">
-                Edit on GitHub
-              </a>
             </div>
           </header>
         ) : null}

@@ -1,22 +1,56 @@
 # Contributing to Cashu Fault Lab
 
-## Getting started
+## Local setup
+
+Fork `GautamBytes/cashu-fault-lab` on GitHub, then clone your fork:
 
 ```bash
+git clone https://github.com/YOUR-USERNAME/cashu-fault-lab.git
+cd cashu-fault-lab
+git remote add upstream https://github.com/GautamBytes/cashu-fault-lab.git
+corepack enable
 pnpm install --frozen-lockfile
+```
+
+The repository requires Node.js 24 and pnpm 11.15.0. Docker is optional for the default test suite
+and required for integration and funded lanes.
+
+Verify the local checkout:
+
+```bash
 pnpm format:check
 pnpm typecheck
 pnpm test
 pnpm build
 ```
 
+Run the documentation website locally:
+
+```bash
+pnpm website:dev
+```
+
+Open `http://localhost:3000`. Website-specific checks are available through
+`pnpm website:test`, `pnpm website:build`, and `pnpm website:test:e2e`.
+
 ## Development workflow
 
-1. Create a feature branch from `main`: `git checkout -b feat/your-feature`
-2. Make your changes, following existing code conventions
-3. Run checks: `pnpm format:check && pnpm typecheck && pnpm test`
-4. Commit with a descriptive message
-5. Push and open a PR against `main`
+1. Sync your checkout: `git fetch upstream && git switch main && git merge --ff-only upstream/main`
+2. Create a focused branch: `git switch -c feat/your-feature`
+3. Make your changes, following existing code conventions.
+4. Run the checks relevant to your change.
+5. Commit with a descriptive conventional commit message.
+6. Push your branch: `git push -u origin feat/your-feature`
+7. Open a pull request from your fork to `GautamBytes/cashu-fault-lab:main`.
+
+## Pull request checklist
+
+- Explain the problem and the behavior changed.
+- Include the commands used to verify the change.
+- Add or update tests for changed behavior.
+- Keep generated files and documentation synchronized.
+- Do not commit secrets, funded credentials, local artifacts, or environment files.
+- Keep the pull request focused; separate unrelated refactors.
 
 ## Code conventions
 

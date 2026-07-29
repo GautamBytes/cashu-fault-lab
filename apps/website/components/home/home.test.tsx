@@ -84,6 +84,10 @@ describe('home components', () => {
       'href',
       '/scenarios',
     );
+    expect(screen.getByRole('link', { name: 'Read the contribution guide' })).toHaveAttribute(
+      'href',
+      '/docs/contributing',
+    );
 
     const explorer = screen.getByRole('region', { name: 'Explore fault scenarios' });
     expect(within(explorer).getAllByRole('listitem')).toHaveLength(4);

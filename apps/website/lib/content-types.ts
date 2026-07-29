@@ -43,7 +43,6 @@ export interface DocumentPage extends MarkdownDocumentDefinition, DocumentationP
   markdown: string;
   headings: DocumentHeading[];
   viewUrl: string;
-  editUrl: string;
 }
 
 export type GeneratedDocumentPage = GeneratedDocumentDefinition & DocumentationPageNavigation;

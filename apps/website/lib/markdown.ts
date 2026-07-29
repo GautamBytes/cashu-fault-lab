@@ -117,7 +117,6 @@ async function loadDocument(definition: DocumentDefinition): Promise<DocumentPag
     markdown,
     headings: extractHeadings(markdown),
     viewUrl: sourceUrl(definition.sourcePath, 'view'),
-    editUrl: sourceUrl(definition.sourcePath, 'edit'),
   };
 }
 

@@ -20,6 +20,16 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
   },
   {
     kind: 'markdown',
+    slug: 'contributing',
+    href: '/docs/contributing',
+    sourcePath: 'CONTRIBUTING.md',
+    title: 'Contribution guide',
+    description: 'Set up the repository locally and contribute changes through a pull request.',
+    group: 'Start',
+    order: 15,
+  },
+  {
+    kind: 'markdown',
     slug: 'cli',
     href: '/docs/cli',
     sourcePath: 'docs/cli-reference.md',

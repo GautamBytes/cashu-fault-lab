@@ -22,6 +22,7 @@ describe('canonical content', () => {
   it('orders Architecture immediately after Adapters in documentation destinations', () => {
     expect(DOCUMENTATION_DESTINATIONS.map((item) => item.slug)).toEqual([
       'getting-started',
+      'contributing',
       'cli',
       'adapters',
       'architecture',
@@ -113,10 +114,10 @@ describe('canonical content', () => {
     expect(documents[0]).toMatchObject({
       slug: 'getting-started',
       previous: undefined,
-      next: { slug: 'cli' },
+      next: { slug: 'contributing' },
       viewUrl: 'https://github.com/GautamBytes/cashu-fault-lab/blob/main/README.md',
-      editUrl: 'https://github.com/GautamBytes/cashu-fault-lab/edit/main/README.md',
     });
+    expect(documents[0]).not.toHaveProperty('editUrl');
   });
 
   it('returns undefined for an unregistered document', async () => {
@@ -130,6 +131,9 @@ describe('canonical content', () => {
 
     expect(records.filter((record) => record.id === 'getting-started')).toEqual([
       expect.objectContaining({ href: '/docs/getting-started', title: 'Getting started' }),
+    ]);
+    expect(records.filter((record) => record.id === 'contributing')).toEqual([
+      expect.objectContaining({ href: '/docs/contributing', title: 'Contribution guide' }),
     ]);
     expect(records).toEqual(
       expect.arrayContaining([
