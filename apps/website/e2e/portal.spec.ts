@@ -109,7 +109,15 @@ test('home is accessible, has one visible title, and fits the viewport', async (
   await quickstartAction.focus();
   await expect(quickstartAction).toBeFocused();
   await quickstartAction.evaluate((element) => element.blur());
-  await expect(page.getByLabel('Demo command').getByText('npx cashu-fault-lab demo')).toBeVisible();
+  const demoCommand = page.getByLabel('Demo command', { exact: true });
+  const copyCommand = demoCommand.getByRole('button', { name: 'Copy demo command' });
+  await expect(demoCommand.getByText('npx cashu-fault-lab demo')).toBeVisible();
+  await expect(copyCommand).toBeVisible();
+  await expect(demoCommand.getByText('npx cashu-fault-lab demo')).toHaveCSS(
+    'white-space',
+    'nowrap',
+  );
+  await expectElementInside(copyCommand, demoCommand);
 
   if (testInfo.project.name === 'desktop-chromium') {
     const viewportHeight = page.viewportSize()?.height ?? 900;
@@ -120,7 +128,7 @@ test('home is accessible, has one visible title, and fits the viewport', async (
     });
     const primaryAction = quickstartAction;
     const githubAction = hero.getByRole('link', { name: /View on GitHub/ });
-    const commandBlock = hero.getByLabel('Demo command');
+    const commandBlock = hero.getByLabel('Demo command', { exact: true });
     const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
 
     for (const element of [productHeading, primaryAction, githubAction, commandBlock, runPanel]) {
@@ -182,7 +190,7 @@ test('user laptop viewport shows the complete hero and next section cue', async 
     hero.locator('h1 + p'),
     hero.getByRole('link', { name: 'Open in Codespaces' }),
     hero.getByRole('link', { name: /View on GitHub/ }),
-    hero.getByLabel('Demo command'),
+    hero.getByLabel('Demo command', { exact: true }),
     hero.getByRole('complementary', { name: 'Deterministic demo run' }),
   ];
   const requiredElementBottoms: number[] = [];
@@ -315,7 +323,7 @@ test('Architecture participates in docs navigation, search, and pagination', asy
   );
 });
 
-test('tablet hero stacks without clipping command metadata or run evidence', async ({
+test('tablet hero stacks without clipping the command or run evidence', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
@@ -331,13 +339,11 @@ test('tablet hero stacks without clipping command metadata or run evidence', asy
   });
   const primaryAction = hero.getByRole('link', { name: 'Open in Codespaces' });
   const actions = primaryAction.locator('..');
-  const command = hero.getByLabel('Demo command');
-  const commandMetadata = hero.getByText('available with v0.1.1 · isolated · secret-redacted', {
-    exact: true,
-  });
+  const command = hero.getByLabel('Demo command', { exact: true });
+  const copyButton = command.getByRole('button', { name: 'Copy demo command' });
   const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
 
-  for (const element of [heading, actions, command, commandMetadata, runPanel]) {
+  for (const element of [heading, actions, command, copyButton, runPanel]) {
     await expectNoElementClipping(element);
     await expectElementInside(element, hero);
   }

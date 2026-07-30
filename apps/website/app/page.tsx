@@ -1,5 +1,6 @@
 import { EvidenceReport } from '../components/home/evidence-report';
 import { FaultTimeline } from '../components/home/fault-timeline';
+import { HeroCommand } from '../components/home/hero-command';
 import { HeroRunPanel } from '../components/home/hero-run-panel';
 import styles from '../components/home/home.module.css';
 import { ScenarioExplorer } from '../components/home/scenario-explorer';
@@ -94,13 +95,7 @@ export default async function HomePage() {
                 View on GitHub <span aria-hidden="true">↗</span>
               </a>
             </div>
-            <div aria-label="Demo command" className={styles.commandBlock}>
-              <span aria-hidden="true">$</span>
-              <code>npx cashu-fault-lab demo</code>
-              <span className={styles.commandNote}>
-                available with v0.1.1 · isolated · secret-redacted
-              </span>
-            </div>
+            <HeroCommand />
           </div>
           <HeroRunPanel summary={summary} />
           <div aria-hidden="true" className={styles.heroSignalPath}>
