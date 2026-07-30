@@ -137,6 +137,28 @@ test('checked-in demo artifacts are valid, deterministic, and secret-free', asyn
   }
 });
 
+test('the website uses a valid, secret-free v0.1.2 demo artifact', async () => {
+  const demoSeed = 'cashu-fault-lab-v0.1.2-demo';
+  const json = await text('docs/examples/v0.1.2-demo.json');
+  const html = await text('docs/examples/v0.1.2-demo.html');
+  const artifact = JSON.parse(json);
+
+  assert.equal(artifact.seed, demoSeed);
+  assert.equal(artifact.status, 'passed');
+  assert.match(html, new RegExp(demoSeed, 'u'));
+  assert.match(await text('apps/website/lib/demo.ts'), /docs\/examples\/v0\.1\.2-demo\.json/u);
+  for (const secret of [
+    'lab-only-cashu-ts-token',
+    'lab-only-cdk-token',
+    'lab-only-receiver-token',
+    'lab-only-fault-token',
+    'proof-secret',
+  ]) {
+    assert.ok(!json.includes(secret), `JSON v0.1.2 demo leaks ${secret}`);
+    assert.ok(!html.includes(secret), `HTML v0.1.2 demo leaks ${secret}`);
+  }
+});
+
 test('runtime metadata and coverage claims match the v0.1 preview', async () => {
   for (const path of [
     'apps/lab-cli/src/index.ts',
