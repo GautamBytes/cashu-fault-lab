@@ -585,14 +585,8 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
   const rejectionViolation = matchingSafetyFailure(safety, /rejected proofs after they may/u);
   if (rejected.length === 0 && !ambiguousReceiverCrash) {
     results.push(notApplicable(rejectionId, 'No rejected receipt was observed.'));
-  } else if (
-    rejected.length > 0 &&
-    rejectedAfterBinding.length === 0 &&
-    !ambiguousReceiverCrash
-  ) {
-    results.push(
-      notApplicable(rejectionId, 'The delivery was rejected before delivery binding.'),
-    );
+  } else if (rejected.length > 0 && rejectedAfterBinding.length === 0 && !ambiguousReceiverCrash) {
+    results.push(notApplicable(rejectionId, 'The delivery was rejected before delivery binding.'));
   } else if (ambiguousReceiverCrash && rejected.length > 0) {
     results.push(
       failed(
