@@ -139,5 +139,10 @@ Wallet implementations integrate through the language-neutral HTTP routes:
 - `GET /v1/deliveries/:id`
 - `GET /v1/ledger`
 - `GET /v1/proofs`
+- `GET /v1/redemptions`
+
+`GET /v1/redemptions` returns the cumulative redemption-start count for each delivery and proof-set
+binding. A final spent/unspent proof state cannot establish at-most-once redemption because it does
+not reveal how many mint requests started.
 
 The TypeScript client contract is a convenience layer, not a requirement. Any implementation that satisfies the JSON schemas and routes can participate.

@@ -2,7 +2,11 @@
 
 Cashu Fault Lab checks payment delivery across retries, duplicates, transport loss, and process recovery. Funded cashu-ts has delivery-v1 sender and receiver paths over HTTP and NIP-17 Nostr, PostgreSQL-backed restart-safe sender state, optional T3 receiver evidence, and real SIGKILL coverage at four sender and six receiver boundaries. CDK remains a funded sender adapter against the reference receiver at T1.
 
-This is an experimental v0.1 developer preview, not certification. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint identities, trustworthy build provenance, and external integrations. See the [release notes](docs/releases/v0.1.0.md) and [certification checklist](docs/releases/v0.1.0-checklist.md).
+This is an experimental v0.1 developer preview, not certification. The current supported CLI is
+v0.1.2. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
+identities, trustworthy build provenance, and external integrations. See the
+[v0.1.2 release notes](docs/releases/v0.1.2.md) and
+[v0.1.2 checklist](docs/releases/v0.1.2-checklist.md).
 
 The lab implements an experimental `cashu-delivery-v1` application profile on existing Cashu and Nostr protocols. Harness operation does not require a new NUT. See [ADR 001](docs/adrs/001-delivery-semantics.md) for the standardization boundary.
 
@@ -18,6 +22,39 @@ npx cashu-fault-lab demo
 This requires Node.js 24 and Docker. The npm package contains the CLI, scenarios, schemas, and
 Compose definitions. The demo pulls versioned runtime images, generates private local credentials,
 writes redacted JSON and HTML evidence, and removes the stack when it finishes.
+
+## Test a local wallet adapter
+
+The v0.1.2 maintainer preview scaffolds an adapter, validates its contract without mutating wallet
+state, then runs response-loss and duplicate-delivery checks:
+
+```bash
+npx cashu-fault-lab@0.1.2 adapter init \
+  --language typescript \
+  --name my-wallet
+```
+
+Implement the eight adapter routes using the generated README and the
+[adapter guide](docs/adapter-guide.md). The generated handlers intentionally return `501 N/A` until
+they are connected to real wallet operations. Then start the adapter and export the token variable
+named by its manifest.
+
+```bash
+npx cashu-fault-lab@0.1.2 adapter preflight \
+  --adapters ./my-wallet/adapter-manifest.json
+
+npx cashu-fault-lab@0.1.2 adapter preview \
+  --adapters ./my-wallet/adapter-manifest.json \
+  --sender my-wallet \
+  --receiver my-wallet \
+  --output-dir ./cashu-fault-results
+```
+
+Choose `typescript`, `rust`, or `python` when generating the adapter. Version 0.1.2 accepts only
+loopback HTTP origins; remote and hosted wallet adapters are intentionally rejected. The preview
+automatically manages its local fault gateway and writes redacted JSON, HTML, JUnit, preflight, and
+replay evidence to `cashu-fault-results/`. Share the bundle for developer feedback, not as release
+qualification or certification.
 
 For workspace development, [open Cashu Fault Lab in GitHub
 Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1) to use the pinned

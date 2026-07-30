@@ -4,7 +4,8 @@ An adapter gives the lab one control surface for a wallet or service. Keep walle
 
 ## Contract
 
-Serve these routes on loopback unless your test network provides equivalent isolation:
+Version 0.1.2 accepts these routes only on loopback origins
+(`http://127.0.0.1:<port>` or `http://[::1]:<port>`):
 
 | Method | Route                | Purpose                                                              |
 | ------ | -------------------- | -------------------------------------------------------------------- |

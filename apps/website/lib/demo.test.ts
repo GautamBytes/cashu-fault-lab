@@ -6,10 +6,10 @@ describe('getDemoSummary', () => {
     const summary = await getDemoSummary();
     expect(summary).toMatchObject({
       scenarioId: 'http-response-lost',
-      seed: 'cashu-fault-lab-v0.1.0-demo',
+      seed: 'cashu-fault-lab-v0.1.2-demo',
       status: 'passed',
       commandCount: 3,
-      timelineCount: 13,
+      timelineCount: 14,
       invariantCount: 18,
     });
     expect(JSON.stringify(summary)).not.toContain('proofSecret');

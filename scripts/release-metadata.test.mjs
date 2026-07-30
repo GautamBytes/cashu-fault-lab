@@ -57,6 +57,61 @@ test('release docs make the preview, demo, and certification boundary explicit',
   assert.match(checklist, /- \[ \].*distinct mint identit/iu);
 });
 
+test('v0.1.2 maintainer documentation stays aligned with the shipped adapter workflow', async () => {
+  const readme = await text('README.md');
+  const contributing = await text('CONTRIBUTING.md');
+  const adapterGuide = await text('docs/adapter-guide.md');
+  const deliveryProfile = await text('spec/delivery-v1.md');
+  const threatModel = await text('spec/threat-model.md');
+  const releaseNotes = await text('docs/releases/v0.1.2.md');
+  const checklist = await text('docs/releases/v0.1.2-checklist.md');
+  const changelog = await text('CHANGELOG.md');
+
+  assert.match(readme, /\[v0\.1\.2 release notes\]\(docs\/releases\/v0\.1\.2\.md\)/u);
+  const workflowSteps = [
+    'npx cashu-fault-lab@0.1.2 adapter init',
+    'Implement the eight adapter routes',
+    'npx cashu-fault-lab@0.1.2 adapter preflight',
+    'npx cashu-fault-lab@0.1.2 adapter preview',
+  ].map((step) => readme.indexOf(step));
+  assert.ok(
+    workflowSteps.every((index) => index >= 0),
+    'README must contain every workflow step',
+  );
+  assert.deepEqual(
+    workflowSteps,
+    [...workflowSteps].sort((left, right) => left - right),
+    'README must order init, implementation, preflight, and preview',
+  );
+
+  assert.match(contributing, /npx cashu-fault-lab@0\.1\.2 adapter init/u);
+  assert.match(contributing, /Implement the 8 HTTP routes/u);
+  assert.match(contributing, /adapter preflight/u);
+  assert.match(contributing, /adapter preview/u);
+
+  assert.match(adapterGuide, /Version 0\.1\.2 accepts these routes only on loopback origins/iu);
+  assert.match(deliveryProfile, /GET \/v1\/redemptions/u);
+  assert.match(deliveryProfile, /cumulative redemption-start count/iu);
+
+  assert.doesNotMatch(
+    threatModel,
+    /Full named process restarts,[\s\S]*real Nostr relay remain release-gated/iu,
+  );
+  assert.match(threatModel, /internal evidence, not independent release qualification/iu);
+
+  assert.match(checklist, /^# v0\.1\.2 maintainer-preview checklist$/mu);
+  assert.match(checklist, /- \[x\].*adapter preflight/iu);
+  assert.match(checklist, /- \[x\].*adapter preview/iu);
+  assert.match(checklist, /- \[ \].*independent wallet receiver/iu);
+  for (const contents of [releaseNotes, checklist, changelog]) {
+    assert.doesNotMatch(contents, /preflight[\s\S]{0,160}\broutes\b/iu);
+  }
+  assert.match(
+    checklist,
+    /capability contract, profile support, and configured read-only evidence endpoints/iu,
+  );
+});
+
 test('checked-in demo artifacts are valid, deterministic, and secret-free', async () => {
   const json = await text('docs/examples/v0.1.0-demo.json');
   const html = await text('docs/examples/v0.1.0-demo.html');
@@ -79,6 +134,28 @@ test('checked-in demo artifacts are valid, deterministic, and secret-free', asyn
   ]) {
     assert.ok(!json.includes(secret), `JSON demo leaks ${secret}`);
     assert.ok(!html.includes(secret), `HTML demo leaks ${secret}`);
+  }
+});
+
+test('the website uses a valid, secret-free v0.1.2 demo artifact', async () => {
+  const demoSeed = 'cashu-fault-lab-v0.1.2-demo';
+  const json = await text('docs/examples/v0.1.2-demo.json');
+  const html = await text('docs/examples/v0.1.2-demo.html');
+  const artifact = JSON.parse(json);
+
+  assert.equal(artifact.seed, demoSeed);
+  assert.equal(artifact.status, 'passed');
+  assert.match(html, new RegExp(demoSeed, 'u'));
+  assert.match(await text('apps/website/lib/demo.ts'), /docs\/examples\/v0\.1\.2-demo\.json/u);
+  for (const secret of [
+    'lab-only-cashu-ts-token',
+    'lab-only-cdk-token',
+    'lab-only-receiver-token',
+    'lab-only-fault-token',
+    'proof-secret',
+  ]) {
+    assert.ok(!json.includes(secret), `JSON v0.1.2 demo leaks ${secret}`);
+    assert.ok(!html.includes(secret), `HTML v0.1.2 demo leaks ${secret}`);
   }
 });
 

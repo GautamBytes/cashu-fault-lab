@@ -30,7 +30,15 @@ The mint is authoritative for proof state and signatures, but its network can fa
 
 The release target covers duplicate, drop, delay, reorder, truncate, and replay of delivery messages and responses. It also covers connection loss around receiver persistence, mint request transmission, mint response receipt, output storage, and ledger credit, plus sender, receiver, gateway, and adapter process restarts at named crash points.
 
-Current developer-preview coverage is narrower. Packaged reference lanes cover request/response loss, duplication, cross-transport retries, and an in-memory mint-response-loss recovery flow. PostgreSQL integration tests cover durable prepared-state recovery, ambiguous mint response recovery, atomic credit, and concurrent-worker leasing. Delay/reorder exist as gateway and relay component tests. Full named process restarts, packaged delay/reorder, sender restart, and a real Nostr relay remain release-gated.
+Current developer-preview coverage includes packaged request/response loss, duplication,
+cross-transport retries, and an in-memory mint-response-loss recovery flow. Funded cashu-ts lanes
+exercise four sender and six receiver SIGKILL/restart boundaries, and the repository runs NIP-17
+delivery through its real WebSocket relay. PostgreSQL integration tests cover durable prepared-state
+recovery, ambiguous mint response recovery, atomic credit, and concurrent-worker leasing.
+Delay/reorder remain gateway and relay component tests rather than packaged end-to-end lanes. These
+results are internal evidence, not independent release qualification: public-relay hardening,
+external wallet implementations, independent evidence authorities, and distinct qualifying mints
+remain release-gated.
 
 Inputs may include:
 

@@ -137,7 +137,13 @@ describe('home components', () => {
     expect(runPanel).toHaveTextContent('Checked in');
     expect(runPanel).toHaveTextContent('Artifact');
     expect(runPanel).not.toHaveTextContent(/\blive\b/i);
-    expect(panelHeader).not.toHaveTextContent('v0.1.0');
+    expect(hero).not.toHaveTextContent('v0.1.0');
+    expect(hero).toHaveTextContent('cashu-fault-lab-v0.1.2-demo');
+    expect(screen.queryByText(/v0\.1\.0/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Inspect the reviewed artifact/ })).toHaveAttribute(
+      'href',
+      'https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.2-demo.json',
+    );
     expect(within(runPanel).queryByRole('list')).not.toBeInTheDocument();
     expect(within(hero).queryByText(/^TRACE \//)).not.toBeInTheDocument();
 
@@ -275,14 +281,19 @@ describe('home components', () => {
 
     expect(within(overview).getByText(summary.scenarioId)).toBeVisible();
     expect(within(overview).getByText(new RegExp(`Run ${summary.status}`, 'i'))).toBeVisible();
+    expect(
+      within(overview).getByText(/report is retained from the reviewed v0\.1\.2 demo/i),
+    ).toBeVisible();
+    expect(within(overview).getByText(/not a v0\.1\.2 qualification result/i)).toBeVisible();
     expect(contextList).toBeVisible();
     expect(supportedList).toBeVisible();
     expect(screen.getByText('18', { selector: 'dd, strong' })).toBeVisible();
     expect(screen.getByRole('link', { name: /Inspect the reviewed artifact/ })).toBeVisible();
     expect(items).toHaveLength(18);
-    expect(within(contextList).getByText('At most once redemption start')).toBeVisible();
-    expect(within(contextList).getByText('at-most-once-redemption-start')).toBeVisible();
-    expect(within(contextList).getAllByText('Not observable').length).toBeGreaterThan(0);
+    expect(within(contextList).getByText('Crash recovery')).toBeVisible();
+    expect(within(contextList).getAllByText('Not applicable').length).toBeGreaterThan(0);
+    expect(within(supportedList).getByText('At most once redemption start')).toBeVisible();
+    expect(within(supportedList).getByText('at-most-once-redemption-start')).toBeVisible();
     expect(within(supportedList).getByText('No unsupported pass')).toBeVisible();
     expect(within(supportedList).getByText('no-unsupported-pass')).toBeVisible();
   });

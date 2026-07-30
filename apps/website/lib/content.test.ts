@@ -34,6 +34,19 @@ describe('canonical content', () => {
     ]);
   });
 
+  it('serves the current release notes and checklist', () => {
+    expect(DOCUMENTATION_DESTINATIONS.find((item) => item.slug === 'release-notes')).toMatchObject({
+      sourcePath: 'docs/releases/v0.1.2.md',
+      description: expect.stringContaining('0.1.2'),
+    });
+    expect(
+      DOCUMENTATION_DESTINATIONS.find((item) => item.slug === 'release-checklist'),
+    ).toMatchObject({
+      sourcePath: 'docs/releases/v0.1.2-checklist.md',
+      description: expect.stringContaining('0.1.2'),
+    });
+  });
+
   it('rejects duplicate GitHub-style heading IDs outside code fences', () => {
     expect(() => extractHeadings('## Retry\n```md\n## ignored\n```\n## Retry\n### NUT-19')).toThrow(
       'Duplicate heading ID: retry',
