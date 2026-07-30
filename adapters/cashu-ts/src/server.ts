@@ -14,6 +14,7 @@ import {
   type CreateRequestInput,
   type DeliveryReceiptView,
   type LedgerCreditView,
+  type MintRedemptionEvidenceView,
   type PaymentRequestView,
   type ProofEvidenceView,
   type SendPaymentInput,
@@ -66,6 +67,7 @@ export interface CashuTsAdapterOperations {
   delivery(deliveryId: string): Promise<DeliveryReceiptView>;
   ledger(): Promise<readonly LedgerCreditView[]>;
   proofs(): Promise<readonly ProofEvidenceView[]>;
+  redemptions?(): Promise<readonly MintRedemptionEvidenceView[]>;
 }
 
 export interface CashuTsAdapterServerOptions {
@@ -399,6 +401,16 @@ export async function buildCashuTsAdapterServer(
     if (!result.ok) return reply;
     const value = result.value;
     assertResponse('proofs', value);
+    return value;
+  });
+
+  app.get('/v1/redemptions', async (_request, reply) => {
+    if (!options.operations?.redemptions)
+      return unavailable(reply, 'Mint redemption evidence operations are not configured');
+    const result = await invoke(reply, () => options.operations!.redemptions!());
+    if (!result.ok) return reply;
+    const value = result.value;
+    assertResponse('redemptions', value);
     return value;
   });
 

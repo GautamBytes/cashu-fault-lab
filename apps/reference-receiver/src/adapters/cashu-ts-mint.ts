@@ -5,11 +5,14 @@ import {
   type SerializedBlindedSignature,
 } from '@cashu/cashu-ts';
 import { normalizeMintUrl } from '@cashu-fault-lab/delivery-core';
+import { randomUUID } from 'node:crypto';
+import { channel } from 'node:diagnostics_channel';
 import type { ExactSwapPlan, SwapOutputPlan, SwapPlanDraft } from '../domain/types.js';
 import {
   MintGatewayError,
   type MintGateway,
   type MintProofState,
+  type MintSwapHooks,
   type RestoreResult,
   type SwapResult,
 } from '../ports/mint-gateway.js';
@@ -17,6 +20,7 @@ import { createExactSwapPlan, replacementPlanHash } from './swap-plan.js';
 import { readBoundedJson } from './bounded-json.js';
 
 const MAX_MINT_RESPONSE_BYTES = 1_048_576;
+const DISPATCH_HEADER = 'x-cashu-fault-lab-dispatch-id';
 
 export type MintFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -39,6 +43,44 @@ interface MintKeysWire extends HasKeysetKeys {
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasDispatchHeader(value: unknown, dispatchId: string): boolean {
+  if (!isRecord(value) || !isRecord(value.request)) return false;
+  const headers = value.request.headers;
+  if (Array.isArray(headers)) {
+    for (let index = 0; index + 1 < headers.length; index += 2) {
+      if (
+        typeof headers[index] === 'string' &&
+        headers[index].toLowerCase() === DISPATCH_HEADER &&
+        headers[index + 1] === dispatchId
+      ) {
+        return true;
+      }
+    }
+  }
+  return typeof headers === 'string' && headers.includes(`${DISPATCH_HEADER}: ${dispatchId}`);
+}
+
+function observeRequestBodySent(dispatchId: string): {
+  readonly sent: Promise<void>;
+  close(): void;
+} {
+  const bodySent = channel('undici:request:bodySent');
+  const result = Promise.withResolvers<void>();
+  let closed = false;
+  const listener = (message: unknown) => {
+    if (!hasDispatchHeader(message, dispatchId)) return;
+    result.resolve();
+    close();
+  };
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    bodySent.unsubscribe(listener);
+  };
+  bodySent.subscribe(listener);
+  return { sent: result.promise, close };
 }
 
 function safeInteger(value: unknown, name: string): number {
@@ -189,14 +231,57 @@ export class CashuTsMintGateway implements MintGateway {
     url: string,
     init: Omit<RequestInit, 'signal'>,
     mayHaveConsumedInputs: boolean,
+    hooks?: MintSwapHooks,
   ): Promise<unknown> {
-    let response: Response;
+    const dispatchId = hooks === undefined ? undefined : randomUUID();
+    const dispatchObserver =
+      dispatchId === undefined ? undefined : observeRequestBodySent(dispatchId);
+    const headers = new Headers(init.headers);
+    if (dispatchId !== undefined) headers.set(DISPATCH_HEADER, dispatchId);
+    let responsePromise: Promise<Response>;
     try {
-      response = await this.#fetch(url, {
+      responsePromise = this.#fetch(url, {
         ...init,
+        headers,
         redirect: 'manual',
         signal: AbortSignal.timeout(this.#timeoutMs),
       });
+    } catch (error) {
+      dispatchObserver?.close();
+      throw new MintGatewayError(
+        'MINT_NETWORK_ERROR',
+        error instanceof Error ? error.message : 'Mint network request failed',
+        mayHaveConsumedInputs,
+      );
+    }
+    if (hooks !== undefined && dispatchObserver !== undefined) {
+      const milestone = await Promise.race([
+        dispatchObserver.sent.then(() => ({ kind: 'dispatched' as const })),
+        responsePromise.then(
+          () => ({ kind: 'response' as const }),
+          (error: unknown) => ({ kind: 'error' as const, error }),
+        ),
+      ]);
+      dispatchObserver.close();
+      if (milestone.kind === 'error') {
+        throw new MintGatewayError(
+          'MINT_NETWORK_ERROR',
+          milestone.error instanceof Error
+            ? milestone.error.message
+            : 'Mint network request failed',
+          mayHaveConsumedInputs,
+        );
+      }
+      try {
+        await hooks.afterRequestDispatched();
+      } catch (error) {
+        void responsePromise.catch(() => {});
+        throw error;
+      }
+    }
+    let response: Response;
+    try {
+      response = await responsePromise;
     } catch (error) {
       throw new MintGatewayError(
         'MINT_NETWORK_ERROR',
@@ -263,7 +348,7 @@ export class CashuTsMintGateway implements MintGateway {
     });
   }
 
-  async #postSwap(plan: ExactSwapPlan): Promise<SwapResult> {
+  async #postSwap(plan: ExactSwapPlan, hooks?: MintSwapHooks): Promise<SwapResult> {
     let swapSucceeded = false;
     try {
       const value = await this.#request(
@@ -274,6 +359,7 @@ export class CashuTsMintGateway implements MintGateway {
           body: plan.serializedRequest,
         },
         true,
+        hooks,
       );
       swapSucceeded = true;
       const keys = await this.#keys(plan.mint, plan.keysetId, plan.unit);
@@ -288,8 +374,8 @@ export class CashuTsMintGateway implements MintGateway {
     }
   }
 
-  async swap(plan: ExactSwapPlan): Promise<SwapResult> {
-    return this.#postSwap(plan);
+  async swap(plan: ExactSwapPlan, hooks?: MintSwapHooks): Promise<SwapResult> {
+    return this.#postSwap(plan, hooks);
   }
 
   async restore(plan: ExactSwapPlan): Promise<RestoreResult> {

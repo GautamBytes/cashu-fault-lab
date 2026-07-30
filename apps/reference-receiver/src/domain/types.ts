@@ -102,6 +102,7 @@ export interface DeliveryRecord {
   readonly proofClaimIds: readonly string[];
   readonly plan: ExactSwapPlan;
   readonly amount: number;
+  readonly redemptionStarts: number;
   readonly phase: DeliveryPhase;
   readonly receipt: DeliveryReceipt;
   readonly replacementPlanHash?: string;

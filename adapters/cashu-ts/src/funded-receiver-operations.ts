@@ -10,6 +10,7 @@ import {
   type DeliveryReceiptView,
   type EvidenceTier,
   type LedgerCreditView,
+  type MintRedemptionEvidenceView,
   type PaymentRequestView,
   type ProofEvidenceView,
 } from '@cashu-fault-lab/adapter-contract';
@@ -334,6 +335,23 @@ export class FundedCashuTsReceiverOperations {
     );
   }
 
+  async redemptions(): Promise<readonly MintRedemptionEvidenceView[]> {
+    await this.#nostr?.poll();
+    const plans = (await this.#store.settlementPlans()).slice(0, 1_000);
+    const records = await Promise.all(plans.map((plan) => this.#store.current(plan.deliveryId)));
+    return records.flatMap((record): readonly MintRedemptionEvidenceView[] =>
+      record === undefined || record.redemptionStarts === 0
+        ? []
+        : [
+            {
+              deliveryId: record.deliveryId,
+              proofSetHash: record.proofSetHash,
+              starts: record.redemptionStarts,
+            },
+          ],
+    );
+  }
+
   #transports(): readonly AdapterTransport[] {
     return [
       ...(this.#paymentTarget === undefined ? [] : (['http'] as const)),
@@ -434,5 +452,9 @@ export class FundedCashuTsDualRoleOperations implements CashuTsAdapterOperations
       ...receiverProofs,
       ...senderProofs.filter((proof) => !receiverDeliveryIds.has(proof.deliveryId)),
     ];
+  }
+
+  redemptions(): Promise<readonly MintRedemptionEvidenceView[]> {
+    return this.#receiver.redemptions();
   }
 }

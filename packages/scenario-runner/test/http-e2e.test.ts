@@ -240,6 +240,11 @@ class HttpE2eDriver implements ScenarioDriver {
         proofSetHash: receiverRecord.proofSetHash,
         transport: 'http',
       },
+      {
+        type: 'redemption_started',
+        deliveryId: receiverRecord.deliveryId,
+        proofSetHash: receiverRecord.proofSetHash,
+      },
       { type: 'mint_proofs_state', proofSetHash: receiverRecord.proofSetHash, state: 'SPENT' },
       {
         type: 'receiver_settled',

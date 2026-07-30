@@ -51,7 +51,7 @@ export async function buildReceiverHttpServer(
 
   await app.register(cors, {
     origin: options.corsOrigins ? [...options.corsOrigins] : false,
-    methods: ['POST', 'OPTIONS'],
+    methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type'],
     credentials: false,
   });

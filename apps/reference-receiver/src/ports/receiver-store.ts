@@ -19,6 +19,7 @@ export interface ReceiverStore {
   ): Promise<{ readonly acquired: false } | { readonly acquired: true; readonly value: T }>;
   prepare(input: PrepareDelivery): Promise<PrepareResult>;
   markMintSent(deliveryId: string): Promise<DeliveryReceipt>;
+  recordRedemptionStart(deliveryId: string): Promise<void>;
   persistSettlementOutputs(input: CommitSettlement): Promise<DeliveryReceipt>;
   creditSettlement(deliveryId: string, now: number): Promise<DeliveryReceipt>;
   finalizeSettlement(deliveryId: string): Promise<DeliveryReceipt>;

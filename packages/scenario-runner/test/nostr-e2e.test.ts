@@ -208,7 +208,14 @@ class NostrE2eDriver implements ScenarioDriver {
   }
 
   async capabilities(): Promise<Readonly<Record<string, unknown>>> {
-    return { sender: 'reference', receiver: 'reference', transports: ['http', 'nostr'] };
+    return {
+      componentVersions: { 'reference-nostr-e2e': '1.0.0' },
+      roles: {
+        sender: { profiles: ['delivery-v1'] },
+        receiver: { profiles: ['delivery-v1'] },
+      },
+      transports: ['http', 'nostr'],
+    };
   }
 
   async configureFault(target: string, rule: FaultRule): Promise<void> {
@@ -266,6 +273,11 @@ class NostrE2eDriver implements ScenarioDriver {
       observations: [
         { type: 'request_observed', requestId, singleUse: true },
         ...attemptedTransports,
+        {
+          type: 'redemption_started',
+          deliveryId: receiverRecord.deliveryId,
+          proofSetHash: receiverRecord.proofSetHash,
+        },
         { type: 'mint_proofs_state', proofSetHash: receiverRecord.proofSetHash, state: 'SPENT' },
         {
           type: 'receiver_settled',

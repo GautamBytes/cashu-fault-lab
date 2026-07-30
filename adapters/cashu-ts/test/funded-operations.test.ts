@@ -182,6 +182,12 @@ describe('FundedCashuTsOperations', () => {
         reason: 'Sender-only cashu-ts adapter has no merchant ledger',
       });
       expect(ledger.statusCode).toBe(501);
+      const redemptions = await app.inject({ method: 'GET', url: '/v1/redemptions' });
+      expect(redemptions.json()).toEqual({
+        status: 'N/A',
+        reason: 'Mint redemption evidence operations are not configured',
+      });
+      expect(redemptions.statusCode).toBe(501);
     } finally {
       await app.close();
     }

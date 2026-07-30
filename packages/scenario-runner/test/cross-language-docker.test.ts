@@ -366,11 +366,11 @@ describe.skipIf(!mintUrl)('real funded cross-language delivery', () => {
             ? `sender=${index} scenario=${scenario.name}: ${result.error.message}; proxy=${JSON.stringify(proxy.diagnostics())}`
             : '',
         ).toBe('passed');
-        expect(observations(result, 'redemption_started')).toBe(0);
+        expect(observations(result, 'redemption_started')).toBe(1);
         expect(observations(result, 'merchant_credited')).toBe(1);
         expect(
           result.artifact.invariants.find((item) => item.id === 'at-most-once-redemption-start'),
-        ).toMatchObject({ status: 'not_observable' });
+        ).toMatchObject({ status: 'passed', confidence: 'adapter_claimed' });
         expect(
           result.artifact.invariants.find(
             (item) => item.id === 'at-most-one-merchant-credit-per-delivery',

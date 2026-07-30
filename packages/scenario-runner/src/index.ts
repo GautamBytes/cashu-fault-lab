@@ -55,6 +55,7 @@ export {
 } from './release-suite.js';
 export { seededProtocolId } from './seeded-fixture.js';
 export {
+  InvariantEvaluationError,
   ScenarioRunner,
   type DriverSendResult,
   type FailureArtifact,

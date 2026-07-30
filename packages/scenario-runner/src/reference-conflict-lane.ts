@@ -307,6 +307,11 @@ class ConflictDriver implements ScenarioDriver {
       }
       observations.push(
         {
+          type: 'mint_proofs_state',
+          proofSetHash,
+          state: 'SPENT',
+        },
+        {
           type: 'receiver_settled',
           deliveryId: variant.deliveryId,
           replacementPlanHash: record.replacementPlanHash,

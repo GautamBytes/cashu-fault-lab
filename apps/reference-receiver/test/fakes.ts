@@ -6,6 +6,7 @@ import type {
   InspectProofsResult,
   MintGateway,
   MintProofState,
+  MintSwapHooks,
   ProofVerifier,
   RestoreResult,
   SwapResult,
@@ -52,7 +53,7 @@ export class FakeMint implements MintGateway {
     });
   }
 
-  async swap(plan: ExactSwapPlan): Promise<SwapResult> {
+  async swap(plan: ExactSwapPlan, hooks?: MintSwapHooks): Promise<SwapResult> {
     this.swapCalls += 1;
     if (this.mode === 'timeout_before_commit') {
       const { MintGatewayError } = await import('../src/index.js');
@@ -63,6 +64,7 @@ export class FakeMint implements MintGateway {
       replacementProofs: [`proof:${plan.deliveryId}`],
     } satisfies SwapResult;
     this.committed.set(plan.deliveryId, result);
+    await hooks?.afterRequestDispatched();
     if (this.mode === 'timeout_after_commit') {
       const { MintGatewayError } = await import('../src/index.js');
       throw new MintGatewayError('MINT_TIMEOUT', 'timeout after commit', true);

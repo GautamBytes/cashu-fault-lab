@@ -53,6 +53,7 @@ await writeExpected(
   CreateRequestInput as MaintainedCreateRequestInput,
   DeliveryReceiptView as MaintainedDeliveryReceiptView,
   LedgerCreditView as MaintainedLedgerCreditView,
+  MintRedemptionEvidenceView as MaintainedMintRedemptionEvidenceView,
   PaymentRequestView as MaintainedPaymentRequestView,
   ProofEvidenceView as MaintainedProofEvidenceView,
   ResetInput as MaintainedResetInput,
@@ -68,6 +69,7 @@ export type SendPaymentInput = MaintainedSendPaymentInput;
 export type PaymentRequestView = MaintainedPaymentRequestView;
 export type DeliveryReceiptView = MaintainedDeliveryReceiptView;
 export type LedgerCreditView = MaintainedLedgerCreditView;
+export type MintRedemptionEvidenceView = MaintainedMintRedemptionEvidenceView;
 export type ProofEvidenceView = MaintainedProofEvidenceView;
 
 export const generatedContract = {
@@ -88,6 +90,7 @@ await writeExpected(
   CreateRequestInput,
   DeliveryReceiptView,
   LedgerCreditView,
+  MintRedemptionEvidenceView,
   PaymentRequestView,
   ProofEvidenceView,
   ResetInput,
@@ -101,6 +104,7 @@ export interface AdapterContractApi {
   sendPayment(input: SendPaymentInput): Promise<DeliveryReceiptView>;
   getDeliveryReceipt(deliveryId: string): Promise<DeliveryReceiptView>;
   getLedger(): Promise<readonly LedgerCreditView[]>;
+  getRedemptions(): Promise<readonly MintRedemptionEvidenceView[]>;
   getProofs(): Promise<readonly ProofEvidenceView[]>;
   armCrash(input: CrashArmInput): Promise<{ readonly ok: true }>;
   getCrashStatus(): Promise<readonly CrashArmStatus[]>;
@@ -120,6 +124,7 @@ await writeExpected(
   PaymentRequestView,
   DeliveryReceiptView,
   LedgerCreditView,
+  MintRedemptionEvidenceView,
   ProofEvidenceView,
 } from './models.js';
 export { generatedContract } from './models.js';

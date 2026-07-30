@@ -55,6 +55,7 @@ export {
   MintGatewayError,
   type MintGateway,
   type MintProofState,
+  type MintSwapHooks,
   type RestoreResult,
   type SwapResult,
 } from './ports/mint-gateway.js';

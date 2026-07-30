@@ -3,6 +3,7 @@ import { parseProtocolId } from '@cashu-fault-lab/delivery-core';
 import { describe, expect, it } from 'vitest';
 import { MemoryReceiverStore } from '../src/adapters/memory-store.js';
 import { FundedReceiverAdapterControl } from '../src/funded-adapter.js';
+import { FakeMint, FakeProofVerifier, payload } from './fakes.js';
 
 const now = 1_784_399_400;
 
@@ -102,5 +103,65 @@ describe('FundedReceiverAdapterControl', () => {
         now,
       ),
     ).rejects.toThrow('Payment request not found');
+  });
+
+  it('reports the cumulative redemption starts recorded at dispatch', async () => {
+    const store = new MemoryReceiverStore();
+    const control = new FundedReceiverAdapterControl({
+      store,
+      mintUrl: 'https://mint.example',
+      paymentTarget: 'http://127.0.0.1:4200/pay',
+      now: () => now,
+    });
+    await control.reset('receiver-seed');
+    const request = await control.createRequest({
+      amount: 8,
+      unit: 'sat',
+      transports: ['http'],
+      singleUse: true,
+      expiresIn: 900,
+    });
+    const candidate = payload(request.id, 'EBESExQVFhcYGRobHB0eHw', now);
+    const inspected = await new FakeProofVerifier().inspect({ payload: candidate });
+    const plan = await new FakeMint().prepareSwap({
+      version: 1,
+      deliveryId: candidate.delivery.id,
+      mint: candidate.mint,
+      unit: candidate.unit,
+      expectedAmount: inspected.netAmount,
+      inputProofs: candidate.proofs,
+      proofYs: inspected.ys,
+    });
+    await store.prepare({
+      command: { payload: candidate, payloadHash: 'a'.repeat(64) },
+      proofSetHash: inspected.proofSetHash,
+      proofClaimIds: inspected.proofClaimIds,
+      proofYs: inspected.ys,
+      netAmount: inspected.netAmount,
+      plan,
+      now,
+    });
+
+    expect(await control.redemptions()).toEqual([]);
+    await store.markMintSent(candidate.delivery.id);
+    expect(await control.redemptions()).toEqual([]);
+
+    await store.recordRedemptionStart(candidate.delivery.id);
+    expect(await control.redemptions()).toEqual([
+      {
+        deliveryId: candidate.delivery.id,
+        proofSetHash: inspected.proofSetHash,
+        starts: 1,
+      },
+    ]);
+
+    await store.recordRedemptionStart(candidate.delivery.id);
+    expect(await control.redemptions()).toEqual([
+      {
+        deliveryId: candidate.delivery.id,
+        proofSetHash: inspected.proofSetHash,
+        starts: 2,
+      },
+    ]);
   });
 });

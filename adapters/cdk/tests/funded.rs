@@ -1,6 +1,6 @@
 use std::sync::{
     Arc,
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 
 use async_trait::async_trait;
@@ -20,6 +20,16 @@ const REQUEST_ID: &str = "AAECAwQFBgcICQoLDA0ODw";
 const DELIVERY_ID: &str = "EBESExQVFhcYGRobHB0eHw";
 
 fn request(amount: u64) -> String {
+    request_with_tags(
+        amount,
+        vec![
+            vec!["delivery".to_owned(), "1".to_owned()],
+            vec!["expires_at".to_owned(), (NOW + 600).to_string()],
+        ],
+    )
+}
+
+fn request_with_tags(amount: u64, tags: Vec<Vec<String>>) -> String {
     PaymentRequest::builder()
         .payment_id(REQUEST_ID)
         .amount(amount)
@@ -29,7 +39,7 @@ fn request(amount: u64) -> String {
         .add_transport(Transport {
             _type: TransportType::HttpPost,
             target: "http://127.0.0.1:8181/pay".to_owned(),
-            tags: vec![],
+            tags,
         })
         .build()
         .to_string()
@@ -137,6 +147,8 @@ async fn reserves_once_and_retransmits_exact_bytes() {
     let bodies = transport.bodies.lock().await;
     assert_eq!(bodies.len(), 2);
     assert_eq!(bodies[0], bodies[1]);
+    let payload: serde_json::Value = serde_json::from_slice(&bodies[0]).unwrap();
+    assert_eq!(payload["delivery"]["expires_at"], NOW + 600);
     drop(bodies);
     assert_eq!(operations.delivery(DELIVERY_ID).await.unwrap(), first);
     let evidence = operations.proofs().await.unwrap();
@@ -147,6 +159,91 @@ async fn reserves_once_and_retransmits_exact_bytes() {
             .unwrap()
             .contains("funded-proof-secret")
     );
+}
+
+#[tokio::test]
+async fn retransmits_a_matching_persisted_delivery_after_request_expiry() {
+    let wallet = Arc::new(FakeWallet {
+        reserves: AtomicUsize::new(0),
+        settled: AtomicUsize::new(0),
+    });
+    let transport = Arc::new(FakeTransport {
+        bodies: tokio::sync::Mutex::new(vec![]),
+        lose_first: false,
+    });
+    let clock = Arc::new(AtomicU64::new(NOW));
+    let operations = FundedCdkOperations::new(wallet.clone(), transport.clone(), {
+        let clock = clock.clone();
+        move || clock.load(Ordering::SeqCst)
+    });
+    operations.reset("funded-seed").await.unwrap();
+    let input = SendInput {
+        request: request(8),
+        delivery_id: Some(DELIVERY_ID.to_owned()),
+        memo: None,
+    };
+
+    let first = operations.send(input.clone()).await.unwrap();
+    clock.store(NOW + 601, Ordering::SeqCst);
+    let retried = operations.send(input).await.unwrap();
+
+    assert_eq!(retried, first);
+    assert_eq!(wallet.reserves.load(Ordering::SeqCst), 1);
+    assert_eq!(transport.bodies.lock().await.len(), 2);
+}
+
+#[tokio::test]
+async fn rejects_missing_or_invalid_delivery_negotiation_before_reserving() {
+    let cases = [
+        vec![],
+        vec![
+            vec![],
+            vec!["delivery".to_owned(), "1".to_owned()],
+            vec!["expires_at".to_owned(), (NOW + 60).to_string()],
+        ],
+        vec![
+            vec!["unrelated".to_owned()],
+            vec!["delivery".to_owned(), "1".to_owned()],
+            vec!["expires_at".to_owned(), (NOW + 60).to_string()],
+        ],
+        vec![vec!["delivery".to_owned(), "1".to_owned()]],
+        vec![
+            vec!["delivery".to_owned(), "1".to_owned()],
+            vec!["delivery".to_owned(), "1".to_owned()],
+            vec!["expires_at".to_owned(), (NOW + 60).to_string()],
+        ],
+        vec![
+            vec!["delivery".to_owned(), "1".to_owned()],
+            vec!["expires_at".to_owned(), format!("0{}", NOW + 60)],
+        ],
+        vec![
+            vec!["delivery".to_owned(), "1".to_owned()],
+            vec!["expires_at".to_owned(), NOW.to_string()],
+        ],
+        vec![
+            vec!["delivery".to_owned(), "1".to_owned()],
+            vec!["expires_at".to_owned(), (NOW + 86_401).to_string()],
+        ],
+    ];
+
+    for (index, tags) in cases.into_iter().enumerate() {
+        let (wallet, _transport, operations) = fixture(false);
+        operations
+            .reset(&format!("invalid-negotiation-{index}"))
+            .await
+            .unwrap();
+        assert!(
+            operations
+                .send(SendInput {
+                    request: request_with_tags(8, tags),
+                    delivery_id: Some(DELIVERY_ID.to_owned()),
+                    memo: None,
+                })
+                .await
+                .is_err()
+        );
+        assert_eq!(wallet.reserves.load(Ordering::SeqCst), 0);
+    }
 }
 
 #[tokio::test]

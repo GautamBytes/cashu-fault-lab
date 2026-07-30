@@ -230,6 +230,7 @@ class ExpiryDriver implements ScenarioDriver {
       proofSetHash,
       transport: 'http',
     });
+    observations.push({ type: 'mint_proofs_state', proofSetHash, state: 'UNSPENT' });
     if (receipt) {
       observations.push({
         type: 'receipt_observed',

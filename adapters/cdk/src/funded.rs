@@ -78,6 +78,7 @@ struct ParsedRequest {
     unit: String,
     mints: Vec<String>,
     target: String,
+    expires_at: u64,
 }
 
 #[derive(Clone)]
@@ -142,6 +143,10 @@ impl FundedCdkOperations {
 
     pub async fn send(&self, input: SendInput) -> Result<DeliveryReceipt, String> {
         let _send = self.send_lock.lock().await;
+        let now = (self.now)();
+        if now > MAX_SAFE_INTEGER {
+            return Err("CDK adapter time is invalid".to_owned());
+        }
         let request = parse_request(&input.request)?;
         let request_fingerprint = hash_bytes(
             &serde_json::to_vec(&json!([input.request, input.memo])).map_err(stable_error)?,
@@ -177,10 +182,7 @@ impl FundedCdkOperations {
                 record
             }
             None => {
-                let now = (self.now)();
-                if now > MAX_SAFE_INTEGER || now.checked_add(900).is_none() {
-                    return Err("CDK adapter time is invalid".to_owned());
-                }
+                validate_request_freshness(&request, now)?;
                 let reserved = self
                     .wallet
                     .reserve(request.amount, &request.unit, &request.mints, &delivery_id)
@@ -200,7 +202,7 @@ impl FundedCdkOperations {
                         "v": 1,
                         "id": delivery_id,
                         "created_at": now,
-                        "expires_at": now + 900,
+                        "expires_at": request.expires_at,
                     },
                 });
                 let payload_bytes = serde_json::to_vec(&payload).map_err(stable_error)?;
@@ -312,20 +314,82 @@ fn parse_request(encoded: &str) -> Result<ParsedRequest, String> {
     if mints.is_empty() {
         return Err("Cashu payment request is incomplete".to_owned());
     }
-    let target = request
+    let mut negotiated = Vec::new();
+    for transport in request
         .transports
         .iter()
-        .find(|transport| transport._type == TransportType::HttpPost)
-        .map(|transport| transport.target.clone())
-        .ok_or_else(|| "Cashu payment request is incomplete".to_owned())?;
-    validate_http_target(&target)?;
+        .filter(|transport| transport._type == TransportType::HttpPost)
+    {
+        if transport.tags.iter().any(|tag| tag.len() < 2) {
+            return Err("Every transport tag must contain a name and value".to_owned());
+        }
+        let delivery = transport
+            .tags
+            .iter()
+            .filter(|tag| tag.first().map(String::as_str) == Some("delivery"))
+            .collect::<Vec<_>>();
+        if delivery.len() > 1 {
+            return Err("Cashu payment request has duplicate delivery tags".to_owned());
+        }
+        let Some(delivery) = delivery.first() else {
+            continue;
+        };
+        if delivery.len() < 2 || delivery[1] != "1" {
+            continue;
+        }
+
+        let expiries = transport
+            .tags
+            .iter()
+            .filter(|tag| tag.first().map(String::as_str) == Some("expires_at"))
+            .collect::<Vec<_>>();
+        if expiries.len() != 1 || expiries[0].len() < 2 {
+            return Err("Version-one delivery requires exactly one expiry tag".to_owned());
+        }
+        let expiry_text = &expiries[0][1];
+        if expiry_text.is_empty()
+            || expiry_text.len() > 1 && expiry_text.starts_with('0')
+            || !expiry_text.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return Err("Delivery expiry must be a canonical Unix timestamp".to_owned());
+        }
+        let expires_at = expiry_text
+            .parse::<u64>()
+            .map_err(|_| "Delivery expiry must be a safe integer".to_owned())?;
+        if expires_at > MAX_SAFE_INTEGER {
+            return Err("Delivery expiry must be a safe integer".to_owned());
+        }
+        validate_http_target(&transport.target)?;
+        negotiated.push((transport.target.clone(), expires_at));
+    }
+    let (target, expires_at) = negotiated
+        .first()
+        .cloned()
+        .ok_or_else(|| "Cashu payment request does not negotiate delivery version 1".to_owned())?;
+    if negotiated
+        .iter()
+        .any(|(_, candidate_expiry)| *candidate_expiry != expires_at)
+    {
+        return Err("Cashu payment request has conflicting delivery expiries".to_owned());
+    }
     Ok(ParsedRequest {
         id,
         amount,
         unit,
         mints,
         target,
+        expires_at,
     })
+}
+
+fn validate_request_freshness(request: &ParsedRequest, now: u64) -> Result<(), String> {
+    if request.expires_at <= now {
+        return Err("Cashu payment request has expired".to_owned());
+    }
+    if request.expires_at - now > 86_400 {
+        return Err("Delivery expiry cannot be more than 24 hours away".to_owned());
+    }
+    Ok(())
 }
 
 fn validate_reserved(reserved: &ReservedProofs, amount: u64) -> Result<(), String> {

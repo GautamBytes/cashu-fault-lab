@@ -28,6 +28,7 @@ Adapter roles declare durability as `process` or `restart_safe`. Restart-safe se
 | `GET`  | `/v1/deliveries/:id` | Read delivery receipt           |
 | `GET`  | `/v1/ledger`         | Merchant credit evidence        |
 | `GET`  | `/v1/proofs`         | Proof-state evidence            |
+| `GET`  | `/v1/redemptions`    | Mint redemption-start evidence  |
 | `POST` | `/v1/test/crashes`   | Arm an authenticated test crash |
 | `GET`  | `/v1/test/crashes`   | Read bounded crash-arm evidence |
 

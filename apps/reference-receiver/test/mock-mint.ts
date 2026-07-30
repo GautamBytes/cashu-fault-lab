@@ -46,6 +46,7 @@ export class MockMintServer {
   restoreCalls = 0;
   dropNextSwapResponse = false;
   failNextKeys = false;
+  swapResponseGate?: Promise<void>;
 
   constructor(
     readonly options: {
@@ -146,6 +147,7 @@ export class MockMintServer {
         response.destroy(new Error('mock response loss'));
         return;
       }
+      await this.swapResponseGate;
       json(response, { signatures: signed });
       return;
     }

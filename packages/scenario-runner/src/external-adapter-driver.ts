@@ -489,12 +489,16 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
       observed.deliveryId,
     );
     const mintAuthority = this.#evidence.mint;
+    const redemptionAuthority = mintAuthority ?? this.#receiver;
     const redemption =
-      mintAuthority === undefined
+      redemptionAuthority.redemptions === undefined
         ? undefined
         : exactRedemption(
-            await adapterCall('independent mint redemption evidence', () =>
-              mintAuthority.redemptions(),
+            await adapterCall(
+              mintAuthority === undefined
+                ? 'receiver redemption evidence'
+                : 'independent mint redemption evidence',
+              () => redemptionAuthority.redemptions!(),
             ),
             observed.deliveryId,
             proof.proofSetHash,
@@ -575,25 +579,30 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     if (redemption !== undefined) {
       this.#observedRedemptionStarts.set(observed.deliveryId, redemption.starts);
     }
+    const firstSettlementObservation = !this.#settledDeliveries.has(observed.deliveryId);
     this.#settledDeliveries.add(observed.deliveryId);
     const observations: Observation[] = [
       { type: 'request_observed', requestId: request.id, singleUse: request.singleUse },
       ...deliveryObservations,
       ...redemptionObservations,
       { type: 'mint_proofs_state', proofSetHash: proof.proofSetHash, state: 'SPENT' },
-      {
-        type: 'receiver_settled',
-        deliveryId: observed.deliveryId,
-        replacementPlanHash: settlementWitness,
-      },
-      {
-        type: 'merchant_credited',
-        creditId,
-        requestId: credit.requestId,
-        deliveryId: credit.deliveryId,
-        amount: credit.amount,
-        unit: credit.unit,
-      },
+      ...(firstSettlementObservation
+        ? ([
+            {
+              type: 'receiver_settled',
+              deliveryId: observed.deliveryId,
+              replacementPlanHash: settlementWitness,
+            },
+            {
+              type: 'merchant_credited',
+              creditId,
+              requestId: credit.requestId,
+              deliveryId: credit.deliveryId,
+              amount: credit.amount,
+              unit: credit.unit,
+            },
+          ] satisfies Observation[])
+        : []),
       {
         type: 'receipt_observed',
         requestId: observed.requestId,

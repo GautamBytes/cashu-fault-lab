@@ -340,7 +340,13 @@ describe('ExternalAdapterScenarioDriver', () => {
       'external-no-fault',
     );
 
-    expect(result.status).toBe('passed');
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: {
+        name: 'InvariantEvaluationError',
+        message: expect.stringContaining('at-most-once-redemption-start'),
+      },
+    });
     expect(
       result.artifact.history.filter(
         (event) => event.phase === 'observation' && event.event === 'delivery_attempted',
@@ -412,7 +418,10 @@ describe('ExternalAdapterScenarioDriver', () => {
       new ExternalAdapterScenarioDriver({ sender, receiver, faults, amount: 8, unit: 'sat' }),
     ).run(scenario('drop_response'), 'external-seed');
 
-    expect(result.status).toBe('passed');
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { name: 'InvariantEvaluationError' },
+    });
     expect(sender.calls).toBe(2);
     expect(new Set(sender.deliveryIds).size).toBe(1);
     expect((await receiver.ledger())[0]).toMatchObject({ creditCount: 1 });
@@ -534,7 +543,10 @@ describe('ExternalAdapterScenarioDriver', () => {
       }),
     ).run(scenario('drop_response'), 'external-backoff');
 
-    expect(result.status).toBe('passed');
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { name: 'InvariantEvaluationError' },
+    });
     expect(sender.calls).toBe(3);
     expect(waits).toEqual([100, 200]);
   });
@@ -555,7 +567,10 @@ describe('ExternalAdapterScenarioDriver', () => {
       'external-duplicate',
     );
 
-    expect(result.status).toBe('passed');
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { name: 'InvariantEvaluationError' },
+    });
     const observations = result.artifact.history.filter((event) => event.phase === 'observation');
     expect(observations.filter((event) => event.event === 'delivery_attempted')).toHaveLength(4);
     expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(0);
@@ -601,7 +616,7 @@ describe('ExternalAdapterScenarioDriver', () => {
     const observations = result.artifact.history.filter((event) => event.phase === 'observation');
     expect(observations.filter((event) => event.event === 'delivery_attempted')).toHaveLength(2);
     expect(observations.filter((event) => event.event === 'redemption_started')).toHaveLength(1);
-    expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(2);
+    expect(observations.filter((event) => event.event === 'merchant_credited')).toHaveLength(1);
   });
 
   it('waits for a restarted receiver adapter to become ready before the next command', async () => {
@@ -637,7 +652,10 @@ describe('ExternalAdapterScenarioDriver', () => {
       'external-restart-readiness',
     );
 
-    expect(result.status).toBe('passed');
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { name: 'InvariantEvaluationError' },
+    });
     expect(faults.restarts).toEqual(['receiver']);
     expect(waits).toEqual([25, 25]);
   });
@@ -675,7 +693,10 @@ describe('ExternalAdapterScenarioDriver', () => {
       'external-restart-durable-state',
     );
 
-    expect(result.status).toBe('passed');
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { name: 'InvariantEvaluationError' },
+    });
     expect(faults.restarts).toEqual(['receiver']);
     expect(waits).toEqual([25, 25]);
   });
@@ -713,7 +734,10 @@ describe('ExternalAdapterScenarioDriver', () => {
       'external-restart-pair-readiness',
     );
 
-    expect(result.status).toBe('passed');
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { name: 'InvariantEvaluationError' },
+    });
     expect(faults.restarts).toEqual(['receiver']);
     expect(waits).toEqual([25, 25, 25]);
   });
@@ -751,7 +775,10 @@ describe('ExternalAdapterScenarioDriver', () => {
       'external-repeated-container-restart-backoff',
     );
 
-    expect(result.status).toBe('passed');
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { name: 'InvariantEvaluationError' },
+    });
     expect(faults.restarts).toEqual(['receiver']);
     expect(waits).toHaveLength(20);
   });

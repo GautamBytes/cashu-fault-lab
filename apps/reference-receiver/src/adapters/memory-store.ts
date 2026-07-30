@@ -179,6 +179,7 @@ export class MemoryReceiverStore implements ReceiverStore {
         proofClaimIds: [...input.proofClaimIds],
         plan: structuredClone(input.plan),
         amount: request.amount,
+        redemptionStarts: 0,
         phase: 'prepared',
         receipt,
       };
@@ -196,6 +197,22 @@ export class MemoryReceiverStore implements ReceiverStore {
       const receipt = nextReceipt(record.receipt, 'processing', 'redeeming');
       draft.deliveries.set(deliveryId, { ...record, phase: 'mint_sent', receipt });
       return structuredClone(receipt);
+    });
+  }
+
+  async recordRedemptionStart(deliveryId: string): Promise<void> {
+    await this.#transaction((draft) => {
+      const record = this.#requireDelivery(draft, deliveryId);
+      if (record.phase === 'prepared' || record.phase === 'rejected') {
+        throw new ReceiverDomainError(
+          'INVALID_STATE',
+          'Delivery cannot record redemption from current phase',
+        );
+      }
+      draft.deliveries.set(deliveryId, {
+        ...record,
+        redemptionStarts: Math.min(record.redemptionStarts + 1, 1_000),
+      });
     });
   }
 
