@@ -167,6 +167,17 @@ footer {
   margin-left: auto;
 }
 
+.footer-profiles-label {
+  color: var(--muted-text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-right: 0.35rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .footer-profiles a {
   align-items: center;
   border-radius: var(--radius-sm);

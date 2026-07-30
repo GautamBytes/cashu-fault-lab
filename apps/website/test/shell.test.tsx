@@ -100,6 +100,7 @@ describe('site footer', () => {
     const profiles = within(footer).getByRole('navigation', {
       name: 'Gautam Manchandani profiles',
     });
+    expect(within(profiles).getByText('Reach out')).toBeVisible();
     const links = [
       ['X', 'https://x.com/GautamM96'],
       ['LinkedIn', 'https://www.linkedin.com/in/gautam-manchandani/'],

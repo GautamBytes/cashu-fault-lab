@@ -60,6 +60,7 @@ export function PortalShell({ children, records }: PortalShellProps) {
         <div className="footer-inner">
           <span>Experimental developer preview.</span>
           <nav aria-label="Gautam Manchandani profiles" className="footer-profiles">
+            <span className="footer-profiles-label">Reach out</span>
             <a href="https://x.com/GautamM96" rel="noreferrer noopener" target="_blank">
               X <span aria-hidden="true">↗</span>
             </a>
