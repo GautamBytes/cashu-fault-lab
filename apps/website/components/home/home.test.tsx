@@ -275,6 +275,10 @@ describe('home components', () => {
 
     expect(within(overview).getByText(summary.scenarioId)).toBeVisible();
     expect(within(overview).getByText(new RegExp(`Run ${summary.status}`, 'i'))).toBeVisible();
+    expect(
+      within(overview).getByText(/baseline report is retained from the reviewed v0\.1\.0 demo/i),
+    ).toBeVisible();
+    expect(within(overview).getByText(/not a v0\.1\.2 qualification result/i)).toBeVisible();
     expect(contextList).toBeVisible();
     expect(supportedList).toBeVisible();
     expect(screen.getByText('18', { selector: 'dd, strong' })).toBeVisible();

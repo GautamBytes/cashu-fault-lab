@@ -90,8 +90,9 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           <p className={styles.eyebrow}>Reviewed demo artifact</p>
           <h2 id="evidence-report-title">Evidence, not a success boolean.</h2>
           <p>
-            This report is summarized on the server from the checked-in v0.1.0 demo. Commands, proof
-            secrets, and arbitrary evidence payloads never reach this page.
+            This baseline report is retained from the reviewed v0.1.0 demo. Commands, proof secrets,
+            and arbitrary evidence payloads never reach this page. It is example evidence, not a
+            v0.1.2 qualification result.
           </p>
         </div>
 
