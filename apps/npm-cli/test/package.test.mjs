@@ -33,6 +33,7 @@ test('the bundled executable and runtime assets exist', async () => {
   await Promise.all([
     access(new URL('dist/bin.js', packageRoot)),
     access(new URL('runtime/scenarios/retry/response-lost.json', packageRoot)),
+    access(new URL('runtime/spec/maintainer-preview-suite.json', packageRoot)),
     access(new URL('runtime/compose/wallet-adapters.compose.yml', packageRoot)),
   ]);
   const compose = await readFile(

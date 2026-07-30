@@ -74,6 +74,7 @@ const createRequestInputSchema = {
       uniqueItems: true,
       items: { enum: ['http', 'nostr'] },
     },
+    httpTarget: { type: 'string', minLength: 1 },
     singleUse: { type: 'boolean' },
     expiresIn: { type: 'integer', minimum: 1, maximum: 86_400 },
   },

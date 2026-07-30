@@ -25,7 +25,13 @@ Useful commands:
 npx cashu-fault-lab ls
 npx cashu-fault-lab inspect retry/response-lost
 npx cashu-fault-lab adapter init --language typescript --name my-wallet
+npx cashu-fault-lab adapter preflight --adapters adapter-manifest.json
+npx cashu-fault-lab adapter preview --adapters adapter-manifest.json --sender my-wallet --receiver my-wallet
 ```
+
+Adapter preflight and preview accept loopback HTTP origins only. Preview runs response-loss and
+duplicate-delivery checks for one exact pair, starts its local fault gateway automatically, and
+writes a redacted feedback bundle. The bundle is diagnostic evidence, not release qualification.
 
 Cashu Fault Lab 0.1 is an experimental developer preview, not a certification that a wallet is
 production-safe.

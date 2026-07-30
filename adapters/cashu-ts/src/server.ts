@@ -184,8 +184,9 @@ function transportViews(
 ): readonly PaymentRequestTransport[] {
   return input.transports.map((transport): PaymentRequestTransport => {
     if (transport === 'http') {
-      if (!options.httpTarget) throw new Error('HTTP request target is not configured');
-      return { type: PaymentRequestTransportType.POST, target: options.httpTarget };
+      const target = input.httpTarget ?? options.httpTarget;
+      if (!target) throw new Error('HTTP request target is not configured');
+      return { type: PaymentRequestTransportType.POST, target };
     }
     if (!options.nostrTarget) throw new Error('Nostr request target is not configured');
     return {

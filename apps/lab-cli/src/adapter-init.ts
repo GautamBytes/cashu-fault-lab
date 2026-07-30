@@ -96,7 +96,7 @@ function templateContext(
     mints: [],
   };
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     adapters: [{ id: name, url: 'http://127.0.0.1:4100', tokenEnv: tokenEnv(name) }],
   };
   return {
@@ -226,6 +226,7 @@ export interface CreateRequestInput {
   readonly unit: string;
   readonly description?: string;
   readonly transports: readonly AdapterTransport[];
+  readonly httpTarget?: string;
   readonly singleUse: boolean;
   readonly expiresIn: number;
 }
@@ -275,6 +276,12 @@ export interface ProofEvidenceView {
   readonly state: 'unspent' | 'pending' | 'spent' | 'unknown';
 }
 
+export interface MintRedemptionEvidenceView {
+  readonly deliveryId: string;
+  readonly proofSetHash: string;
+  readonly starts: number;
+}
+
 export interface UnsupportedResponse {
   readonly status: 'N/A';
   readonly reason: string;
@@ -284,7 +291,7 @@ export interface UnsupportedResponse {
 
 export const contract = ${context.capabilitiesJson} as const satisfies AdapterCapabilities;
 
-export const routeCount = 7 as const;
+export const routeCount = 8 as const;
 `,
     'src/server.ts': `import Fastify from 'fastify';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -338,6 +345,9 @@ export function buildServer(options: ServerOptions = {}) {
   server.get('/v1/proofs', async (_request, reply) =>
     reply.code(501).send(unsupported('proof evidence is not implemented')),
   );
+  server.get('/v1/redemptions', async (_request, reply) =>
+    reply.code(501).send(unsupported('redemption evidence is not implemented')),
+  );
 
   return server;
 }
@@ -363,7 +373,7 @@ const token = 'test-token';
 const auth = { authorization: \`Bearer \${token}\` };
 
 describe('${context.name} adapter contract surface', () => {
-  it('exposes health and seven authenticated contract routes', async () => {
+  it('exposes health and eight authenticated contract routes', async () => {
     const server = buildServer({ token });
     try {
       expect((await server.inject('/healthz')).statusCode).toBe(200);
@@ -380,6 +390,7 @@ describe('${context.name} adapter contract surface', () => {
         { method: 'GET', url: '/v1/deliveries/AAECAwQFBgcICQoLDA0ODw' },
         { method: 'GET', url: '/v1/ledger' },
         { method: 'GET', url: '/v1/proofs' },
+        { method: 'GET', url: '/v1/redemptions' },
       ] as const) {
         const response = await server.inject({ ...request, headers: auth });
         expect(response.statusCode).toBe(501);
@@ -426,15 +437,27 @@ ${context.tokenEnv}=local-token pnpm start
 ${context.tokenEnv}=local-token HOST=0.0.0.0 pnpm start # opt in when publishing from a container
 \`\`\`
 
-The scaffold exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and five explicit \`501 N/A\` wallet-operation stubs.
+The scaffold exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and six explicit \`501 N/A\` wallet-operation stubs.
 
 Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
+
+## Validate with Cashu Fault Lab
+
+\`\`\`bash
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.2 adapter preflight --adapters adapter-manifest.json
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.2 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
+\`\`\`
+
+Preflight is read-only. Preview requires funded wallet operations and remains a maintainer diagnostic, not release qualification.
 `,
     '.github/workflows/ci.yml': `name: Adapter CI
 
 on:
   pull_request:
   push:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -448,6 +471,17 @@ jobs:
       - run: pnpm install
       - run: pnpm build
       - run: pnpm test
+      - name: Adapter contract preflight
+        run: |
+          ${context.tokenEnv}=adapter-ci-local-token pnpm start > adapter.log 2>&1 &
+          adapter_pid=$!
+          trap 'kill "$adapter_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null
+          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.1.2 adapter preflight --adapters adapter-manifest.json
       - run: docker build .
 `,
   };
@@ -548,6 +582,7 @@ pub struct CreateRequestInput {
     pub unit: String,
     pub description: Option<String>,
     pub transports: Vec<String>,
+    pub http_target: Option<String>,
     pub single_use: bool,
     pub expires_in: u64,
 }
@@ -619,6 +654,14 @@ pub struct ProofEvidenceView {
     pub proof_set_hash: String,
     pub input_ys: Vec<String>,
     pub state: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MintRedemptionEvidenceView {
+    pub delivery_id: String,
+    pub proof_set_hash: String,
+    pub starts: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -708,6 +751,7 @@ fn app_with_token(token: String) -> Router {
         .route("/v1/deliveries/{delivery_id}", get(not_applicable))
         .route("/v1/ledger", get(not_applicable))
         .route("/v1/proofs", get(not_applicable))
+        .route("/v1/redemptions", get(not_applicable))
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize));
     Router::new()
         .route("/healthz", get(healthz))
@@ -770,6 +814,7 @@ mod tests {
             (Method::GET, "/v1/deliveries/AAECAwQFBgcICQoLDA0ODw", StatusCode::NOT_IMPLEMENTED),
             (Method::GET, "/v1/ledger", StatusCode::NOT_IMPLEMENTED),
             (Method::GET, "/v1/proofs", StatusCode::NOT_IMPLEMENTED),
+            (Method::GET, "/v1/redemptions", StatusCode::NOT_IMPLEMENTED),
         ];
         for (method, uri, status) in routes {
             let response = app
@@ -814,15 +859,27 @@ ${context.tokenEnv}=local-token cargo run
 ${context.tokenEnv}=local-token HOST=0.0.0.0 cargo run # opt in when publishing from a container
 \`\`\`
 
-The scaffold uses Rust 1.97, edition 2024, Axum, and Tokio. It exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and five explicit \`501 N/A\` wallet-operation stubs.
+The scaffold uses Rust 1.97, edition 2024, Axum, and Tokio. It exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and six explicit \`501 N/A\` wallet-operation stubs.
 
 Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
+
+## Validate with Cashu Fault Lab
+
+\`\`\`bash
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.2 adapter preflight --adapters adapter-manifest.json
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.2 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
+\`\`\`
+
+Preflight is read-only. Preview requires funded wallet operations and remains a maintainer diagnostic, not release qualification.
 `,
     '.github/workflows/ci.yml': `name: Adapter CI
 
 on:
   pull_request:
   push:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -832,7 +889,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.97
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
       - run: cargo test
+      - name: Adapter contract preflight
+        run: |
+          ${context.tokenEnv}=adapter-ci-local-token cargo run > adapter.log 2>&1 &
+          adapter_pid=$!
+          trap 'kill "$adapter_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null
+          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.1.2 adapter preflight --adapters adapter-manifest.json
       - run: docker build .
 `,
   };
@@ -921,6 +992,7 @@ class CreateRequestInput(BaseModel):
     unit: str
     description: str | None = None
     transports: list[Literal["http", "nostr"]]
+    httpTarget: str | None = None
     singleUse: bool
     expiresIn: int
 
@@ -974,6 +1046,12 @@ class ProofEvidenceView(BaseModel):
     proofSetHash: str
     inputYs: list[str]
     state: Literal["unspent", "pending", "spent", "unknown"]
+
+
+class MintRedemptionEvidenceView(BaseModel):
+    deliveryId: str
+    proofSetHash: str
+    starts: int
 
 
 class UnsupportedResponse(BaseModel):
@@ -1052,6 +1130,11 @@ def ledger() -> UnsupportedResponse:
 @app.get("/v1/proofs", status_code=501, dependencies=[Depends(require_auth)])
 def proofs() -> UnsupportedResponse:
     return unsupported("proof evidence is not implemented")
+
+
+@app.get("/v1/redemptions", status_code=501, dependencies=[Depends(require_auth)])
+def redemptions() -> UnsupportedResponse:
+    return unsupported("redemption evidence is not implemented")
 `,
     'tests/test_contract.py': `from fastapi.testclient import TestClient
 
@@ -1078,6 +1161,7 @@ def test_health_and_contract_routes(monkeypatch):
         ("get", "/v1/deliveries/AAECAwQFBgcICQoLDA0ODw"),
         ("get", "/v1/ledger"),
         ("get", "/v1/proofs"),
+        ("get", "/v1/redemptions"),
     ]
     for method, path in routes:
         response = getattr(client, method)(path, headers=auth)
@@ -1107,13 +1191,25 @@ ${context.tokenEnv}=local-token uvicorn ${context.moduleName}.main:app --host 0.
 
 Development identities are not release provenance. Replace them with produced-artifact source/build digests before release qualification.
 
-The scaffold uses Python 3.12+, FastAPI, and Pydantic-ready type hints. It exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and five explicit \`501 N/A\` wallet-operation stubs.
+The scaffold uses Python 3.12+, FastAPI, and Pydantic-ready type hints. It exposes \`/healthz\`, \`/v1/capabilities\`, a working \`/v1/reset\` control route, and six explicit \`501 N/A\` wallet-operation stubs.
+
+## Validate with Cashu Fault Lab
+
+\`\`\`bash
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.2 adapter preflight --adapters adapter-manifest.json
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.2 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
+\`\`\`
+
+Preflight is read-only. Preview requires funded wallet operations and remains a maintainer diagnostic, not release qualification.
 `,
     '.github/workflows/ci.yml': `name: Adapter CI
 
 on:
   pull_request:
   push:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -1123,8 +1219,22 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
       - run: python -m pip install -e ".[test]"
       - run: pytest
+      - name: Adapter contract preflight
+        run: |
+          ${context.tokenEnv}=adapter-ci-local-token uvicorn ${context.moduleName}.main:app --host 127.0.0.1 --port 4100 > adapter.log 2>&1 &
+          adapter_pid=$!
+          trap 'kill "$adapter_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null
+          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.1.2 adapter preflight --adapters adapter-manifest.json
       - run: docker build .
 `,
   };

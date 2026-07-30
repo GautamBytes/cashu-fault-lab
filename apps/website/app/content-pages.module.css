@@ -310,47 +310,111 @@
 }
 
 .architectureHero {
-  background: var(--purple-950);
+  align-items: center;
+  background: linear-gradient(135deg, var(--purple-950) 0 52%, var(--control-surface) 52% 100%);
   color: var(--sand-100);
+  gap: clamp(2rem, 4vw, 3.5rem);
+  grid-template-columns: minmax(0, 1.08fr) minmax(19rem, 0.92fr);
+  min-height: 0;
+  padding-block: clamp(2.75rem, 5vw, 4.25rem);
+}
+
+.architectureHero::before {
+  inset: 0 auto 0 52%;
+}
+
+.architectureHero::after {
+  right: clamp(1.5rem, 4vw, 3rem);
+  width: clamp(6rem, 12vw, 10rem);
 }
 
 .architectureHero .eyebrow {
   color: var(--sand-500);
 }
 
+.architectureHero h1 {
+  font-size: clamp(3rem, 5vw, 4.35rem);
+  max-width: 11ch;
+}
+
+.architectureHero .lede {
+  font-size: clamp(1rem, 1.45vw, 1.16rem);
+  max-width: 38rem;
+}
+
+.architectureHeroCopy {
+  align-self: center;
+}
+
 .boundaryNote {
-  align-items: center;
-  background: var(--panel-translucent);
+  background: var(--control-surface);
   border: 1px solid var(--sand-border-soft);
   border-radius: var(--radius-sm);
+  box-shadow:
+    inset 3px 0 0 var(--purple-electric),
+    0 1.25rem 3rem rgb(0 0 0 / 20%);
+  overflow: hidden;
+}
+
+.boundaryHeading {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
   display: grid;
   gap: 1rem;
-  grid-template-columns: auto 1fr;
-  padding: 1.25rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 1.15rem;
 }
 
-.boundaryNote > span {
+.boundaryHeading > span {
   align-items: center;
   border: 1px solid var(--purple-500);
-  border-radius: var(--radius-sm);
+  color: var(--sand-300);
   display: flex;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 2rem;
-  height: 4rem;
+  font-size: 1.35rem;
+  height: 2.8rem;
   justify-content: center;
-  width: 4rem;
+  width: 2.8rem;
 }
 
-.boundaryNote p {
-  color: var(--sand-300);
-  line-height: 1.5;
+.boundaryHeading .stageKicker {
+  margin: 0 0 0.35rem;
+}
+
+.boundaryHeading h2 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  letter-spacing: 0;
+  line-height: 1.08;
   margin: 0;
 }
 
-.boundaryNote strong {
-  color: var(--sand-100);
-  display: block;
-  margin-bottom: 0.3rem;
+.boundaryNote ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.boundaryNote li {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--sand-300);
+  display: grid;
+  font-size: 0.82rem;
+  gap: 0.9rem;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  line-height: 1.45;
+  padding: 0.8rem 1.15rem;
+}
+
+.boundaryNote li:last-child {
+  border-bottom: 0;
+}
+
+.boundaryNote li > span {
+  color: var(--sand-500);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
 }
 
 .flowSection {
@@ -364,7 +428,7 @@
 }
 
 .sectionIntro {
-  max-width: 53rem;
+  max-width: 46rem;
 }
 
 .sectionIntro > p:last-child {
@@ -375,19 +439,37 @@
 }
 
 .topologyFigure {
-  margin: 3rem 0 0;
+  margin: 2rem 0 0;
 }
 
 .topologyDiagram {
   background: var(--ink);
   border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
   padding: clamp(1rem, 3vw, 2rem);
 }
 
-.deliveryPath,
-.branchList {
+.pipelineHeading {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--sand-500);
   display: grid;
-  gap: clamp(1.5rem, 5vw, 4rem);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
+  grid-template-columns: 1fr auto;
+  letter-spacing: 0.1em;
+  margin-bottom: 1rem;
+  padding: 0 0 0.8rem;
+  text-transform: uppercase;
+}
+
+.pipelineHeading span:last-child {
+  color: var(--muted-text);
+}
+
+.deliveryPath {
+  display: grid;
+  gap: 1rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   list-style: none;
   margin: 0;
@@ -400,202 +482,191 @@
 }
 
 .pathStage:not(:last-child)::after {
+  background: var(--ink);
   color: var(--sand-500);
   content: '→';
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 1.2rem;
+  font-size: 1rem;
+  padding: 0.1rem;
   position: absolute;
-  right: calc(clamp(1.5rem, 5vw, 4rem) * -0.67);
-  top: 50%;
+  right: -0.72rem;
+  top: 2rem;
   transform: translate(50%, -50%);
+  z-index: 2;
 }
 
 .stageCard {
   background: var(--elevated-surface);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
-  min-height: 14rem;
-  padding: 1.2rem;
+  height: 100%;
+  min-height: 11rem;
+  padding: 1rem;
   position: relative;
+}
+
+.stageHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
 }
 
 .flowMarker {
   align-items: center;
   background: var(--sand-300);
-  border: 2px solid var(--purple-950);
+  border: 1px solid var(--purple-500);
   color: var(--purple-950);
   display: flex;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 1rem;
-  height: 2.4rem;
+  font-size: 0.78rem;
+  height: 2.15rem;
   justify-content: center;
   position: relative;
-  width: 2.4rem;
+  width: 2.15rem;
   z-index: 1;
 }
 
 .stageKicker,
-.branchOrigin {
+.branchOrigin,
+.railLabel {
   color: var(--sand-500);
   display: block;
   font-size: 0.64rem;
-  margin: 2.5rem 0 0.8rem;
+  margin: 0;
 }
 
-.stageCard h3 {
+.stageCard h3,
+.branchCard h3,
+.evidenceNode h3,
+.qualificationCard h3 {
   font-family: 'Archivo Black', sans-serif;
-  font-size: 1.45rem;
   letter-spacing: 0;
   line-height: 1;
   margin: 0;
 }
 
+.stageCard h3 {
+  font-size: 1.3rem;
+}
+
 .stageCard p {
   color: var(--sand-300);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   line-height: 1.55;
-  margin: 1rem 0 0;
+  margin: 0.8rem 0 0;
 }
 
-.branchList {
-  margin-top: 4rem;
+.evidenceRail {
+  align-items: stretch;
+  border-top: 1px solid var(--purple-border-soft);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns:
+    minmax(0, 1.45fr) auto minmax(8.5rem, 0.85fr) auto
+    minmax(8.5rem, 0.85fr);
+  margin-top: 1rem;
+  padding-top: 1rem;
 }
 
-.senderBranch {
-  grid-column: 1;
+.evidenceSources {
+  background: var(--control-surface);
+  border: 1px dashed var(--purple-border);
+  padding: 0.85rem;
 }
 
-.receiverBranch {
-  grid-column: 3;
-}
-
-.senderBranch,
-.receiverBranch {
-  position: relative;
-}
-
-.senderBranch::before,
-.receiverBranch::before {
-  border-left: 2px solid var(--purple-500);
-  color: var(--sand-500);
-  content: '↓';
+.railLabel {
   font-family: 'IBM Plex Mono', monospace;
-  height: 4rem;
-  left: 50%;
-  padding-left: 0.45rem;
-  position: absolute;
-  top: -4rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.65rem;
+  text-transform: uppercase;
+}
+
+.evidenceSourceList {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .branchCard {
-  border-style: dashed;
-  min-height: 12rem;
+  align-items: start;
+  background: var(--elevated-surface);
+  border: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.7rem;
 }
 
 .branchCard .flowMarker {
-  position: absolute;
-  right: 1.2rem;
-  top: 1.2rem;
+  height: 1.8rem;
+  width: 1.8rem;
+}
+
+.branchCard h3 {
+  font-size: 0.98rem;
+  margin-top: 0.2rem;
 }
 
 .branchOrigin {
-  margin-top: 0;
-  padding-right: 3rem;
-}
-
-.convergenceLines {
-  border-bottom: 2px solid var(--purple-500);
-  border-left: 2px solid var(--purple-500);
-  border-right: 2px solid var(--purple-500);
-  height: 4rem;
-  margin: 0 calc(100% / 6);
-  position: relative;
-}
-
-.convergenceLines::after {
-  border-left: 2px solid var(--purple-500);
-  bottom: -2rem;
-  content: '↓';
-  color: var(--sand-500);
   font-family: 'IBM Plex Mono', monospace;
-  height: 2rem;
-  left: 50%;
-  padding-left: 0.45rem;
-  position: absolute;
-}
-
-.convergenceLines span,
-.oracleOutputLine span {
-  background: var(--purple-950);
-  color: var(--sand-500);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.62rem;
-  left: 50%;
-  padding: 0 0.65rem;
-  position: absolute;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  transform: translateX(-50%);
-  white-space: nowrap;
 }
 
-.convergenceLines span {
-  bottom: -0.45rem;
+.branchCard p {
+  color: var(--muted-text);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin: 0.45rem 0 0;
 }
 
-.oracleStage,
-.evidenceStage {
-  margin-left: auto;
-  margin-right: auto;
-  width: min(31rem, 58%);
+.evidenceArrow {
+  align-self: center;
+  color: var(--sand-500);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 1rem;
+}
+
+.evidenceNode {
+  background: var(--control-surface);
+  border: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.9rem;
+}
+
+.evidenceNode .stageKicker {
+  margin: 1.5rem 0 0.65rem;
+}
+
+.evidenceNode h3 {
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.evidenceNode p {
+  color: var(--muted-text);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  margin: 0.65rem 0 0;
 }
 
 .oracleStage {
   background: var(--purple-950);
   border-color: var(--purple-500);
   color: var(--sand-100);
-  margin-top: 2rem;
-  min-height: 12rem;
-}
-
-.oracleStage .flowMarker {
-  border-color: var(--purple-950);
-}
-
-.oracleStage .stageKicker,
-.oracleStage p {
-  color: var(--sand-300);
-}
-
-.oracleOutputLine {
-  border-left: 2px solid var(--sand-500);
-  height: 4rem;
-  margin: 0 auto;
-  position: relative;
-  width: 0;
-}
-
-.oracleOutputLine::after {
-  bottom: -0.5rem;
-  color: var(--sand-500);
-  content: '↓';
-  font-family: 'IBM Plex Mono', monospace;
-  left: -0.42rem;
-  position: absolute;
-}
-
-.oracleOutputLine span {
-  top: 50%;
-  transform: translate(-50%, -50%);
+  box-shadow: inset 3px 0 0 var(--purple-electric);
 }
 
 .evidenceStage {
-  border-style: double;
-  border-width: 3px;
-  min-height: 12rem;
+  background: var(--elevated-surface);
 }
 
 .topologyCaption {
-  border-bottom: 1px solid var(--purple-500);
   color: var(--sand-500);
   font-size: 0.68rem;
   line-height: 1.6;
@@ -605,6 +676,9 @@
 .separationSection,
 .blockersSection {
   border-top: 1px solid var(--hairline);
+}
+
+.blockersSection {
   display: grid;
   gap: clamp(2.5rem, 7vw, 7rem);
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -612,18 +686,134 @@
 
 .separationSection {
   background: var(--elevated-surface);
+  display: block;
 }
 
-.separationCopy,
 .safetyCopy {
   align-self: end;
 }
 
-.separationCopy > p,
 .safetyCopy > p:last-child {
   font-size: 1.03rem;
   line-height: 1.65;
   margin: 0;
+}
+
+.separationIntro {
+  align-items: end;
+  display: grid;
+  gap: 1rem clamp(2rem, 6vw, 5rem);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+}
+
+.separationIntro .eyebrow {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+.separationIntro h2 {
+  font-size: clamp(2.25rem, 4vw, 3.5rem);
+  max-width: 16ch;
+}
+
+.separationIntro > p:last-child {
+  color: var(--sand-300);
+  font-size: 0.96rem;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.qualificationGrid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 2rem;
+}
+
+.qualificationCard {
+  background: var(--control-surface);
+  border: 1px solid var(--hairline);
+  border-top: 3px solid var(--sand-500);
+  padding: clamp(1.1rem, 2.5vw, 1.5rem);
+}
+
+.qualificationCard:last-child {
+  background: var(--purple-950);
+  border-top-color: var(--purple-electric);
+}
+
+.qualificationCard > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.qualificationStatus {
+  border: 1px solid var(--sand-border-soft);
+  color: var(--sand-300);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
+  padding: 0.35rem 0.5rem;
+  text-transform: uppercase;
+}
+
+.qualificationCard h3 {
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  margin-top: 1.5rem;
+}
+
+.qualificationCard > p {
+  color: var(--sand-300);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0.8rem 0 0;
+}
+
+.qualificationCard ul {
+  display: grid;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 1.25rem 0 0;
+  padding: 0;
+}
+
+.qualificationCard li {
+  align-items: start;
+  border-top: 1px solid var(--hairline);
+  color: var(--sand-300);
+  display: grid;
+  font-size: 0.8rem;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  line-height: 1.4;
+  padding-top: 0.65rem;
+}
+
+.qualificationCard li::before {
+  color: var(--sand-500);
+  content: '✓';
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.qualificationAction {
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+}
+
+.qualificationAction p {
+  color: var(--muted-text);
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.qualificationAction .inlineLink {
+  margin-top: 0;
+  white-space: nowrap;
 }
 
 .releaseHero {
@@ -815,9 +1005,35 @@
   }
 
   .heroReadout,
-  .statusStamp,
-  .boundaryNote {
+  .statusStamp {
     max-width: 34rem;
+  }
+
+  .architectureHero {
+    background: var(--purple-950);
+    min-height: 0;
+  }
+
+  .boundaryNote {
+    max-width: none;
+    width: 100%;
+  }
+
+  .evidenceRail {
+    grid-template-columns: 1fr;
+  }
+
+  .evidenceArrow {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+
+  .evidenceSourceList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .separationIntro {
+    grid-template-columns: 1fr;
   }
 
   .scenarioGrid,
@@ -854,6 +1070,10 @@
     font-size: clamp(3.4rem, 18vw, 5.6rem);
   }
 
+  .architectureHero h1 {
+    font-size: clamp(2.65rem, 13vw, 4.1rem);
+  }
+
   .groupHeading {
     align-items: start;
     flex-direction: column;
@@ -863,6 +1083,7 @@
   .gateGrid,
   .separationSection,
   .blockersSection,
+  .qualificationGrid,
   .sourceRail {
     grid-template-columns: 1fr;
   }
@@ -875,8 +1096,7 @@
     padding: 0.8rem;
   }
 
-  .deliveryPath,
-  .branchList {
+  .deliveryPath {
     gap: 0;
     grid-template-columns: 1fr;
   }
@@ -894,24 +1114,8 @@
     transform: translateX(-50%);
   }
 
-  .branchList {
-    border-top: 1px dashed var(--purple-500);
-    margin-top: 3rem;
-    padding-top: 3rem;
-  }
-
-  .senderBranch,
-  .receiverBranch {
-    grid-column: 1;
-  }
-
-  .receiverBranch {
-    margin-top: 1rem;
-  }
-
-  .senderBranch::before,
-  .receiverBranch::before {
-    display: none;
+  .evidenceSourceList {
+    grid-template-columns: 1fr;
   }
 
   .stageCard,
@@ -923,24 +1127,19 @@
     border-left-width: 3px;
   }
 
-  .convergenceLines {
-    border-bottom: 0;
-    border-left: 2px solid var(--purple-500);
-    border-right: 0;
-    height: 4rem;
-    margin: 0 auto;
-    width: 0;
+  .pipelineHeading {
+    align-items: start;
+    gap: 0.5rem;
   }
 
-  .convergenceLines span {
-    bottom: auto;
-    top: 50%;
-    transform: translate(-50%, -50%);
+  .pipelineHeading span:last-child {
+    max-width: 18ch;
+    text-align: right;
   }
 
-  .oracleStage,
-  .evidenceStage {
-    width: 100%;
+  .qualificationAction {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .sourceRail a {

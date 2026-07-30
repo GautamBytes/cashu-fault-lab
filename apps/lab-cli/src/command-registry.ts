@@ -98,6 +98,73 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
       exitCodes: COMMON_EXIT_CODES,
     },
     {
+      name: 'adapter preflight',
+      usage: 'cashu-fault-lab adapter preflight --adapters <path>',
+      summary: 'Run read-only readiness checks against loopback wallet adapters',
+      arguments: [],
+      options: [
+        { flags: '--adapters <path>', description: 'Local adapter manifest.' },
+        { flags: '--adapter <id>', description: 'Check only one registered adapter.' },
+        {
+          flags: '--profile <profile>',
+          description: 'Profile readiness to inspect.',
+          defaultValue: 'delivery-v1',
+        },
+        { flags: '--json', description: 'Emit a machine-readable preflight report.' },
+      ],
+      examples: [
+        'cashu-fault-lab adapter preflight --adapters adapter-manifest.json',
+        'cashu-fault-lab adapter preflight --adapters adapter-manifest.json --adapter my-wallet --json',
+      ],
+      env: ['<adapter token environment variables from the manifest>'],
+      modes: ['text', 'json'],
+      artifacts: [],
+      exitCodes: COMMON_EXIT_CODES,
+    },
+    {
+      name: 'adapter preview',
+      usage: 'cashu-fault-lab adapter preview --adapters <path>',
+      summary: 'Run a non-qualifying maintainer preview for one loopback adapter pair',
+      arguments: [],
+      options: [
+        { flags: '--adapters <path>', description: 'Local adapter manifest.' },
+        { flags: '--sender <id>', description: 'Sender adapter ID.' },
+        { flags: '--receiver <id>', description: 'Receiver adapter ID.' },
+        {
+          flags: '--profile <profile>',
+          description: 'Delivery profile.',
+          defaultValue: 'delivery-v1',
+        },
+        {
+          flags: '--seed <seed>',
+          description: 'Deterministic preview seed.',
+          defaultValue: 'cashu-fault-lab-maintainer-preview',
+        },
+        {
+          flags: '--output-dir <path>',
+          description: 'Preview result directory.',
+          defaultValue: 'cashu-fault-results',
+        },
+      ],
+      examples: [
+        'cashu-fault-lab adapter preview --adapters adapter-manifest.json --sender my-wallet --receiver my-wallet',
+      ],
+      env: [
+        '<adapter token environment variables from the manifest>',
+        'CFL_HTTP_FAULT_GATEWAY_URL',
+        'CFL_HTTP_FAULT_GATEWAY_TOKEN',
+      ],
+      modes: ['text'],
+      artifacts: [
+        '<output-dir>/README.txt',
+        '<output-dir>/preflight.json',
+        '<output-dir>/preview.json',
+        '<output-dir>/preview.html',
+        '<output-dir>/preview.junit.xml',
+      ],
+      exitCodes: COMMON_EXIT_CODES,
+    },
+    {
       name: 'demo',
       usage: 'cashu-fault-lab demo',
       summary: 'Run the response-loss recovery demo against the reference stack',

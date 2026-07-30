@@ -85,6 +85,7 @@ export interface CreateRequestInput {
   readonly unit: string;
   readonly description?: string;
   readonly transports: readonly AdapterTransport[];
+  readonly httpTarget?: string;
   readonly singleUse: boolean;
   readonly expiresIn: number;
 }

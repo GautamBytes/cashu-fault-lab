@@ -105,6 +105,30 @@ describe('FundedReceiverAdapterControl', () => {
     ).rejects.toThrow('Payment request not found');
   });
 
+  it('uses an HTTP target origin override while preserving the receiver payment path', async () => {
+    const control = new FundedReceiverAdapterControl({
+      store: new MemoryReceiverStore(),
+      mintUrl: 'https://mint.example',
+      paymentTarget: 'http://127.0.0.1:4200/pay',
+      now: () => now,
+    });
+    await control.reset('receiver-seed');
+
+    const request = await control.createRequest({
+      amount: 8,
+      unit: 'sat',
+      transports: ['http'],
+      httpTarget: 'http://127.0.0.1:4300',
+      singleUse: true,
+      expiresIn: 900,
+    });
+
+    expect(request.transports).toEqual([{ type: 'post', target: 'http://127.0.0.1:4300/pay' }]);
+    expect(
+      PaymentRequest.fromEncodedRequest(request.raw).getTransport(PaymentRequestTransportType.POST),
+    ).toMatchObject({ target: 'http://127.0.0.1:4300/pay' });
+  });
+
   it('reports the cumulative redemption starts recorded at dispatch', async () => {
     const store = new MemoryReceiverStore();
     const control = new FundedReceiverAdapterControl({

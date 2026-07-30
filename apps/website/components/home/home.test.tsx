@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import HomePage from '../../app/page';
 import { getDemoSummary } from '../../lib/demo';
@@ -103,6 +104,23 @@ describe('home components', () => {
     expect(within(explorer).getByText(String(expectedScenarioCount))).toBeVisible();
   });
 
+  it('copies the single-line demo command without release metadata', async () => {
+    stubMotionPreference();
+    const user = userEvent.setup();
+    render(await HomePage());
+
+    const command = screen.getByLabelText('Demo command');
+    expect(within(command).getByText('npx cashu-fault-lab demo')).toHaveAttribute('tabindex', '0');
+    expect(
+      within(command).queryByText('available with v0.1.1 · isolated · secret-redacted'),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(command).getByRole('button', { name: 'Copy demo command' }));
+
+    expect(await navigator.clipboard.readText()).toBe('npx cashu-fault-lab demo');
+    expect(within(command).getByText('Copied')).toBeVisible();
+  });
+
   it('renders canonical artifact data without a second staged trace', async () => {
     stubMotionPreference();
     const summary = await getDemoSummary();
@@ -187,6 +205,25 @@ describe('home components', () => {
     const commandCodeRule = css.match(/\.commandBlock code\s*{([^}]*)}/)?.[1];
 
     expect(commandCodeRule).toMatch(/border:\s*0/);
+  });
+
+  it('keeps the hero quickstart command compact and on one line at every breakpoint', async () => {
+    const css = await readFile(homePath('home.module.css'), 'utf8');
+    const heroCopyRule = cssRules(css, 'heroCopy')[0];
+    const commandBlockRule = cssRules(css, 'commandBlock')[0];
+    const copyButtonRule = cssRules(css, 'commandCopyButton')[0];
+    const commandCodeRule = css.match(/\.commandBlock code\s*{([^}]*)}/)?.[1];
+
+    expect(heroCopyRule).toMatch(/min-width:\s*0/);
+    expect(commandBlockRule).toMatch(/min-width:\s*0/);
+    expect(commandBlockRule).toMatch(/max-width:\s*100%/);
+    expect(commandBlockRule).toMatch(/width:\s*fit-content/);
+    expect(commandCodeRule).not.toMatch(/flex:\s*1/);
+    expect(commandCodeRule).toMatch(/white-space:\s*nowrap/);
+    expect(copyButtonRule).not.toMatch(/margin-left:\s*auto/);
+    expect(cssRules(css, 'commandBlock').every((rule) => !/flex-wrap:\s*wrap/.test(rule))).toBe(
+      true,
+    );
   });
 
   it('keeps CTA text above 4.5 to 1 across every primary gradient stop', async () => {

@@ -757,6 +757,9 @@ export class PackagedLabRuntime implements LabRuntime {
         amount: 8,
         unit: 'sat',
         transports: externalScenarioTransports(scenario.name),
+        ...(this.#env.CFL_HTTP_FAULT_GATEWAY_URL === undefined
+          ? {}
+          : { httpTarget: this.#env.CFL_HTTP_FAULT_GATEWAY_URL }),
         senderAlias: aliases.senderAlias,
         requestAlias: aliases.requestAlias,
       });
@@ -839,6 +842,135 @@ export class PackagedLabRuntime implements LabRuntime {
     return result;
   }
 
+  async #externalMatrix(
+    adapterManifest: AdapterManifest,
+    seed: string,
+    scenarioSuite?: LoadedReleaseSuite,
+  ): Promise<{
+    readonly registry: ExternalAdapterRegistry;
+    readonly matrix: CompatibilityMatrix;
+  }> {
+    const registry = await ExternalAdapterRegistry.load(adapterManifest, this.#env, {
+      ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
+    });
+    const matrix = new CompatibilityMatrix(async (selected, sender, receiver) => {
+      const senderClient = registry.client(sender.id);
+      const receiverClient = registry.client(receiver.id);
+      if (senderClient === undefined || receiverClient === undefined) {
+        return {
+          ok: false,
+          code: 'ADAPTER_REGISTRY_IDENTITY',
+          reason: 'Matrix participant is missing from the external adapter registry',
+        };
+      }
+      const smoke = await runExternalDeliveryPair({
+        profile: selected,
+        seed,
+        sender: senderClient,
+        receiver: receiverClient,
+        amount: 8,
+        unit: 'sat',
+      });
+      if (!smoke.ok || scenarioSuite === undefined) return smoke;
+      const scenarios: MatrixScenarioEvidence[] = [];
+      for (const entry of scenarioSuite.scenarios) {
+        const scenarioSeed = String(
+          seededProtocolId(seed, `release-suite:${sender.id}:${receiver.id}:${entry.id}`),
+        );
+        const senderRole = sender.capabilities.roles.sender;
+        const receiverRole = receiver.capabilities.roles.receiver;
+        if (
+          senderRole === undefined ||
+          DURABILITY_RANK[senderRole.durability] < DURABILITY_RANK[entry.senderDurability]
+        ) {
+          scenarios.push(
+            suiteNotApplicable(
+              entry,
+              scenarioSeed,
+              `Sender durability does not meet ${entry.senderDurability}`,
+            ),
+          );
+          continue;
+        }
+        if (
+          receiverRole === undefined ||
+          DURABILITY_RANK[receiverRole.durability] < DURABILITY_RANK[entry.receiverDurability]
+        ) {
+          scenarios.push(
+            suiteNotApplicable(
+              entry,
+              scenarioSeed,
+              `Receiver durability does not meet ${entry.receiverDurability}`,
+            ),
+          );
+          continue;
+        }
+        const aliases = logicalAliases(entry.spec);
+        if (aliases === undefined) {
+          scenarios.push({
+            id: entry.id,
+            seed: scenarioSeed,
+            status: 'failed',
+            requiredInvariants: entry.requiredInvariants,
+            invariants: [],
+            code: 'SCENARIO_INPUT_INVALID',
+            reason: 'Release scenario requires one logical sender and request',
+          });
+          continue;
+        }
+        const evidence = registry.evidence(receiver.id);
+        const driver = new ExternalAdapterScenarioDriver({
+          sender: senderClient,
+          receiver: receiverClient,
+          ...(evidence === undefined ? {} : { evidence }),
+          faults: new RestartableExternalFaultController(
+            this.#faultController(),
+            this.#services,
+            { sender: sender.id, receiver: receiver.id },
+            { sender: senderClient, receiver: receiverClient },
+          ),
+          amount: 8,
+          unit: 'sat',
+          transports: entry.transports,
+          ...(this.#env.CFL_HTTP_FAULT_GATEWAY_URL === undefined
+            ? {}
+            : { httpTarget: this.#env.CFL_HTTP_FAULT_GATEWAY_URL }),
+          senderAlias: aliases.senderAlias,
+          requestAlias: aliases.requestAlias,
+        });
+        const result = withPackagedMetadata(
+          await new ScenarioRunner(driver).run(entry.spec, scenarioSeed),
+        );
+        scenarios.push(suiteEvidence(entry, scenarioSeed, result));
+      }
+      return {
+        ...smoke,
+        invariants: aggregateReleaseSuiteInvariants(scenarios),
+        scenarios,
+        releaseSuiteDigest: scenarioSuite.digest,
+      } satisfies MatrixExecutionResult;
+    });
+    return { registry, matrix };
+  }
+
+  async preview(
+    profileName: string,
+    seed: string,
+    adapterManifest: AdapterManifest,
+    senderId: string,
+    receiverId: string,
+    scenarioSuite: LoadedReleaseSuite,
+  ): Promise<MatrixCaseResult> {
+    const { registry, matrix } = await this.#externalMatrix(adapterManifest, seed, scenarioSuite);
+    const participants = registry.participants();
+    const sender = participants.find(({ id }) => id === senderId);
+    const receiver = participants.find(({ id }) => id === receiverId);
+    if (sender === undefined || receiver === undefined) {
+      throw new Error(`External adapter pair is not registered: ${senderId} -> ${receiverId}`);
+    }
+    return matrix.runPair(profileName, sender, receiver);
+  }
+
   async matrix(
     profileName: string,
     seed: string,
@@ -846,103 +978,11 @@ export class PackagedLabRuntime implements LabRuntime {
     releaseSuite?: LoadedReleaseSuite,
   ): Promise<readonly MatrixCaseResult[]> {
     if (adapterManifest !== undefined) {
-      const registry = await ExternalAdapterRegistry.load(adapterManifest, this.#env, {
-        ...(this.#fetch === undefined ? {} : { fetch: this.#fetch }),
-      });
-      const externalMatrix = new CompatibilityMatrix(async (selected, sender, receiver) => {
-        const senderClient = registry.client(sender.id);
-        const receiverClient = registry.client(receiver.id);
-        if (senderClient === undefined || receiverClient === undefined) {
-          return {
-            ok: false,
-            code: 'ADAPTER_REGISTRY_IDENTITY',
-            reason: 'Matrix participant is missing from the external adapter registry',
-          };
-        }
-        const smoke = await runExternalDeliveryPair({
-          profile: selected,
-          seed,
-          sender: senderClient,
-          receiver: receiverClient,
-          amount: 8,
-          unit: 'sat',
-        });
-        if (!smoke.ok || releaseSuite === undefined) return smoke;
-        const scenarios: MatrixScenarioEvidence[] = [];
-        for (const entry of releaseSuite.scenarios) {
-          const scenarioSeed = String(
-            seededProtocolId(seed, `release-suite:${sender.id}:${receiver.id}:${entry.id}`),
-          );
-          const senderRole = sender.capabilities.roles.sender;
-          const receiverRole = receiver.capabilities.roles.receiver;
-          if (
-            senderRole === undefined ||
-            DURABILITY_RANK[senderRole.durability] < DURABILITY_RANK[entry.senderDurability]
-          ) {
-            scenarios.push(
-              suiteNotApplicable(
-                entry,
-                scenarioSeed,
-                `Sender durability does not meet ${entry.senderDurability}`,
-              ),
-            );
-            continue;
-          }
-          if (
-            receiverRole === undefined ||
-            DURABILITY_RANK[receiverRole.durability] < DURABILITY_RANK[entry.receiverDurability]
-          ) {
-            scenarios.push(
-              suiteNotApplicable(
-                entry,
-                scenarioSeed,
-                `Receiver durability does not meet ${entry.receiverDurability}`,
-              ),
-            );
-            continue;
-          }
-          const aliases = logicalAliases(entry.spec);
-          if (aliases === undefined) {
-            scenarios.push({
-              id: entry.id,
-              seed: scenarioSeed,
-              status: 'failed',
-              requiredInvariants: entry.requiredInvariants,
-              invariants: [],
-              code: 'SCENARIO_INPUT_INVALID',
-              reason: 'Release scenario requires one logical sender and request',
-            });
-            continue;
-          }
-          const evidence = registry.evidence(receiver.id);
-          const driver = new ExternalAdapterScenarioDriver({
-            sender: senderClient,
-            receiver: receiverClient,
-            ...(evidence === undefined ? {} : { evidence }),
-            faults: new RestartableExternalFaultController(
-              this.#faultController(),
-              this.#services,
-              { sender: sender.id, receiver: receiver.id },
-              { sender: senderClient, receiver: receiverClient },
-            ),
-            amount: 8,
-            unit: 'sat',
-            transports: entry.transports,
-            senderAlias: aliases.senderAlias,
-            requestAlias: aliases.requestAlias,
-          });
-          const result = withPackagedMetadata(
-            await new ScenarioRunner(driver).run(entry.spec, scenarioSeed),
-          );
-          scenarios.push(suiteEvidence(entry, scenarioSeed, result));
-        }
-        return {
-          ...smoke,
-          invariants: aggregateReleaseSuiteInvariants(scenarios),
-          scenarios,
-          releaseSuiteDigest: releaseSuite.digest,
-        } satisfies MatrixExecutionResult;
-      });
+      const { registry, matrix: externalMatrix } = await this.#externalMatrix(
+        adapterManifest,
+        seed,
+        releaseSuite,
+      );
       const externalParticipants = registry.participants();
       return externalMatrix.run(profileName, externalParticipants, externalParticipants);
     }

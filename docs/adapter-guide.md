@@ -60,6 +60,43 @@ Treat the pinned NUT-26 NIP-04/raw-key mapping as a separate expected-failure pr
 
 Expose hashes, status, amount, unit, and stable error codes. Keep proof secrets, signatures, witnesses, blinded messages, blinding factors, complete payloads, private keys, and bearer values out of adapter logs and responses.
 
+## Maintainer preview
+
+Version 0.1.2 intentionally accepts only adapter and evidence origins on
+`http://127.0.0.1:<port>` or `http://[::1]:<port>`. Hosted adapters, TLS termination, redirects,
+userinfo, paths, queries, and fragments are rejected. This keeps wallet control tokens and funded
+test traffic on the maintainer's machine while the external contract is still experimental.
+
+Start the adapter processes, export the token variables named by `adapter-manifest.json`, and run:
+
+```bash
+npx cashu-fault-lab@0.1.2 adapter preflight \
+  --adapters adapter-manifest.json
+
+npx cashu-fault-lab@0.1.2 adapter preview \
+  --adapters adapter-manifest.json \
+  --sender my-wallet \
+  --receiver my-wallet \
+  --output-dir cashu-fault-results
+```
+
+Preflight is read-only: it checks authentication, identity, contract compatibility, profile support,
+and configured evidence authorities without resetting wallet state. Preview then runs the exact
+selected pair through the response-loss and duplicate-delivery scenarios. It automatically starts
+an authenticated loopback fault gateway on port `4300` when no gateway is configured, and always
+stops a gateway it started.
+
+The receiver's generated payment request must advertise the gateway origin
+(`http://127.0.0.1:4300`) as its HTTP target so the preview can inject transport faults; the gateway
+forwards that path to the selected receiver adapter origin. Set `CFL_HTTP_FAULT_GATEWAY_URL` and
+`CFL_HTTP_FAULT_GATEWAY_TOKEN` only when reusing an already-running loopback gateway.
+When `/v1/requests` receives `httpTarget`, use that value for HTTP transport targets. If it is an
+origin without a path, preserve the adapter's normal payment path under that origin.
+
+Share `cashu-fault-results/preview.json` or `preview.html` when opening an issue. The bundle also
+contains JUnit, the preflight result, exact per-scenario replay commands, and a short README. It is
+redacted developer feedback evidence, not certification or release qualification.
+
 ## Local checks
 
 ```bash

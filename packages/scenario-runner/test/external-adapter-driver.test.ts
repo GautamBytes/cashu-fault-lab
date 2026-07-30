@@ -172,6 +172,7 @@ class Receiver implements AdapterClient {
   deliveryId = '';
   capabilityFailures = 0;
   deliveryFailures = 0;
+  readonly createRequestInputs: CreateRequestInput[] = [];
   readonly request: PaymentRequestView = {
     id: requestId,
     raw: 'creqAexternal',
@@ -192,7 +193,8 @@ class Receiver implements AdapterClient {
 
   async reset(): Promise<void> {}
 
-  async createRequest(_input: CreateRequestInput): Promise<PaymentRequestView> {
+  async createRequest(input: CreateRequestInput): Promise<PaymentRequestView> {
+    this.createRequestInputs.push(input);
     return this.request;
   }
 
@@ -370,6 +372,34 @@ describe('ExternalAdapterScenarioDriver', () => {
     expect(result.status).toBe('failed');
     if (result.status !== 'failed') throw new Error('Expected configured fault to fail');
     expect(result.error.message).toBe('External configured fault was not exercised');
+  });
+
+  it('passes the configured HTTP gateway target to receiver request creation', async () => {
+    const receiver = new Receiver();
+    const sender = new Sender(receiver);
+    const options = {
+      sender,
+      receiver,
+      faults: new ZeroTrafficFaults(),
+      amount: 8,
+      unit: 'sat',
+      httpTarget: 'http://127.0.0.1:4300',
+    };
+
+    await new ScenarioRunner(new ExternalAdapterScenarioDriver(options)).run(
+      {
+        name: 'external-gateway-target',
+        commands: [{ type: 'assert_quiescent' }],
+      },
+      'external-gateway-target',
+    );
+
+    expect(receiver.createRequestInputs).toEqual([
+      expect.objectContaining({
+        transports: ['http'],
+        httpTarget: 'http://127.0.0.1:4300',
+      }),
+    ]);
   });
 
   it('fails explicitly when gateway traffic did not apply the configured fault rule', async () => {

@@ -74,6 +74,59 @@ Examples:
 - `cashu-fault-lab adapter init --language rust --name my-wallet`
 - `cashu-fault-lab adapter init --language python --name receive-only --role receiver --output ./receive-only`
 
+## `cashu-fault-lab adapter preflight --adapters <path>`
+
+Run read-only readiness checks against loopback wallet adapters
+
+Options:
+
+- `--adapters <path>`: Local adapter manifest.
+- `--adapter <id>`: Check only one registered adapter.
+- `--profile <profile>`: Profile readiness to inspect. Default: `delivery-v1`.
+- `--json`: Emit a machine-readable preflight report.
+
+Modes: `text`, `json`
+Environment: `<adapter token environment variables from the manifest>`
+Artifacts: None
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab adapter preflight --adapters adapter-manifest.json`
+- `cashu-fault-lab adapter preflight --adapters adapter-manifest.json --adapter my-wallet --json`
+
+## `cashu-fault-lab adapter preview --adapters <path>`
+
+Run a non-qualifying maintainer preview for one loopback adapter pair
+
+Options:
+
+- `--adapters <path>`: Local adapter manifest.
+- `--sender <id>`: Sender adapter ID.
+- `--receiver <id>`: Receiver adapter ID.
+- `--profile <profile>`: Delivery profile. Default: `delivery-v1`.
+- `--seed <seed>`: Deterministic preview seed. Default: `cashu-fault-lab-maintainer-preview`.
+- `--output-dir <path>`: Preview result directory. Default: `cashu-fault-results`.
+
+Modes: `text`
+Environment: `<adapter token environment variables from the manifest>`, `CFL_HTTP_FAULT_GATEWAY_URL`, `CFL_HTTP_FAULT_GATEWAY_TOKEN`
+Artifacts: `<output-dir>/README.txt`, `<output-dir>/preflight.json`, `<output-dir>/preview.json`, `<output-dir>/preview.html`, `<output-dir>/preview.junit.xml`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab adapter preview --adapters adapter-manifest.json --sender my-wallet --receiver my-wallet`
+
 ## `cashu-fault-lab demo`
 
 Run the response-loss recovery demo against the reference stack

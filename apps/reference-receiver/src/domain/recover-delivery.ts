@@ -57,7 +57,9 @@ async function recoverLockedDelivery(
       return receipt;
     }
 
-    const restored = await deps.mint.restore(record.plan);
+    const restored = await deps.mint.restore(record.plan, {
+      afterRequestDispatched: () => deps.store.recordRedemptionStart(deliveryId),
+    });
     if (restored.kind === 'recovered') {
       return settleWithCheckpoints(
         {

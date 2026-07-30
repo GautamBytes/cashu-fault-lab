@@ -17,10 +17,14 @@ import {
   type ScenarioRunResult,
   type ScenarioSpec,
 } from '@cashu-fault-lab/scenario-runner';
+import { HttpFaultGateway } from '@cashu-fault-lab/http-fault-gateway';
 import { Command, CommanderError, Option } from 'commander';
+import { randomBytes } from 'node:crypto';
 import { chmod, mkdir, readFile, writeFile, readdir, realpath } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
+import { preflightLocalAdapters, type AdapterPreflightReport } from './adapter-preflight.js';
+import { createAdapterPreviewArtifacts, validateLocalFaultGateway } from './adapter-preview.js';
 import { registerAdapterCommands } from './commands/adapter.js';
 import { registerLifecycleCommands } from './commands/lifecycle.js';
 import {
@@ -82,6 +86,14 @@ export interface LabRuntime {
     adapterManifest?: AdapterManifest,
     releaseSuite?: LoadedReleaseSuite,
   ): Promise<readonly MatrixCaseResult[]>;
+  preview(
+    profile: string,
+    seed: string,
+    adapterManifest: AdapterManifest,
+    sender: string,
+    receiver: string,
+    scenarioSuite: LoadedReleaseSuite,
+  ): Promise<MatrixCaseResult>;
 }
 
 export interface CliIo {
@@ -98,6 +110,28 @@ export interface RunCliDependencies {
   readonly doctorProbes?: import('./doctor.js').DoctorProbes;
   readonly distribution?: 'workspace' | 'package';
   readonly version?: string;
+  readonly adapterPreflight?: (
+    manifest: AdapterManifest,
+    options: {
+      readonly profile: string;
+      readonly adapterId?: string;
+      readonly requiredRoles?: ReadonlyMap<string, readonly ('sender' | 'receiver')[]>;
+    },
+  ) => Promise<AdapterPreflightReport>;
+  readonly adapterPreview?: (
+    manifest: AdapterManifest,
+    options: {
+      readonly profile: string;
+      readonly seed: string;
+      readonly sender: string;
+      readonly receiver: string;
+      readonly manifestPath: string;
+    },
+  ) => Promise<{
+    readonly status: MatrixCaseResult['status'];
+    readonly artifacts: ReadonlyMap<string, string>;
+  }>;
+  readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
 export interface CliOutcome {
@@ -252,13 +286,15 @@ export async function runCli(
   const diagnosticJson = argv[2] === '--json';
   const parseArgv = diagnosticJson ? [argv[0]!, argv[1]!, ...argv.slice(3)] : [...argv];
   const io = dependencies.io ?? defaultIo;
-  const runtime = dependencies.runtime ?? new PackagedLabRuntime();
+  const env = dependencies.env ?? process.env;
+  const runtime = dependencies.runtime ?? new PackagedLabRuntime({ env });
   const doctorProbes = dependencies.doctorProbes;
+  const cliVersion = dependencies.version ?? '0.1.0';
   let exitCode: CliOutcome['exitCode'] = 0;
   const program = new Command()
     .name('cashu-fault-lab')
     .description('Deterministic Cashu payment delivery fault laboratory')
-    .version(dependencies.version ?? '0.1.0')
+    .version(cliVersion)
     .exitOverride()
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr });
 
@@ -271,7 +307,181 @@ export async function runCli(
       exitCode = code;
     },
   });
-  registerAdapterCommands(program, { io });
+  const adapterPreflight =
+    dependencies.adapterPreflight ??
+    ((
+      manifest: AdapterManifest,
+      options: {
+        readonly profile: string;
+        readonly adapterId?: string;
+        readonly requiredRoles?: ReadonlyMap<string, readonly ('sender' | 'receiver')[]>;
+      },
+    ) =>
+      preflightLocalAdapters({
+        manifest,
+        env,
+        profile: options.profile,
+        ...(options.adapterId === undefined ? {} : { adapterId: options.adapterId }),
+        ...(options.requiredRoles === undefined ? {} : { requiredRoles: options.requiredRoles }),
+      }));
+  registerAdapterCommands(program, {
+    io,
+    loadManifest: async (path) => {
+      const manifest = await readAdapterManifest(io, path);
+      if (manifest === undefined) throw new Error('Adapter manifest path is required');
+      return manifest;
+    },
+    preflight: adapterPreflight,
+    preview:
+      dependencies.adapterPreview ??
+      (async (manifest, options) => {
+        const selectedIds = new Set([options.sender, options.receiver]);
+        const registrations = manifest.adapters.filter(({ id }) => selectedIds.has(id));
+        if (
+          !registrations.some(({ id }) => id === options.sender) ||
+          !registrations.some(({ id }) => id === options.receiver)
+        ) {
+          throw new LabDiagnosticError(
+            createDiagnostic('ADAPTER_MANIFEST_INVALID', {
+              problem: `Selected adapter pair is not registered: ${options.sender} -> ${options.receiver}`,
+            }),
+          );
+        }
+        const selectedManifest: AdapterManifest = {
+          schemaVersion: manifest.schemaVersion,
+          adapters: registrations,
+        };
+        const requiredRoles = new Map<string, Array<'sender' | 'receiver'>>();
+        for (const [id, role] of [
+          [options.sender, 'sender'],
+          [options.receiver, 'receiver'],
+        ] as const) {
+          requiredRoles.set(id, [...new Set([...(requiredRoles.get(id) ?? []), role])]);
+        }
+        const preflight = await adapterPreflight(selectedManifest, {
+          profile: options.profile,
+          requiredRoles,
+        });
+        if (!preflight.ok) {
+          const firstFailure = preflight.checks.find(({ status }) => status === 'failed');
+          throw new LabDiagnosticError(
+            createDiagnostic('ADAPTER_CONTRACT_INCOMPATIBLE', {
+              problem:
+                firstFailure === undefined
+                  ? 'Selected adapter pair failed preflight.'
+                  : `${firstFailure.code}: ${firstFailure.message}`,
+              ...(firstFailure?.remediation === undefined
+                ? {}
+                : { remediation: firstFailure.remediation }),
+              nextCommand: `cashu-fault-lab adapter preflight --adapters adapter-manifest.json --profile ${options.profile}`,
+            }),
+          );
+        }
+        const repositoryRoot = runtimeAssetPath();
+        const scenarioSuite = await loadReleaseSuite({
+          repositoryRoot,
+          path: 'spec/maintainer-preview-suite.json',
+          readText: io.readText,
+          realPath: io.realPath,
+        });
+        if (scenarioSuite.profile !== options.profile) {
+          throw new LabDiagnosticError(
+            createDiagnostic('PROFILE_UNSUPPORTED', {
+              problem: `Maintainer preview suite requires profile ${scenarioSuite.profile}.`,
+            }),
+          );
+        }
+        let previewRuntime = runtime;
+        let ownedGateway: HttpFaultGateway | undefined;
+        if (
+          env.CFL_HTTP_FAULT_GATEWAY_URL === undefined &&
+          env.CFL_HTTP_FAULT_GATEWAY_TOKEN === undefined
+        ) {
+          const receiver = registrations.find(({ id }) => id === options.receiver);
+          if (receiver === undefined) throw new Error('Preview receiver registration is missing');
+          const token = `cfl_preview_${randomBytes(24).toString('base64url')}`;
+          ownedGateway = new HttpFaultGateway({
+            downstream: receiver.url,
+            controlToken: token,
+          });
+          let url: string;
+          try {
+            url = await ownedGateway.listen(4300, '127.0.0.1');
+          } catch {
+            await ownedGateway.close();
+            throw new LabDiagnosticError(
+              createDiagnostic('PORT_IN_USE', {
+                problem: 'The automatic maintainer-preview gateway could not bind port 4300.',
+                remediation:
+                  'Stop the process using loopback port 4300, or configure an existing loopback gateway with CFL_HTTP_FAULT_GATEWAY_URL and CFL_HTTP_FAULT_GATEWAY_TOKEN.',
+              }),
+            );
+          }
+          if (dependencies.runtime === undefined) {
+            previewRuntime = new PackagedLabRuntime({
+              env: {
+                ...env,
+                CFL_HTTP_FAULT_GATEWAY_URL: url,
+                CFL_HTTP_FAULT_GATEWAY_TOKEN: token,
+              },
+            });
+          }
+        } else {
+          try {
+            validateLocalFaultGateway(env);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : '';
+            const code = message.startsWith('FAULT_GATEWAY_NOT_LOOPBACK')
+              ? 'FAULT_GATEWAY_NOT_LOOPBACK'
+              : 'FAULT_GATEWAY_REQUIRED';
+            throw new LabDiagnosticError(createDiagnostic(code));
+          }
+        }
+        let result: MatrixCaseResult;
+        try {
+          result = await previewRuntime.preview(
+            options.profile,
+            options.seed,
+            selectedManifest,
+            options.sender,
+            options.receiver,
+            scenarioSuite,
+          );
+        } finally {
+          await ownedGateway?.close();
+        }
+        const resultScenarios = 'scenarios' in result ? (result.scenarios ?? []) : [];
+        const scenarioEvidence = new Map(
+          resultScenarios.map((scenario) => [scenario.id, scenario]),
+        );
+        const artifacts = createAdapterPreviewArtifacts({
+          profile: options.profile,
+          seed: options.seed,
+          sender: options.sender,
+          receiver: options.receiver,
+          manifestPath: options.manifestPath,
+          preflight,
+          result,
+          cliVersion,
+          runtime: {
+            node: process.version,
+            platform: process.platform,
+            architecture: process.arch,
+          },
+          scenarios: scenarioSuite.scenarios.map((scenario) => ({
+            id: scenario.id,
+            path: scenario.scenario,
+            seed:
+              scenarioEvidence.get(scenario.id)?.seed ??
+              `${options.seed}:${options.sender}:${options.receiver}:${scenario.id}`,
+          })),
+        });
+        return { status: result.status, artifacts };
+      }),
+    setExitCode: (code) => {
+      exitCode = code;
+    },
+  });
 
   program
     .command('demo')

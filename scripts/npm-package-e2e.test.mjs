@@ -3,6 +3,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -59,6 +60,7 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     assert.ok(paths.includes('LICENSE'));
     assert.ok(paths.includes('dist/bin.js'));
     assert.ok(paths.includes('runtime/scenarios/retry/response-lost.json'));
+    assert.ok(paths.includes('runtime/spec/maintainer-preview-suite.json'));
     assert.ok(paths.includes('runtime/compose/wallet-adapters.compose.yml'));
     assert.ok(paths.every((path) => !path.endsWith('.map')));
     assert.ok(paths.every((path) => !path.startsWith('src/')));
@@ -131,6 +133,54 @@ test('the packed CLI installs and works outside the monorepo', async () => {
       await readFile(join(adapterRoot, 'adapter-manifest.json'), 'utf8'),
       /wallet-adapter/u,
     );
+    const contractSource = await readFile(join(adapterRoot, 'src', 'contract.ts'), 'utf8');
+    const contractMatch = /export const contract = (\{.*\}) as const satisfies/u.exec(
+      contractSource,
+    );
+    assert.ok(contractMatch?.[1], 'generated adapter capabilities were not found');
+    const generatedCapabilities = JSON.parse(contractMatch[1]);
+    const observedRequests = [];
+    const adapterServer = createServer((request, response) => {
+      observedRequests.push({ method: request.method, url: request.url });
+      if (request.headers.authorization !== 'Bearer package-e2e-token') {
+        response.writeHead(401).end();
+        return;
+      }
+      if (request.method === 'GET' && request.url === '/v1/capabilities') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(generatedCapabilities));
+        return;
+      }
+      response.writeHead(404).end();
+    });
+    await new Promise((resolve, reject) => {
+      adapterServer.once('error', reject);
+      adapterServer.listen(4100, '127.0.0.1', resolve);
+    });
+    try {
+      const preflight = await run(
+        process.execPath,
+        [
+          cli,
+          'adapter',
+          'preflight',
+          '--adapters',
+          join(adapterRoot, 'adapter-manifest.json'),
+          '--json',
+        ],
+        {
+          cwd: installRoot,
+          env: { ...process.env, WALLET_ADAPTER_TOKEN: 'package-e2e-token' },
+        },
+      );
+      assert.equal(preflight.exitCode, 0, `${preflight.stdout}\n${preflight.stderr}`);
+      assert.equal(JSON.parse(preflight.stdout).ok, true);
+      assert.deepEqual(observedRequests, [{ method: 'GET', url: '/v1/capabilities' }]);
+    } finally {
+      await new Promise((resolve, reject) =>
+        adapterServer.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
 
     if (runPublishedDemo) {
       const artifactPath = join(installRoot, 'demo.json');

@@ -28,7 +28,7 @@ describe('generated content pages', () => {
     );
   });
 
-  it('renders Architecture in the docs shell with its generated topology and current state', async () => {
+  it('renders Architecture as a compact dashboard with explicit trust and qualification boundaries', async () => {
     render(await ArchitecturePage());
 
     const documentationNavigation = screen.getAllByRole('navigation', {
@@ -45,6 +45,7 @@ describe('generated content pages', () => {
     expect(architectureLink).toHaveAttribute('href', '/architecture');
     expect(architectureLink).toHaveAttribute('aria-current', 'page');
     expect(architectureArticle).not.toBeNull();
+    expect(screen.getByRole('complementary', { name: 'Trust boundary' })).toBeVisible();
 
     const deliveryPath = screen.getByRole('list', { name: 'Primary delivery path' });
     expect(architectureArticle).toContainElement(deliveryPath);
@@ -53,12 +54,13 @@ describe('generated content pages', () => {
     expect(within(deliveryPath).getByText('HTTP/Nostr faults')).toBeInTheDocument();
     expect(within(deliveryPath).getByText('Durable receiver')).toBeInTheDocument();
 
-    const branches = screen.getByRole('list', {
-      name: 'Evidence branches converging at independent oracle',
+    const evidencePath = screen.getByRole('group', { name: 'Independent evidence path' });
+    const evidenceSources = within(evidencePath).getByRole('list', {
+      name: 'Evidence sources',
     });
-    expect(within(branches).getAllByRole('listitem')).toHaveLength(2);
-    expect(within(branches).getByText('Exact payload')).toBeInTheDocument();
-    expect(within(branches).getByText('Mint recovery')).toBeInTheDocument();
+    expect(within(evidenceSources).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(evidenceSources).getByText('Exact payload')).toBeInTheDocument();
+    expect(within(evidenceSources).getByText('Mint recovery')).toBeInTheDocument();
     expect(screen.getByRole('article', { name: 'Exact payload' })).toHaveAttribute(
       'aria-describedby',
       'sender-title',
@@ -75,6 +77,24 @@ describe('generated content pages', () => {
     expect(screen.getByRole('article', { name: 'JSON/JUnit/HTML evidence' })).toHaveAttribute(
       'aria-describedby',
       'oracle-title',
+    );
+    expect(screen.getByRole('article', { name: 'Successful recovery' })).toBeVisible();
+    expect(screen.getByRole('article', { name: 'Release qualification' })).toBeVisible();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'One delivery. Separate authorities.' })
+        .parentElement?.parentElement,
+    ).toHaveAttribute('data-scroll-reveal', 'off');
+    expect(
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Recovery behavior is not release evidence.',
+      }).parentElement?.parentElement,
+    ).toHaveAttribute('data-scroll-reveal', 'off');
+
+    const css = await readFile(resolve(process.cwd(), 'app/content-pages.module.css'), 'utf8');
+    expect(css).toMatch(/\.evidenceRail\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:/s);
+    expect(css).toMatch(
+      /\.qualificationGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
     );
   });
 

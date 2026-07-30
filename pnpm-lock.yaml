@@ -94,6 +94,9 @@ importers:
       '@cashu-fault-lab/delivery-core':
         specifier: workspace:*
         version: link:../../packages/delivery-core
+      '@cashu-fault-lab/http-fault-gateway':
+        specifier: workspace:*
+        version: link:../http-fault-gateway
       '@cashu-fault-lab/report':
         specifier: workspace:*
         version: link:../../packages/report

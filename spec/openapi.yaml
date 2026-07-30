@@ -596,6 +596,10 @@ components:
             type: string
             enum: ['http', 'nostr']
           description: Accepted transport protocols
+        httpTarget:
+          type: string
+          minLength: 1
+          description: Optional HTTP target or origin override for generated HTTP transport requests
         singleUse:
           type: boolean
           description: Whether the request forbids multiple deliveries
