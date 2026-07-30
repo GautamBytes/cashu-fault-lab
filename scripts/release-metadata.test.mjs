@@ -63,12 +63,26 @@ test('v0.1.2 maintainer documentation stays aligned with the shipped adapter wor
   const adapterGuide = await text('docs/adapter-guide.md');
   const deliveryProfile = await text('spec/delivery-v1.md');
   const threatModel = await text('spec/threat-model.md');
+  const releaseNotes = await text('docs/releases/v0.1.2.md');
   const checklist = await text('docs/releases/v0.1.2-checklist.md');
+  const changelog = await text('CHANGELOG.md');
 
   assert.match(readme, /\[v0\.1\.2 release notes\]\(docs\/releases\/v0\.1\.2\.md\)/u);
-  assert.match(readme, /npx cashu-fault-lab@0\.1\.2 adapter init/u);
-  assert.match(readme, /npx cashu-fault-lab@0\.1\.2 adapter preflight/u);
-  assert.match(readme, /npx cashu-fault-lab@0\.1\.2 adapter preview/u);
+  const workflowSteps = [
+    'npx cashu-fault-lab@0.1.2 adapter init',
+    'Implement the eight adapter routes',
+    'npx cashu-fault-lab@0.1.2 adapter preflight',
+    'npx cashu-fault-lab@0.1.2 adapter preview',
+  ].map((step) => readme.indexOf(step));
+  assert.ok(
+    workflowSteps.every((index) => index >= 0),
+    'README must contain every workflow step',
+  );
+  assert.deepEqual(
+    workflowSteps,
+    [...workflowSteps].sort((left, right) => left - right),
+    'README must order init, implementation, preflight, and preview',
+  );
 
   assert.match(contributing, /npx cashu-fault-lab@0\.1\.2 adapter init/u);
   assert.match(contributing, /Implement the 8 HTTP routes/u);
@@ -89,6 +103,13 @@ test('v0.1.2 maintainer documentation stays aligned with the shipped adapter wor
   assert.match(checklist, /- \[x\].*adapter preflight/iu);
   assert.match(checklist, /- \[x\].*adapter preview/iu);
   assert.match(checklist, /- \[ \].*independent wallet receiver/iu);
+  for (const contents of [releaseNotes, checklist, changelog]) {
+    assert.doesNotMatch(contents, /preflight[\s\S]{0,160}\broutes\b/iu);
+  }
+  assert.match(
+    checklist,
+    /capability contract, profile support, and configured read-only evidence endpoints/iu,
+  );
 });
 
 test('checked-in demo artifacts are valid, deterministic, and secret-free', async () => {

@@ -32,8 +32,14 @@ state, then runs response-loss and duplicate-delivery checks:
 npx cashu-fault-lab@0.1.2 adapter init \
   --language typescript \
   --name my-wallet
+```
 
-# Start the generated adapter, then export the token variable named by its manifest.
+Implement the eight adapter routes using the generated README and the
+[adapter guide](docs/adapter-guide.md). The generated handlers intentionally return `501 N/A` until
+they are connected to real wallet operations. Then start the adapter and export the token variable
+named by its manifest.
+
+```bash
 npx cashu-fault-lab@0.1.2 adapter preflight \
   --adapters ./my-wallet/adapter-manifest.json
 
@@ -48,8 +54,7 @@ Choose `typescript`, `rust`, or `python` when generating the adapter. Version 0.
 loopback HTTP origins; remote and hosted wallet adapters are intentionally rejected. The preview
 automatically manages its local fault gateway and writes redacted JSON, HTML, JUnit, preflight, and
 replay evidence to `cashu-fault-results/`. Share the bundle for developer feedback, not as release
-qualification or certification. See the [adapter guide](docs/adapter-guide.md) for the contract and
-integration steps.
+qualification or certification.
 
 For workspace development, [open Cashu Fault Lab in GitHub
 Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1) to use the pinned
