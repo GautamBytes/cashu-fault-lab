@@ -118,6 +118,7 @@ describe('adapter HTTP contract', () => {
         unit: 'sat',
         description: 'order-42',
         transports: ['http', 'nostr'],
+        httpTarget: 'http://127.0.0.1:4300/pay',
         singleUse: true,
         expiresIn: 900,
       }),

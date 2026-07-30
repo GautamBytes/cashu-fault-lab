@@ -112,7 +112,11 @@ export interface RunCliDependencies {
   readonly version?: string;
   readonly adapterPreflight?: (
     manifest: AdapterManifest,
-    options: { readonly profile: string; readonly adapterId?: string },
+    options: {
+      readonly profile: string;
+      readonly adapterId?: string;
+      readonly requiredRoles?: ReadonlyMap<string, readonly ('sender' | 'receiver')[]>;
+    },
   ) => Promise<AdapterPreflightReport>;
   readonly adapterPreview?: (
     manifest: AdapterManifest,
@@ -121,6 +125,7 @@ export interface RunCliDependencies {
       readonly seed: string;
       readonly sender: string;
       readonly receiver: string;
+      readonly manifestPath: string;
     },
   ) => Promise<{
     readonly status: MatrixCaseResult['status'];
@@ -306,13 +311,18 @@ export async function runCli(
     dependencies.adapterPreflight ??
     ((
       manifest: AdapterManifest,
-      options: { readonly profile: string; readonly adapterId?: string },
+      options: {
+        readonly profile: string;
+        readonly adapterId?: string;
+        readonly requiredRoles?: ReadonlyMap<string, readonly ('sender' | 'receiver')[]>;
+      },
     ) =>
       preflightLocalAdapters({
         manifest,
         env,
         profile: options.profile,
         ...(options.adapterId === undefined ? {} : { adapterId: options.adapterId }),
+        ...(options.requiredRoles === undefined ? {} : { requiredRoles: options.requiredRoles }),
       }));
   registerAdapterCommands(program, {
     io,
@@ -341,8 +351,16 @@ export async function runCli(
           schemaVersion: manifest.schemaVersion,
           adapters: registrations,
         };
+        const requiredRoles = new Map<string, Array<'sender' | 'receiver'>>();
+        for (const [id, role] of [
+          [options.sender, 'sender'],
+          [options.receiver, 'receiver'],
+        ] as const) {
+          requiredRoles.set(id, [...new Set([...(requiredRoles.get(id) ?? []), role])]);
+        }
         const preflight = await adapterPreflight(selectedManifest, {
           profile: options.profile,
+          requiredRoles,
         });
         if (!preflight.ok) {
           const firstFailure = preflight.checks.find(({ status }) => status === 'failed');
@@ -441,6 +459,7 @@ export async function runCli(
           seed: options.seed,
           sender: options.sender,
           receiver: options.receiver,
+          manifestPath: options.manifestPath,
           preflight,
           result,
           cliVersion,

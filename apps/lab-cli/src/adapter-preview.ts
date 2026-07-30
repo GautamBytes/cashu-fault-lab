@@ -19,6 +19,7 @@ export interface AdapterPreviewArtifactInput {
   readonly seed: string;
   readonly sender: string;
   readonly receiver: string;
+  readonly manifestPath: string;
   readonly preflight: AdapterPreflightReport;
   readonly result: MatrixCaseResult;
   readonly cliVersion: string;
@@ -85,7 +86,8 @@ function rerunCommand(
     shellArgument(scenario.path),
     '--seed',
     shellArgument(scenario.seed),
-    '--adapters adapter-manifest.json',
+    '--adapters',
+    shellArgument(input.manifestPath),
     '--sender',
     shellArgument(input.sender),
     '--receiver',

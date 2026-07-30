@@ -757,6 +757,9 @@ export class PackagedLabRuntime implements LabRuntime {
         amount: 8,
         unit: 'sat',
         transports: externalScenarioTransports(scenario.name),
+        ...(this.#env.CFL_HTTP_FAULT_GATEWAY_URL === undefined
+          ? {}
+          : { httpTarget: this.#env.CFL_HTTP_FAULT_GATEWAY_URL }),
         senderAlias: aliases.senderAlias,
         requestAlias: aliases.requestAlias,
       });
@@ -929,6 +932,9 @@ export class PackagedLabRuntime implements LabRuntime {
           amount: 8,
           unit: 'sat',
           transports: entry.transports,
+          ...(this.#env.CFL_HTTP_FAULT_GATEWAY_URL === undefined
+            ? {}
+            : { httpTarget: this.#env.CFL_HTTP_FAULT_GATEWAY_URL }),
           senderAlias: aliases.senderAlias,
           requestAlias: aliases.requestAlias,
         });

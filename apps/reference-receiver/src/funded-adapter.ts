@@ -57,6 +57,17 @@ function paymentTarget(value: string): string {
   return url.toString();
 }
 
+function overridePaymentTarget(currentTarget: string, requestedTarget: string | undefined): string {
+  if (requestedTarget === undefined) return currentTarget;
+  const requested = paymentTarget(requestedTarget);
+  const requestedUrl = new URL(requested);
+  if (requestedUrl.pathname !== '/' || requestedUrl.search.length > 0) return requested;
+  const current = new URL(currentTarget);
+  current.protocol = requestedUrl.protocol;
+  current.host = requestedUrl.host;
+  return current.toString();
+}
+
 function toUrlSafeCreqA(value: string): string {
   const prefix = 'creqA';
   if (!value.startsWith(prefix) || value.length === prefix.length) {
@@ -139,11 +150,12 @@ export class FundedReceiverAdapterControl implements ReceiverAdapterControl {
       singleUse: true,
       expiresAt,
     });
+    const target = overridePaymentTarget(this.#paymentTarget, input.httpTarget);
     const request = new PaymentRequest(
       [
         {
           type: PaymentRequestTransportType.POST,
-          target: this.#paymentTarget,
+          target,
           tags: [
             ['delivery', '1'],
             ['expires_at', String(expiresAt)],
@@ -164,7 +176,7 @@ export class FundedReceiverAdapterControl implements ReceiverAdapterControl {
       unit: input.unit,
       singleUse: true,
       expiresAt,
-      transports: [{ type: 'post', target: this.#paymentTarget }],
+      transports: [{ type: 'post', target }],
     };
   }
 

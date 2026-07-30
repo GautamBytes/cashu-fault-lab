@@ -74,6 +74,7 @@ export interface ExternalAdapterScenarioDriverOptions {
   readonly restartReadinessAttempts?: number;
   readonly restartReadinessDelayMs?: number;
   readonly transports?: readonly AdapterTransport[];
+  readonly httpTarget?: string;
   readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly senderAlias?: string;
   readonly requestAlias?: string;
@@ -229,6 +230,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
   readonly #amount: number;
   readonly #unit: string;
   readonly #transports: readonly AdapterTransport[];
+  readonly #httpTarget: string | undefined;
   readonly #maxAttempts: number;
   readonly #retryDelayMs: number;
   readonly #restartReadinessAttempts: number;
@@ -272,6 +274,7 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
     ) {
       throw new Error('External scenario transports are invalid');
     }
+    this.#httpTarget = options.httpTarget;
     this.#maxAttempts = positiveSafeInteger(options.maxAttempts ?? 3, 'maxAttempts');
     this.#retryDelayMs = positiveSafeInteger(options.retryDelayMs ?? 100, 'retryDelayMs');
     this.#restartReadinessAttempts = positiveSafeInteger(
@@ -318,6 +321,9 @@ export class ExternalAdapterScenarioDriver implements ScenarioDriver {
         amount: this.#amount,
         unit: this.#unit,
         transports: this.#transports,
+        ...(this.#httpTarget === undefined || !this.#transports.includes('http')
+          ? {}
+          : { httpTarget: this.#httpTarget }),
         singleUse: true,
         expiresIn: 900,
       }),

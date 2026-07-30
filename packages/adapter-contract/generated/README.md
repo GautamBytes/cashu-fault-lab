@@ -6,7 +6,7 @@ These files are deterministic projections of `spec/openapi.yaml`.
 - TypeScript target: `typescript-fetch`
 - Rust target: `rust`
 - Python target: `python`
-- Spec digest: `sha256:c5168ac723e7a61751e80ffa0e0a69ea4294315f4b70349e7fd7b1e51b515ec4`
+- Spec digest: `sha256:76c5f22e863481d2bc21d55080d7e20ecc6e2bbe3310164f801c4fedef3abc5d`
 
 Normal package consumers build from committed output and do not need Java or
 OpenAPI Generator installed.

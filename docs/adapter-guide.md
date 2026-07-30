@@ -90,6 +90,8 @@ The receiver's generated payment request must advertise the gateway origin
 (`http://127.0.0.1:4300`) as its HTTP target so the preview can inject transport faults; the gateway
 forwards that path to the selected receiver adapter origin. Set `CFL_HTTP_FAULT_GATEWAY_URL` and
 `CFL_HTTP_FAULT_GATEWAY_TOKEN` only when reusing an already-running loopback gateway.
+When `/v1/requests` receives `httpTarget`, use that value for HTTP transport targets. If it is an
+origin without a path, preserve the adapter's normal payment path under that origin.
 
 Share `cashu-fault-results/preview.json` or `preview.html` when opening an issue. The bundle also
 contains JUnit, the preflight result, exact per-scenario replay commands, and a short README. It is

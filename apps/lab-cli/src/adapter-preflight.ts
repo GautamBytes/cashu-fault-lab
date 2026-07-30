@@ -4,6 +4,7 @@ import {
   validateAdapterCompatibility,
   type AdapterCapabilities,
   type AdapterImplementationIdentity,
+  type AdapterRole,
 } from '@cashu-fault-lab/adapter-contract';
 import type {
   AdapterManifest,
@@ -43,6 +44,7 @@ export interface LocalAdapterPreflightOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly profile?: string;
   readonly adapterId?: string;
+  readonly requiredRoles?: ReadonlyMap<string, readonly AdapterRole[]>;
   readonly fetch?: typeof fetch;
 }
 
@@ -85,6 +87,11 @@ function warning(
   remediation: string,
 ): AdapterPreflightCheck {
   return { adapterId, stage, status: 'warning', code, message, remediation };
+}
+
+function uniqueRoles(roles: readonly AdapterRole[] | undefined): readonly AdapterRole[] {
+  if (roles === undefined) return [];
+  return [...new Set(roles)];
 }
 
 function capabilityFailure(adapterId: string, error: unknown): AdapterPreflightCheck {
@@ -268,22 +275,49 @@ async function checkAdapter(
   const supportsProfile = Object.values(capabilities.roles).some((role) =>
     role?.profiles.includes(profile),
   );
-  checks.push(
-    supportsProfile
-      ? passed(
-          registration.id,
-          'profile',
-          'ADAPTER_PROFILE_SUPPORTED',
-          `At least one declared role supports ${profile}.`,
-        )
-      : warning(
-          registration.id,
-          'profile',
-          'ADAPTER_PROFILE_UNSUPPORTED',
-          `No declared adapter role supports ${profile}.`,
-          `Implement the profile before running adapter preview --profile ${profile}.`,
-        ),
-  );
+  const requiredRoles = uniqueRoles(options.requiredRoles?.get(registration.id));
+  if (requiredRoles.length === 0) {
+    checks.push(
+      supportsProfile
+        ? passed(
+            registration.id,
+            'profile',
+            'ADAPTER_PROFILE_SUPPORTED',
+            `At least one declared role supports ${profile}.`,
+          )
+        : warning(
+            registration.id,
+            'profile',
+            'ADAPTER_PROFILE_UNSUPPORTED',
+            `No declared adapter role supports ${profile}.`,
+            `Implement the profile before running adapter preview --profile ${profile}.`,
+          ),
+    );
+  } else {
+    for (const role of requiredRoles) {
+      const roleSupportsProfile = capabilities.roles[role]?.profiles.includes(profile) === true;
+      checks.push(
+        roleSupportsProfile
+          ? passed(
+              registration.id,
+              'profile',
+              role === 'sender'
+                ? 'ADAPTER_SENDER_PROFILE_SUPPORTED'
+                : 'ADAPTER_RECEIVER_PROFILE_SUPPORTED',
+              `The ${role} role supports ${profile}.`,
+            )
+          : failure(
+              registration.id,
+              'profile',
+              role === 'sender'
+                ? 'ADAPTER_SENDER_PROFILE_UNSUPPORTED'
+                : 'ADAPTER_RECEIVER_PROFILE_UNSUPPORTED',
+              `The ${role} role does not support ${profile}.`,
+              `Declare ${profile} support on the adapter ${role} role before running adapter preview.`,
+            ),
+      );
+    }
+  }
 
   if (registration.evidence?.ledger !== undefined) {
     checks.push(

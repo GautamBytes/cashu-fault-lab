@@ -13,9 +13,11 @@ import { basename, join } from 'node:path';
 export interface AdapterPreflightCommandOptions {
   readonly profile: string;
   readonly adapterId?: string;
+  readonly requiredRoles?: ReadonlyMap<string, readonly ('sender' | 'receiver')[]>;
 }
 
 export interface AdapterPreviewCommandOptions {
+  readonly manifestPath: string;
   readonly profile: string;
   readonly seed: string;
   readonly sender: string;
@@ -126,6 +128,7 @@ export function registerAdapterCommands(program: Command, context: AdapterComman
       }) => {
         const manifest = await context.loadManifest(options.adapters);
         const result = await context.preview(manifest, {
+          manifestPath: options.adapters,
           profile: options.profile,
           seed: options.seed,
           sender: options.sender,

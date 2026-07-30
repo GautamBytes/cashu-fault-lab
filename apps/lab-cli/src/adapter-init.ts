@@ -226,6 +226,7 @@ export interface CreateRequestInput {
   readonly unit: string;
   readonly description?: string;
   readonly transports: readonly AdapterTransport[];
+  readonly httpTarget?: string;
   readonly singleUse: boolean;
   readonly expiresIn: number;
 }
@@ -581,6 +582,7 @@ pub struct CreateRequestInput {
     pub unit: String,
     pub description: Option<String>,
     pub transports: Vec<String>,
+    pub http_target: Option<String>,
     pub single_use: bool,
     pub expires_in: u64,
 }
@@ -990,6 +992,7 @@ class CreateRequestInput(BaseModel):
     unit: str
     description: str | None = None
     transports: list[Literal["http", "nostr"]]
+    httpTarget: str | None = None
     singleUse: bool
     expiresIn: int
 

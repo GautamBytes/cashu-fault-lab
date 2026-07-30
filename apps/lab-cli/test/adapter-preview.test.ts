@@ -113,6 +113,7 @@ describe('maintainer preview artifacts', () => {
       sender: 'my-wallet',
       receiver: 'my-wallet',
       preflight,
+      manifestPath: 'fixtures/custom manifest.json',
       result,
       cliVersion: '0.1.2',
       runtime: {
@@ -151,6 +152,8 @@ describe('maintainer preview artifacts', () => {
     expect(artifacts.get('README.txt')).toContain(
       'cashu-fault-lab run scenarios/retry/response-lost.json --seed scenario-seed',
     );
+    expect(artifacts.get('README.txt')).toContain("--adapters 'fixtures/custom manifest.json'");
+    expect(preview.rerun[0].command).toContain("--adapters 'fixtures/custom manifest.json'");
     expect([...artifacts.values()].join('\n')).not.toContain('Bearer');
   });
 });

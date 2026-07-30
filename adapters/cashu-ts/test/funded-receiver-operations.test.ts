@@ -219,6 +219,27 @@ describe('FundedCashuTsReceiverOperations', () => {
     expect(mint.swapCalls).toBe(1);
   });
 
+  it('uses an HTTP target origin override while preserving the receiver payment path', async () => {
+    const { receiver } = receiverFixture();
+    await receiver.reset('receiver-seed');
+
+    const request = await receiver.createRequest({
+      amount: 8,
+      unit: 'sat',
+      transports: ['http'],
+      httpTarget: 'http://127.0.0.1:4300',
+      singleUse: true,
+      expiresIn: 900,
+    });
+
+    expect(request.transports).toEqual([
+      expect.objectContaining({ type: 'post', target: 'http://127.0.0.1:4300/pay' }),
+    ]);
+    expect(
+      PaymentRequest.fromEncodedRequest(request.raw).getTransport(PaymentRequestTransportType.POST),
+    ).toMatchObject({ target: 'http://127.0.0.1:4300/pay' });
+  });
+
   it('serves dual-role capabilities and accepts payment bytes through /pay', async () => {
     const { receiver } = receiverFixture();
     const sender = new FundedCashuTsDualRoleOperations({

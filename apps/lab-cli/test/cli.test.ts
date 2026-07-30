@@ -399,6 +399,7 @@ describe('lab CLI', () => {
     let received:
       | {
           readonly manifest: AdapterManifest;
+          readonly manifestPath: string;
           readonly profile: string;
           readonly seed: string;
           readonly sender: string;
@@ -442,6 +443,7 @@ describe('lab CLI', () => {
     expect(outcome.exitCode).toBe(0);
     expect(received).toEqual({
       manifest: adapterManifest,
+      manifestPath: 'adapter-manifest.json',
       profile: 'delivery-v1',
       seed: 'maintainer-seed',
       sender: 'sender-wallet',
@@ -550,16 +552,33 @@ describe('lab CLI', () => {
       '--receiver',
       'my-wallet',
     ] as const;
+    const preflightRequests: Array<{
+      readonly profile: string;
+      readonly requiredRoles?: ReadonlyMap<string, readonly string[]>;
+    }> = [];
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const outcome = await runCli(argumentsForPreview, {
         io: diskIo,
         runtime: new FakeRuntime(),
         env: {},
-        adapterPreflight: async () => report,
+        adapterPreflight: async (_manifest, options) => {
+          preflightRequests.push(options);
+          return report;
+        },
       });
       expect(outcome.exitCode).toBe(0);
     }
+    expect(preflightRequests).toEqual([
+      {
+        profile: 'delivery-v1',
+        requiredRoles: new Map([['my-wallet', ['sender', 'receiver']]]),
+      },
+      {
+        profile: 'delivery-v1',
+        requiredRoles: new Map([['my-wallet', ['sender', 'receiver']]]),
+      },
+    ]);
   });
 
   it('runs a scenario and writes a replayable result artifact', async () => {

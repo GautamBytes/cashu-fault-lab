@@ -130,6 +130,30 @@ describe('local adapter preflight', () => {
     expect(JSON.stringify(identityMismatch)).not.toContain('do-not-print-this');
   });
 
+  it('requires selected preview roles to support the requested profile', async () => {
+    const receiverOnly = {
+      ...capabilities(),
+      roles: { receiver: capabilities().roles.receiver },
+    };
+
+    const report = await preflightLocalAdapters({
+      manifest: manifest(),
+      env: { MY_WALLET_TOKEN: 'local-secret' },
+      profile: 'delivery-v1',
+      requiredRoles: new Map([['my-wallet', ['sender']]]),
+      fetch: async () => Response.json(receiverOnly),
+    } as Parameters<typeof preflightLocalAdapters>[0] & {
+      readonly requiredRoles: ReadonlyMap<string, readonly ['sender']>;
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.checks.at(-1)).toMatchObject({
+      code: 'ADAPTER_SENDER_PROFILE_UNSUPPORTED',
+      status: 'failed',
+      adapterId: 'my-wallet',
+    });
+  });
+
   it('checks configured evidence authorities using only read operations', async () => {
     const configured = parseAdapterManifest({
       schemaVersion: 2,
