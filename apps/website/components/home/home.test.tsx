@@ -207,16 +207,20 @@ describe('home components', () => {
     expect(commandCodeRule).toMatch(/border:\s*0/);
   });
 
-  it('keeps the hero quickstart command on one line at every breakpoint', async () => {
+  it('keeps the hero quickstart command compact and on one line at every breakpoint', async () => {
     const css = await readFile(homePath('home.module.css'), 'utf8');
     const heroCopyRule = cssRules(css, 'heroCopy')[0];
     const commandBlockRule = cssRules(css, 'commandBlock')[0];
+    const copyButtonRule = cssRules(css, 'commandCopyButton')[0];
     const commandCodeRule = css.match(/\.commandBlock code\s*{([^}]*)}/)?.[1];
 
     expect(heroCopyRule).toMatch(/min-width:\s*0/);
     expect(commandBlockRule).toMatch(/min-width:\s*0/);
-    expect(commandBlockRule).toMatch(/width:\s*100%/);
+    expect(commandBlockRule).toMatch(/max-width:\s*100%/);
+    expect(commandBlockRule).toMatch(/width:\s*fit-content/);
+    expect(commandCodeRule).not.toMatch(/flex:\s*1/);
     expect(commandCodeRule).toMatch(/white-space:\s*nowrap/);
+    expect(copyButtonRule).not.toMatch(/margin-left:\s*auto/);
     expect(cssRules(css, 'commandBlock').every((rule) => !/flex-wrap:\s*wrap/.test(rule))).toBe(
       true,
     );

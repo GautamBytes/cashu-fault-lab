@@ -199,11 +199,11 @@
   font-family: 'IBM Plex Mono', monospace;
   gap: 0.7rem;
   margin-top: 1.4rem;
-  max-width: 37rem;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   padding: 0.8rem 1rem;
-  width: 100%;
+  width: fit-content;
 }
 
 .commandBlock > span:first-child {
@@ -213,7 +213,7 @@
 .commandBlock code {
   background: transparent;
   border: 0;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
   padding: 0;
@@ -240,7 +240,6 @@
     monospace;
   gap: 0.55rem;
   justify-content: center;
-  margin-left: auto;
   min-height: 44px;
   min-width: 5.4rem;
   padding: 0.45rem 0.75rem;
