@@ -7,6 +7,8 @@ export type LabDiagnosticCode =
   | 'EVIDENCE_TIER_INSUFFICIENT'
   | 'ADAPTER_MANIFEST_INVALID'
   | 'ADAPTER_CONTRACT_INCOMPATIBLE'
+  | 'FAULT_GATEWAY_REQUIRED'
+  | 'FAULT_GATEWAY_NOT_LOOPBACK'
   | 'PROFILE_UNSUPPORTED'
   | 'ENCODING_UNSUPPORTED'
   | 'IMPLEMENTATIONS_NOT_INDEPENDENT';
@@ -83,6 +85,23 @@ const CATALOGUE: Readonly<Record<LabDiagnosticCode, LabDiagnostic>> = {
     likelyCause: 'The adapter was generated from a different API version or OpenAPI digest.',
     remediation: 'Regenerate the adapter/client from the current canonical specification.',
     nextCommand: 'pnpm codegen',
+  },
+  FAULT_GATEWAY_REQUIRED: {
+    code: 'FAULT_GATEWAY_REQUIRED',
+    problem: 'The maintainer preview requires the authenticated HTTP fault gateway.',
+    likelyCause: 'The gateway URL or control token is not configured in this shell.',
+    remediation:
+      'Start the local fault gateway and set CFL_HTTP_FAULT_GATEWAY_URL plus CFL_HTTP_FAULT_GATEWAY_TOKEN.',
+    nextCommand:
+      'cashu-fault-lab adapter preview --adapters adapter-manifest.json --sender <id> --receiver <id>',
+  },
+  FAULT_GATEWAY_NOT_LOOPBACK: {
+    code: 'FAULT_GATEWAY_NOT_LOOPBACK',
+    problem: 'The maintainer preview fault gateway is not a loopback HTTP origin.',
+    likelyCause: 'CFL_HTTP_FAULT_GATEWAY_URL points to a hosted, TLS, or path-qualified endpoint.',
+    remediation: 'Use an origin-only http://127.0.0.1:<port> or http://[::1]:<port> gateway URL.',
+    nextCommand:
+      'cashu-fault-lab adapter preview --adapters adapter-manifest.json --sender <id> --receiver <id>',
   },
   PROFILE_UNSUPPORTED: {
     code: 'PROFILE_UNSUPPORTED',

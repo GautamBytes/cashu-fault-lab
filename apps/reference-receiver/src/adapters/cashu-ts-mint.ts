@@ -378,16 +378,7 @@ export class CashuTsMintGateway implements MintGateway {
     return this.#postSwap(plan, hooks);
   }
 
-  async restore(plan: ExactSwapPlan): Promise<RestoreResult> {
-    const replayAllowed =
-      plan.recovery.nut19Replay &&
-      (plan.recovery.nut19ReplayUntil === null || this.#now() <= plan.recovery.nut19ReplayUntil);
-    if (replayAllowed) {
-      try {
-        return { kind: 'recovered', result: await this.#postSwap(plan) };
-      } catch {}
-    }
-    if (!plan.recovery.nut09) return { kind: 'not_found' };
+  async #restoreOutputs(plan: ExactSwapPlan): Promise<RestoreResult> {
     const outputs = plan.outputs.map(({ amount, id, B_ }) => ({ amount, id, B_ }));
     const value = await this.#request(
       mintEndpoint(plan.mint, '/v1/restore'),
@@ -414,6 +405,30 @@ export class CashuTsMintGateway implements MintGateway {
     }
     const keys = await this.#keys(plan.mint, plan.keysetId, plan.unit);
     return { kind: 'recovered', result: replacementResult(plan, keys, parseSignatures(value)) };
+  }
+
+  async restore(plan: ExactSwapPlan, hooks?: MintSwapHooks): Promise<RestoreResult> {
+    const replayAllowed =
+      plan.recovery.nut19Replay &&
+      (plan.recovery.nut19ReplayUntil === null || this.#now() <= plan.recovery.nut19ReplayUntil);
+    let restoreError: unknown;
+    if (plan.recovery.nut09) {
+      try {
+        const restored = await this.#restoreOutputs(plan);
+        if (restored.kind === 'recovered') return restored;
+      } catch (error) {
+        restoreError = error;
+        if (!replayAllowed) throw error;
+      }
+    }
+    if (replayAllowed) {
+      try {
+        return { kind: 'recovered', result: await this.#postSwap(plan, hooks) };
+      } catch {
+        if (restoreError !== undefined) throw restoreError;
+      }
+    }
+    return { kind: 'not_found' };
   }
 
   async proofStates(plan: ExactSwapPlan): Promise<readonly MintProofState[]> {

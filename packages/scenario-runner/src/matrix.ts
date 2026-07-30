@@ -111,6 +111,16 @@ export class CompatibilityMatrix {
     this.#execute = execute;
   }
 
+  async runPair(
+    profile: string,
+    sender: MatrixParticipant,
+    receiver: MatrixParticipant,
+  ): Promise<MatrixCaseResult> {
+    const [result] = await this.run(profile, [sender], [receiver]);
+    if (result === undefined) throw new Error('Matrix pair did not produce a result');
+    return result;
+  }
+
   async run(
     profile: string,
     senders: readonly MatrixParticipant[],

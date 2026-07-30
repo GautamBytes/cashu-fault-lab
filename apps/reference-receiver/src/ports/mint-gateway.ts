@@ -29,7 +29,7 @@ export class MintGatewayError extends Error {
 export interface MintGateway {
   prepareSwap(draft: SwapPlanDraft): Promise<ExactSwapPlan>;
   swap(plan: ExactSwapPlan, hooks?: MintSwapHooks): Promise<SwapResult>;
-  restore(plan: ExactSwapPlan): Promise<RestoreResult>;
+  restore(plan: ExactSwapPlan, hooks?: MintSwapHooks): Promise<RestoreResult>;
   proofStates(plan: ExactSwapPlan): Promise<readonly MintProofState[]>;
 }
 

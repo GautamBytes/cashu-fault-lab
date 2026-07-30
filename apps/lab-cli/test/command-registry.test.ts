@@ -12,6 +12,8 @@ describe('CLI command registry', () => {
       'up',
       'down',
       'adapter init',
+      'adapter preflight',
+      'adapter preview',
       'demo',
       'run',
       'replay',
@@ -61,6 +63,24 @@ describe('CLI command registry', () => {
       artifacts: expect.arrayContaining(['<output>/adapter-manifest.json', '<output>/Dockerfile']),
     });
 
+    expect(byName.get('adapter preflight')).toMatchObject({
+      modes: ['text', 'json'],
+      options: expect.arrayContaining([
+        expect.objectContaining({ flags: '--adapters <path>' }),
+        expect.objectContaining({ flags: '--adapter <id>' }),
+      ]),
+    });
+
+    expect(byName.get('adapter preview')).toMatchObject({
+      summary: expect.stringContaining('maintainer preview'),
+      options: expect.arrayContaining([
+        expect.objectContaining({ flags: '--sender <id>' }),
+        expect.objectContaining({ flags: '--receiver <id>' }),
+        expect.objectContaining({ flags: '--output-dir <path>' }),
+      ]),
+      artifacts: expect.arrayContaining(['<output-dir>/preview.json']),
+    });
+
     expect(byName.get('demo')).toMatchObject({
       summary: 'Run the response-loss recovery demo against the reference stack',
       options: expect.arrayContaining([
@@ -87,6 +107,8 @@ describe('CLI command registry', () => {
     expect(docs).toContain('## `cashu-fault-lab run <scenario>`');
     expect(docs).toContain('Artifacts: `artifacts/latest.json`');
     expect(docs).toContain('## `cashu-fault-lab adapter init --language <language> --name <name>`');
+    expect(docs).toContain('## `cashu-fault-lab adapter preflight --adapters <path>`');
+    expect(docs).toContain('## `cashu-fault-lab adapter preview --adapters <path>`');
     expect(docs).toContain('## `cashu-fault-lab demo`');
     expect(docs).toContain('## `cashu-fault-lab doctor`');
     expect(docs).toContain('Environment: `CFL_REAL_MINT_URL`');

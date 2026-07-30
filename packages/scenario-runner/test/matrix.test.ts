@@ -74,6 +74,27 @@ describe('CompatibilityMatrix', () => {
     expect(calls).toEqual(['delivery-v1:sender-a:receiver-a', 'delivery-v1:sender-b:receiver-a']);
   });
 
+  it('runs exactly one selected sender/receiver pair for maintainer preview', async () => {
+    const calls: string[] = [];
+    const matrix = new CompatibilityMatrix(async (profile, sender, receiver) => {
+      calls.push(`${profile}:${sender.id}:${receiver.id}`);
+      return { ok: true };
+    });
+
+    const result = await matrix.runPair(
+      'delivery-v1',
+      participant('sender-a', 'sender'),
+      participant('receiver-b', 'receiver'),
+    );
+
+    expect(result).toMatchObject({
+      status: 'passed',
+      sender: 'sender-a',
+      receiver: 'receiver-b',
+    });
+    expect(calls).toEqual(['delivery-v1:sender-a:receiver-b']);
+  });
+
   it('clones per-scenario evidence into the passed matrix case', async () => {
     const scenarios = [
       {

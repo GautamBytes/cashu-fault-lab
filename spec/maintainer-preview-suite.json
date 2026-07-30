@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "profile": "delivery-v1",
+  "scenarios": [
+    {
+      "id": "retry-response-lost",
+      "scenario": "scenarios/retry/response-lost.json",
+      "transports": ["http"],
+      "senderDurability": "process",
+      "receiverDurability": "process",
+      "requiredInvariants": [
+        "at-most-one-merchant-credit-per-delivery",
+        "stable-duplicate-response",
+        "retry-convergence",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    },
+    {
+      "id": "duplicate-http-storm",
+      "scenario": "scenarios/concurrency/duplicate-storm.json",
+      "transports": ["http"],
+      "senderDurability": "process",
+      "receiverDurability": "process",
+      "requiredInvariants": [
+        "at-most-once-redemption-start",
+        "at-most-one-merchant-credit-per-request",
+        "at-most-one-merchant-credit-per-delivery",
+        "proof-set-exclusivity",
+        "stable-duplicate-response",
+        "reproducibility",
+        "no-unsupported-pass"
+      ]
+    }
+  ]
+}

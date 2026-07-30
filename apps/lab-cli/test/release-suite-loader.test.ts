@@ -92,6 +92,28 @@ describe('release suite loader', () => {
     expect(policy.releaseSuiteDigest).toBe(loaded.digest);
   });
 
+  it('loads the checked-in non-qualifying maintainer preview suite', async () => {
+    const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
+    const loaded = await loadReleaseSuite({
+      repositoryRoot,
+      path: 'spec/maintainer-preview-suite.json',
+      readText: async (path) => readFile(path, 'utf8'),
+      realPath: realpath,
+    });
+
+    expect(loaded.profile).toBe('delivery-v1');
+    expect(loaded.scenarios.map(({ id }) => id)).toEqual([
+      'retry-response-lost',
+      'duplicate-http-storm',
+    ]);
+    expect(
+      loaded.scenarios.every(
+        ({ senderDurability, receiverDurability }) =>
+          senderDurability === 'process' && receiverDurability === 'process',
+      ),
+    ).toBe(true);
+  });
+
   it.each(['/tmp/release-suite.json', '../release-suite.json'])(
     'rejects a non-confined suite path: %s',
     async (path) => {

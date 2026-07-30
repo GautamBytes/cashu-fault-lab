@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AdapterManifest } from '../src/adapter-manifest.js';
+import type { AdapterPreflightReport } from '../src/adapter-preflight.js';
 import type { DoctorProbes } from '../src/doctor.js';
 import type { LoadedReleaseSuite } from '../src/release-suite-loader.js';
 import {
@@ -157,6 +158,25 @@ class FakeRuntime implements LabRuntime {
       },
     ];
   }
+
+  async preview(
+    _profile: string,
+    _seed: string,
+    adapterManifest: AdapterManifest,
+    sender: string,
+    receiver: string,
+    scenarioSuite: LoadedReleaseSuite,
+  ): Promise<MatrixCaseResult> {
+    this.adapterManifest = adapterManifest;
+    const [result] = await this.matrix(
+      scenarioSuite.profile,
+      _seed,
+      adapterManifest,
+      scenarioSuite,
+    );
+    if (result === undefined) throw new Error('Fake preview did not produce a result');
+    return { ...result, sender, receiver };
+  }
 }
 
 function fixture(files: Readonly<Record<string, string>> = {}) {
@@ -248,6 +268,297 @@ describe('lab CLI', () => {
       );
     } finally {
       await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('runs a read-only adapter preflight and emits machine-readable results', async () => {
+    const adapterManifest = {
+      schemaVersion: 2,
+      adapters: [
+        {
+          id: 'my-wallet',
+          url: 'http://127.0.0.1:4100',
+          tokenEnv: 'MY_WALLET_TOKEN',
+        },
+      ],
+    } as const;
+    const report: AdapterPreflightReport = {
+      schemaVersion: 1,
+      ok: true,
+      profile: 'delivery-v1',
+      adapters: [{ id: 'my-wallet', url: 'http://127.0.0.1:4100' }],
+      checks: [
+        {
+          adapterId: 'my-wallet',
+          stage: 'connectivity',
+          status: 'passed',
+          code: 'ADAPTER_REACHABLE',
+          message: 'Adapter is reachable.',
+        },
+      ],
+    };
+    const setup = fixture({ 'adapter-manifest.json': JSON.stringify(adapterManifest) });
+    let received:
+      | {
+          readonly manifest: AdapterManifest;
+          readonly profile: string;
+          readonly adapterId?: string;
+        }
+      | undefined;
+
+    const outcome = await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        'adapter',
+        'preflight',
+        '--adapters',
+        'adapter-manifest.json',
+        '--adapter',
+        'my-wallet',
+        '--json',
+      ],
+      {
+        io: setup.io,
+        runtime: new FakeRuntime(),
+        adapterPreflight: async (manifest, options) => {
+          received = { manifest, ...options };
+          return report;
+        },
+      },
+    );
+
+    expect(outcome.exitCode).toBe(0);
+    expect(received).toEqual({
+      manifest: adapterManifest,
+      profile: 'delivery-v1',
+      adapterId: 'my-wallet',
+    });
+    expect(JSON.parse(setup.stdout())).toEqual(report);
+  });
+
+  it('returns exit code 2 when adapter preflight finds invalid local configuration', async () => {
+    const setup = fixture({
+      'adapter-manifest.json': JSON.stringify({
+        schemaVersion: 2,
+        adapters: [
+          {
+            id: 'my-wallet',
+            url: 'http://127.0.0.1:4100',
+            tokenEnv: 'MY_WALLET_TOKEN',
+          },
+        ],
+      }),
+    });
+    const outcome = await runCli(
+      ['node', 'cashu-fault-lab', 'adapter', 'preflight', '--adapters', 'adapter-manifest.json'],
+      {
+        io: setup.io,
+        runtime: new FakeRuntime(),
+        adapterPreflight: async () => ({
+          schemaVersion: 1,
+          ok: false,
+          profile: 'delivery-v1',
+          adapters: [{ id: 'my-wallet', url: 'http://127.0.0.1:4100' }],
+          checks: [
+            {
+              adapterId: 'my-wallet',
+              stage: 'authentication',
+              status: 'failed',
+              code: 'ADAPTER_TOKEN_MISSING',
+              message: 'Control token is missing.',
+              remediation: 'Set MY_WALLET_TOKEN and rerun adapter preflight.',
+            },
+          ],
+        }),
+      },
+    );
+
+    expect(outcome.exitCode).toBe(2);
+    expect(setup.stdout()).toContain('ADAPTER_TOKEN_MISSING');
+    expect(setup.stdout()).toContain('Set MY_WALLET_TOKEN');
+  });
+
+  it('runs one local adapter pair and writes a non-qualifying maintainer preview bundle', async () => {
+    const adapterManifest = {
+      schemaVersion: 2,
+      adapters: [
+        {
+          id: 'sender-wallet',
+          url: 'http://127.0.0.1:4100',
+          tokenEnv: 'SENDER_WALLET_TOKEN',
+        },
+        {
+          id: 'receiver-wallet',
+          url: 'http://127.0.0.1:4200',
+          tokenEnv: 'RECEIVER_WALLET_TOKEN',
+        },
+      ],
+    } as const;
+    const setup = fixture({ 'adapter-manifest.json': JSON.stringify(adapterManifest) });
+    let received:
+      | {
+          readonly manifest: AdapterManifest;
+          readonly profile: string;
+          readonly seed: string;
+          readonly sender: string;
+          readonly receiver: string;
+        }
+      | undefined;
+
+    const outcome = await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        'adapter',
+        'preview',
+        '--adapters',
+        'adapter-manifest.json',
+        '--sender',
+        'sender-wallet',
+        '--receiver',
+        'receiver-wallet',
+        '--seed',
+        'maintainer-seed',
+        '--output-dir',
+        'cashu-fault-results',
+      ],
+      {
+        io: setup.io,
+        runtime: new FakeRuntime(),
+        adapterPreview: async (manifest, options) => {
+          received = { manifest, ...options };
+          return {
+            status: 'passed',
+            artifacts: new Map([
+              ['README.txt', 'maintainer preview\n'],
+              ['preview.json', '{"qualification":false}\n'],
+            ]),
+          };
+        },
+      },
+    );
+
+    expect(outcome.exitCode).toBe(0);
+    expect(received).toEqual({
+      manifest: adapterManifest,
+      profile: 'delivery-v1',
+      seed: 'maintainer-seed',
+      sender: 'sender-wallet',
+      receiver: 'receiver-wallet',
+    });
+    expect(setup.stored.get('cashu-fault-results/README.txt')).toBe('maintainer preview\n');
+    expect(setup.stored.get('cashu-fault-results/preview.json')).toContain('"qualification":false');
+    expect(setup.stdout()).toContain('not release qualification');
+    expect(setup.stdout()).toContain('cashu-fault-results/preview.json');
+  });
+
+  it('returns exit code 1 when a maintainer preview finds a scenario failure', async () => {
+    const setup = fixture({
+      'adapter-manifest.json': JSON.stringify({
+        schemaVersion: 2,
+        adapters: [
+          {
+            id: 'my-wallet',
+            url: 'http://127.0.0.1:4100',
+            tokenEnv: 'MY_WALLET_TOKEN',
+          },
+        ],
+      }),
+    });
+    const outcome = await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        'adapter',
+        'preview',
+        '--adapters',
+        'adapter-manifest.json',
+        '--sender',
+        'my-wallet',
+        '--receiver',
+        'my-wallet',
+      ],
+      {
+        io: setup.io,
+        runtime: new FakeRuntime(),
+        adapterPreview: async () => ({
+          status: 'failed',
+          artifacts: new Map([['preview.json', '{"qualification":false}\n']]),
+        }),
+      },
+    );
+
+    expect(outcome.exitCode).toBe(1);
+    expect(setup.stdout()).toContain('preview failed');
+  });
+
+  it('automatically starts and stops the loopback preview gateway', async () => {
+    const setup = fixture({
+      'adapter-manifest.json': JSON.stringify({
+        schemaVersion: 2,
+        adapters: [
+          {
+            id: 'my-wallet',
+            url: 'http://127.0.0.1:4100',
+            tokenEnv: 'MY_WALLET_TOKEN',
+          },
+        ],
+      }),
+    });
+    const diskIo: CliIo = {
+      ...setup.io,
+      readText: async (path) => {
+        try {
+          return await setup.io.readText(path);
+        } catch {
+          return readFile(path, 'utf8');
+        }
+      },
+    };
+    const report: AdapterPreflightReport = {
+      schemaVersion: 1,
+      ok: true,
+      profile: 'delivery-v1',
+      adapters: [
+        {
+          id: 'my-wallet',
+          url: 'http://127.0.0.1:4100',
+          implementation: matrixCapability.implementation,
+          capabilities: matrixCapability,
+        },
+      ],
+      checks: [
+        {
+          adapterId: 'my-wallet',
+          stage: 'connectivity',
+          status: 'passed',
+          code: 'ADAPTER_REACHABLE',
+          message: 'Adapter is reachable.',
+        },
+      ],
+    };
+    const argumentsForPreview = [
+      'node',
+      'cashu-fault-lab',
+      'adapter',
+      'preview',
+      '--adapters',
+      'adapter-manifest.json',
+      '--sender',
+      'my-wallet',
+      '--receiver',
+      'my-wallet',
+    ] as const;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const outcome = await runCli(argumentsForPreview, {
+        io: diskIo,
+        runtime: new FakeRuntime(),
+        env: {},
+        adapterPreflight: async () => report,
+      });
+      expect(outcome.exitCode).toBe(0);
     }
   });
 
