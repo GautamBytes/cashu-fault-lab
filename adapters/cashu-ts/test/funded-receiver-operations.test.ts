@@ -65,8 +65,12 @@ class FakeMint implements MintGateway {
     };
   }
 
-  async swap(): Promise<Awaited<ReturnType<MintGateway['swap']>>> {
+  async swap(
+    _plan: Parameters<MintGateway['swap']>[0],
+    hooks?: Parameters<MintGateway['swap']>[1],
+  ): Promise<Awaited<ReturnType<MintGateway['swap']>>> {
     this.swapCalls += 1;
+    await hooks?.afterRequestDispatched();
     return { replacementPlanHash: 'c'.repeat(64), replacementProofs: ['replacement-proof'] };
   }
 
@@ -208,6 +212,9 @@ describe('FundedCashuTsReceiverOperations', () => {
     await expect(receiver.proofs()).resolves.toEqual([
       { deliveryId, proofSetHash: 'b'.repeat(64), inputYs: [proofY], state: 'spent' },
     ]);
+    await expect(receiver.redemptions()).resolves.toEqual([
+      { deliveryId, proofSetHash: 'b'.repeat(64), starts: 1 },
+    ]);
     expect(mint.prepareCalls).toBe(1);
     expect(mint.swapCalls).toBe(1);
   });
@@ -265,6 +272,9 @@ describe('FundedCashuTsReceiverOperations', () => {
       });
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({ delivery_id: deliveryId, status: 'settled' });
+      const redemptions = await app.inject({ method: 'GET', url: '/v1/redemptions' });
+      expect(redemptions.statusCode).toBe(200);
+      expect(redemptions.json()).toEqual([{ deliveryId, proofSetHash: 'b'.repeat(64), starts: 1 }]);
     } finally {
       await app.close();
     }

@@ -92,11 +92,15 @@ async function swapAndSettle(
   deps: AcceptDeliveryDependencies,
 ): Promise<DeliveryReceipt> {
   try {
-    const swapped = await deps.mint.swap(plan);
-    await receiverCrashCheckpoint(deps).hit(
-      'receiver_after_mint_request_before_response',
-      deliveryId,
-    );
+    const swapped = await deps.mint.swap(plan, {
+      afterRequestDispatched: async () => {
+        await deps.store.recordRedemptionStart(deliveryId);
+        await receiverCrashCheckpoint(deps).hit(
+          'receiver_after_mint_request_before_response',
+          deliveryId,
+        );
+      },
+    });
     return settleWithCheckpoints(
       {
         deliveryId,

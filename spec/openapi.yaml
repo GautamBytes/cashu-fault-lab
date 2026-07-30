@@ -313,6 +313,33 @@ paths:
         '501':
           $ref: '#/components/responses/NotApplicable'
 
+  /v1/redemptions:
+    get:
+      summary: Return cumulative mint redemption-start evidence (receiver role)
+      operationId: getRedemptions
+      description: |
+        Return the number of mint redemption requests begun for each delivery and
+        proof-set binding. Counts are cumulative and capped at 1,000 so duplicate
+        dispatches remain observable without exposing proof secrets.
+      responses:
+        '200':
+          description: Mint redemption-start evidence
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items:
+                  $ref: '#/components/schemas/MintRedemptionEvidenceView'
+              example:
+                - deliveryId: 'xK3f9mQpL7vR2hN8dW5gYw'
+                  proofSetHash: 'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3'
+                  starts: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '501':
+          $ref: '#/components/responses/NotApplicable'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -739,4 +766,22 @@ components:
           type: string
           enum: ['unspent', 'pending', 'spent', 'unknown']
           description: Current proof state
+      additionalProperties: false
+
+    MintRedemptionEvidenceView:
+      type: object
+      required: [deliveryId, proofSetHash, starts]
+      properties:
+        deliveryId:
+          type: string
+          description: Associated delivery identifier
+        proofSetHash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA-256 hash of the proof set
+        starts:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: Cumulative mint redemption requests begun for this binding
       additionalProperties: false

@@ -93,6 +93,19 @@ describe('PostgresReceiverStore', () => {
     expect(indexes.rows[0]!.indexdef).toContain("'credited'::text");
   });
 
+  it('persists the cumulative redemption-start count separately from lifecycle phase', async () => {
+    const prepared = await store.prepare(await prepareInput());
+
+    expect(prepared.record.redemptionStarts).toBe(0);
+    await store.markMintSent(deliveryId);
+    expect((await store.current(deliveryId))?.redemptionStarts).toBe(0);
+
+    await store.recordRedemptionStart(deliveryId);
+    await store.recordRedemptionStart(deliveryId);
+
+    expect((await store.current(deliveryId))?.redemptionStarts).toBe(2);
+  });
+
   it('atomically collapses 100 duplicate prepares into one encrypted plan and proof claim', async () => {
     const input = await prepareInput();
     const results = await Promise.all(Array.from({ length: 100 }, () => store.prepare(input)));

@@ -161,6 +161,8 @@ export interface InvariantCommand {
   readonly type: string;
   readonly target?: string;
   readonly component?: string;
+  readonly boundary?: string;
+  readonly rule?: { readonly kind?: string };
 }
 
 export interface InvariantRunMetadata {
@@ -352,8 +354,26 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
   const results: InvariantResult[] = [];
 
   const redemptionId: InvariantId = 'at-most-once-redemption-start';
+  const rejectedDeliveries = new Set(
+    latest.filter((receipt) => receipt.status === 'rejected').map((receipt) => receipt.deliveryId),
+  );
+  const unspentProofSets = new Set(
+    proofStates
+      .filter((proofState) => proofState.state === 'UNSPENT')
+      .map((proofState) => proofState.proofSetHash),
+  );
+  const observedPreRedemptionRejection =
+    attempts.length > 0 &&
+    attempts.every(
+      (attempt) =>
+        rejectedDeliveries.has(attempt.deliveryId) && unspentProofSets.has(attempt.proofSetHash),
+    );
   if (attempts.length === 0) {
     results.push(notApplicable(redemptionId, 'No delivery was attempted.'));
+  } else if (redemptions.length === 0 && observedPreRedemptionRejection) {
+    results.push(
+      notApplicable(redemptionId, 'The observed delivery was rejected before mint redemption.'),
+    );
   } else if (redemptions.length === 0) {
     results.push(notObservable(redemptionId, 'Mint redemption-start evidence is unavailable.'));
   } else {
@@ -381,6 +401,10 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
   );
   if (singleUse.size === 0) {
     results.push(notApplicable(requestCreditId, 'No single-use request was observed.'));
+  } else if (credits.length === 0 && observedPreRedemptionRejection) {
+    results.push(
+      notApplicable(requestCreditId, 'The observed request was rejected before settlement.'),
+    );
   } else if (credits.length === 0) {
     results.push(
       notObservable(requestCreditId, 'Durable merchant ledger evidence is unavailable.'),
@@ -401,6 +425,10 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
   const deliveryCreditId: InvariantId = 'at-most-one-merchant-credit-per-delivery';
   if (attempts.length === 0) {
     results.push(notApplicable(deliveryCreditId, 'No delivery was attempted.'));
+  } else if (credits.length === 0 && observedPreRedemptionRejection) {
+    results.push(
+      notApplicable(deliveryCreditId, 'The observed delivery was rejected before settlement.'),
+    );
   } else if (credits.length === 0) {
     results.push(
       notObservable(deliveryCreditId, 'Durable merchant ledger evidence is unavailable.'),
@@ -530,16 +558,56 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
 
   const rejectionId: InvariantId = 'no-false-rejection-after-possible-consumption';
   const rejected = latest.filter((item) => item.status === 'rejected');
-  if (rejected.length === 0) {
+  const ambiguousReceiverCrash = commands.some(
+    (command) =>
+      command.type === 'arm_crash' &&
+      command.component === 'receiver' &&
+      (command.boundary === 'receiver_after_mint_request_before_response' ||
+        command.boundary === 'receiver_after_mint_response_before_output_persistence'),
+  );
+  const attemptedDeliveryIds = new Set(attempts.map((attempt) => attempt.deliveryId));
+  const rejectedAfterBinding = rejected.filter((receipt) =>
+    attemptedDeliveryIds.has(receipt.deliveryId),
+  );
+  const relevantDeliveryIds = new Set(
+    (rejectedAfterBinding.length > 0 ? rejectedAfterBinding : latest).map(
+      (receipt) => receipt.deliveryId,
+    ),
+  );
+  const relevantProofSets = new Set(
+    attempts
+      .filter((attempt) => relevantDeliveryIds.has(attempt.deliveryId))
+      .map((attempt) => attempt.proofSetHash),
+  );
+  const relevantProofStates = proofStates.filter((proofState) =>
+    relevantProofSets.has(proofState.proofSetHash),
+  );
+  const rejectionViolation = matchingSafetyFailure(safety, /rejected proofs after they may/u);
+  if (rejected.length === 0 && !ambiguousReceiverCrash) {
     results.push(notApplicable(rejectionId, 'No rejected receipt was observed.'));
-  } else if (proofStates.length === 0) {
+  } else if (rejected.length > 0 && rejectedAfterBinding.length === 0 && !ambiguousReceiverCrash) {
+    results.push(notApplicable(rejectionId, 'The delivery was rejected before delivery binding.'));
+  } else if (ambiguousReceiverCrash && rejected.length > 0) {
+    results.push(
+      failed(
+        rejectionId,
+        rejectionViolation ?? 'Receiver rejected a delivery after an ambiguous mint request.',
+        rejectionViolation === undefined
+          ? [receiptReference(model)]
+          : [receiptReference(model), proofReference(model)],
+      ),
+    );
+  } else if (receipts.length === 0) {
+    results.push(
+      notObservable(rejectionId, 'Receiver receipt evidence is unavailable after mint dispatch.'),
+    );
+  } else if (relevantProofStates.length === 0) {
     results.push(
       notObservable(rejectionId, 'Mint proof evidence is unavailable for the rejected delivery.'),
     );
   } else {
-    const violation = matchingSafetyFailure(safety, /rejected proofs after they may/u);
     results.push(
-      violation === undefined
+      rejectionViolation === undefined
         ? passed(rejectionId, observationConfidence, [
             receiptReference(model),
             evidence(
@@ -548,7 +616,7 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
               firstObservationIndex(model, 'mint_proofs_state'),
             ),
           ])
-        : failed(rejectionId, violation, [receiptReference(model)]),
+        : failed(rejectionId, rejectionViolation, [receiptReference(model)]),
     );
   }
 
@@ -641,12 +709,15 @@ function evaluateSafetyAndLiveness(input: EvaluateInvariantsInput): readonly Inv
   }
 
   const retryId: InvariantId = 'retry-convergence';
+  const retryFaultKinds = new Set(['drop_request', 'drop_response', 'duplicate']);
   const retryApplies =
     duplicates ||
     commands.some(
       (command) =>
         command.type === 'configure_fault' &&
-        (command.target === 'http' || command.target === 'nostr'),
+        (command.target === 'http' || command.target === 'nostr') &&
+        command.rule?.kind !== undefined &&
+        retryFaultKinds.has(command.rule.kind),
     );
   if (!retryApplies) {
     results.push(notApplicable(retryId, 'The scenario does not exercise delivery retries.'));
@@ -693,6 +764,9 @@ function evaluateEvidence(input: EvaluateInvariantsInput): readonly InvariantRes
   const attempts = observations(model, 'delivery_attempted');
   const proofStates = observations(model, 'mint_proofs_state');
   const credits = observations(model, 'merchant_credited');
+  const settledReceipts = latestReceipts(observations(model, 'receipt_observed')).filter(
+    (receipt) => receipt.status === 'settled',
+  );
   const results: InvariantResult[] = [];
 
   const mintId: InvariantId = 'independent-mint-evidence';
@@ -713,8 +787,8 @@ function evaluateEvidence(input: EvaluateInvariantsInput): readonly InvariantRes
   }
 
   const ledgerId: InvariantId = 'independent-ledger-evidence';
-  if (attempts.length === 0) {
-    results.push(notApplicable(ledgerId, 'No delivery requiring ledger evidence was attempted.'));
+  if (settledReceipts.length === 0) {
+    results.push(notApplicable(ledgerId, 'No settled delivery requires ledger evidence.'));
   } else if (credits.length === 0) {
     results.push(notObservable(ledgerId, 'Independent durable ledger evidence is unavailable.'));
   } else {

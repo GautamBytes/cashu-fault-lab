@@ -19,7 +19,15 @@ class FakeDriver implements ScenarioDriver {
   }
 
   async capabilities(): Promise<Readonly<Record<string, unknown>>> {
-    return { fake: true, seed: this.seed };
+    return {
+      fake: true,
+      seed: this.seed,
+      componentVersions: { fake: '1.0.0' },
+      roles: {
+        sender: { profiles: ['delivery-v1'] },
+        receiver: { profiles: ['delivery-v1'] },
+      },
+    };
   }
 
   async configureFault(target: string, rule: FaultRule): Promise<void> {
@@ -45,6 +53,11 @@ class FakeDriver implements ScenarioDriver {
           payloadHash: 'payload-a',
           proofSetHash: 'proofs-a',
           transport: 'http',
+        },
+        {
+          type: 'redemption_started',
+          deliveryId: 'delivery-1',
+          proofSetHash: 'proofs-a',
         },
         { type: 'mint_proofs_state', proofSetHash: 'proofs-a', state: 'SPENT' },
         {
@@ -106,6 +119,26 @@ class SourceConfidenceDriver extends FakeDriver {
   readonly sourceConfidence = {
     ledger: 'adapter_claimed',
   } as const;
+}
+
+class MissingEvidenceDriver extends FakeDriver {
+  override async send(sender: string, requestId: string): Promise<DriverSendResult> {
+    this.calls.push(`send:${sender}:${requestId}`);
+    return {
+      value: { accepted: true },
+      observations: [
+        { type: 'request_observed', requestId, singleUse: true },
+        {
+          type: 'delivery_attempted',
+          requestId,
+          deliveryId: 'delivery-1',
+          payloadHash: 'payload-a',
+          proofSetHash: 'proofs-a',
+          transport: 'http',
+        },
+      ],
+    };
+  }
 }
 
 class DeferredSendDriver extends FakeDriver {
@@ -238,6 +271,42 @@ describe('ScenarioRunner', () => {
     expect(
       result.artifact.invariants.find((item) => item.id === 'monotonic-receipts'),
     ).toMatchObject({ status: 'passed', confidence: 'derived' });
+  });
+
+  it('fails when an applicable invariant is not observable', async () => {
+    const result = await new ScenarioRunner(new MissingEvidenceDriver()).run(
+      {
+        name: 'missing-invariant-evidence',
+        commands: [{ type: 'send', sender: 'sender-a', requestId: 'request-1' }],
+      },
+      'missing-evidence',
+    );
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: {
+        name: 'InvariantEvaluationError',
+        message: expect.stringContaining('at-most-once-redemption-start'),
+      },
+    });
+    expect(
+      result.artifact.invariants.some((invariant) => invariant.status === 'not_observable'),
+    ).toBe(true);
+  });
+
+  it('does not fail solely because invariants are not applicable', async () => {
+    const result = await new ScenarioRunner(new FakeDriver()).run(
+      {
+        name: 'not-applicable-invariants',
+        commands: [{ type: 'send', sender: 'sender-a', requestId: 'request-1' }],
+      },
+      'not-applicable',
+    );
+
+    expect(result.status).toBe('passed');
+    expect(
+      result.artifact.invariants.some((invariant) => invariant.status === 'not_applicable'),
+    ).toBe(true);
   });
 
   it('turns oracle violations into reproducible failure artifacts', async () => {

@@ -289,6 +289,15 @@ function externalDemoFetch(
           },
         ];
       }
+      if (url.pathname === '/v1/redemptions') {
+        return [
+          {
+            deliveryId: activeDeliveryId,
+            proofSetHash: 'b'.repeat(64),
+            starts: 1,
+          },
+        ];
+      }
       throw new Error(`Unexpected demo adapter request: ${url.pathname} ${String(init?.method)}`);
     })();
     return new Response(JSON.stringify(body), {
@@ -775,6 +784,15 @@ describe('PackagedLabRuntime', () => {
             },
           ];
         }
+        if (url.pathname === '/v1/redemptions') {
+          return [
+            {
+              deliveryId: activeDeliveryId,
+              proofSetHash: 'b'.repeat(64),
+              starts: 1,
+            },
+          ];
+        }
         throw new Error(`Unexpected adapter request: ${url.pathname} ${String(init?.method)}`);
       })();
       return new Response(JSON.stringify(body), {
@@ -1008,6 +1026,15 @@ describe('PackagedLabRuntime', () => {
               proofSetHash: 'b'.repeat(64),
               inputYs: [`02${'01'.repeat(32)}`],
               state: 'spent',
+            },
+          ];
+        }
+        if (url.pathname === '/v1/redemptions') {
+          return [
+            {
+              deliveryId: activeDeliveryId,
+              proofSetHash: 'b'.repeat(64),
+              starts: 1,
             },
           ];
         }

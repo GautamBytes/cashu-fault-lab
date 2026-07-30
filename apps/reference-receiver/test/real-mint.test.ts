@@ -1,5 +1,5 @@
 import type { ProtocolId } from '@cashu-fault-lab/delivery-core';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CashuTsMintGateway, MintGatewayError } from '../src/index.js';
 import { MockMintServer, mockKeysetId } from './mock-mint.js';
 
@@ -61,5 +61,32 @@ describe('CashuTsMintGateway NUT-03', () => {
       mayHaveConsumedInputs: true,
     });
     expect(mint.swapCalls).toBe(1);
+  });
+
+  it('signals dispatch after the request body is sent and before the mint response', async () => {
+    const mint = new MockMintServer({ nut09: true, nut19Ttl: null });
+    servers.push(mint);
+    await mint.start();
+    const responseGate = Promise.withResolvers<void>();
+    mint.swapResponseGate = responseGate.promise;
+    let checkpointReached = false;
+    const gateway = new CashuTsMintGateway({
+      now: () => 1_784_399_400,
+    });
+    const plan = await gateway.prepareSwap(draft(mint.url));
+
+    const swapping = gateway.swap(plan, {
+      afterRequestDispatched: async () => {
+        checkpointReached = true;
+      },
+    });
+
+    await vi.waitFor(() => expect(mint.swapCalls).toBe(1));
+    const checkpointBeforeResponse = checkpointReached;
+    responseGate.resolve();
+    await swapping;
+
+    expect(checkpointBeforeResponse).toBe(true);
+    expect(checkpointReached).toBe(true);
   });
 });

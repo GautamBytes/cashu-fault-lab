@@ -98,6 +98,16 @@ export interface ScenarioError {
   readonly message: string;
 }
 
+export class InvariantEvaluationError extends Error {
+  readonly invariantIds: readonly string[];
+
+  constructor(invariantIds: readonly string[]) {
+    super(`Invariant evaluation failed or was not observable: ${invariantIds.join(', ')}`);
+    this.name = 'InvariantEvaluationError';
+    this.invariantIds = [...invariantIds];
+  }
+}
+
 function sameFailure(left: ScenarioError, right: ScenarioRunResult): boolean {
   return (
     right.status === 'failed' &&
@@ -311,6 +321,16 @@ export class ScenarioRunner {
       componentVersions,
       imageDigests: imageDigestsFromCapabilities(capabilities),
     };
+    if (!failure) {
+      const incomplete = artifact.invariants
+        .filter(
+          (invariant) => invariant.status === 'failed' || invariant.status === 'not_observable',
+        )
+        .map((invariant) => invariant.id);
+      if (incomplete.length > 0) {
+        failure = errorView(new InvariantEvaluationError(incomplete));
+      }
+    }
     return failure
       ? { status: 'failed', artifact, error: failure }
       : { status: 'passed', artifact };

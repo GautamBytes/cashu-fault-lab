@@ -179,6 +179,48 @@ describe('PostgresSenderState', () => {
     await expect(first.get(deliveryId)).resolves.toMatchObject({ attempts: 2 });
   });
 
+  it('commits durable writes before a locked operation fails', async () => {
+    if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+    const state = new PostgresSenderState({ pool, encryptionKey: stateKey });
+
+    await expect(
+      state.withDeliveryLock(deliveryId, async (lockedState) => {
+        await lockedState.create(record());
+        throw new Error('network attempt failed after durable reservation');
+      }),
+    ).rejects.toThrowError(/network attempt failed/);
+
+    await expect(state.get(deliveryId)).resolves.toMatchObject({
+      deliveryId,
+      status: 'sending',
+      attempts: 1,
+    });
+  });
+
+  it('uses the lock session for autocommit writes with a single-connection pool', async () => {
+    if (container === undefined) throw new Error('PostgreSQL container did not start');
+    const singleConnectionPool = new Pool({
+      connectionString: container.getConnectionUri(),
+      max: 1,
+      connectionTimeoutMillis: 500,
+    });
+    try {
+      const state = new PostgresSenderState({
+        pool: singleConnectionPool,
+        encryptionKey: stateKey,
+        tenantId: 'single-connection',
+      });
+
+      await state.withDeliveryLock(deliveryId, async (lockedState) => {
+        await lockedState.create(record());
+      });
+
+      await expect(state.get(deliveryId)).resolves.toMatchObject({ deliveryId });
+    } finally {
+      await singleConnectionPool.end();
+    }
+  });
+
   it('rejects nested delivery-lock acquisition instead of deadlocking', async () => {
     if (pool === undefined) throw new Error('PostgreSQL pool did not start');
     const state = new PostgresSenderState({ pool, encryptionKey: stateKey });

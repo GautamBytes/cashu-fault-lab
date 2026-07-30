@@ -143,6 +143,7 @@ export interface AdapterClient {
   delivery(deliveryId: string): Promise<DeliveryReceiptView>;
   ledger(): Promise<readonly LedgerCreditView[]>;
   proofs(): Promise<readonly ProofEvidenceView[]>;
+  redemptions?(): Promise<readonly MintRedemptionEvidenceView[]>;
 }
 
 export type AdapterRequestOperation = 'reset' | 'createRequest' | 'send' | 'armCrash';

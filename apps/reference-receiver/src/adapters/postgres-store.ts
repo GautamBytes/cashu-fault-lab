@@ -34,6 +34,7 @@ interface DeliveryRow extends QueryResultRow {
   readonly mint: string;
   readonly unit: string;
   readonly amount: string;
+  readonly redemption_starts: string;
   readonly phase: DeliveryPhase;
   readonly receipt: DeliveryReceipt | string;
   readonly swap_plan_ciphertext: Buffer;
@@ -328,6 +329,24 @@ export class PostgresReceiverStore implements ReceiverStore {
       const receipt = nextReceipt(record.receipt, 'processing', 'redeeming');
       await this.#updatePhase(client, deliveryId, 'mint_sent', receipt);
       return receipt;
+    });
+  }
+
+  async recordRedemptionStart(deliveryId: string): Promise<void> {
+    await this.#serializable(async (client) => {
+      const record = await this.#requiredDelivery(client, deliveryId, true);
+      if (record.phase === 'prepared' || record.phase === 'rejected') {
+        throw new ReceiverDomainError(
+          'INVALID_STATE',
+          'Delivery cannot record redemption from current phase',
+        );
+      }
+      await client.query(
+        `UPDATE deliveries
+         SET redemption_starts = LEAST(redemption_starts + 1, 1000), updated_at = now()
+         WHERE delivery_id = $1`,
+        [deliveryId],
+      );
     });
   }
 
@@ -693,7 +712,8 @@ export class PostgresReceiverStore implements ReceiverStore {
     forUpdate: boolean,
   ): Promise<DeliveryRecord | undefined> {
     const result = await connection.query<DeliveryRow>(
-      `SELECT delivery_id, request_id, payload_hash, proof_set_hash, mint, unit, amount, phase,
+      `SELECT delivery_id, request_id, payload_hash, proof_set_hash, mint, unit, amount,
+              redemption_starts, phase,
               receipt, swap_plan_ciphertext, swap_plan_nonce, swap_plan_tag,
               replacement_plan_hash, replacement_ciphertext, replacement_nonce, replacement_tag
        FROM deliveries WHERE delivery_id = $1${forUpdate ? ' FOR UPDATE' : ''}`,
@@ -746,6 +766,7 @@ export class PostgresReceiverStore implements ReceiverStore {
       proofClaimIds: claims.rows.map((claim) => claim.proof_y_hmac),
       plan,
       amount: safeDatabaseInteger(row.amount, 'Delivery amount'),
+      redemptionStarts: safeDatabaseInteger(row.redemption_starts, 'Redemption starts'),
       phase: row.phase,
       receipt: parseJson(row.receipt),
       ...(row.replacement_plan_hash ? { replacementPlanHash: row.replacement_plan_hash } : {}),

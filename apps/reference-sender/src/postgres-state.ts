@@ -33,9 +33,8 @@ export interface CreatePostgresSenderStateOptions {
   readonly maxConnections?: number;
 }
 
-type DatabaseConnection = Pool | PoolClient;
-
 const senderLockScope = new AsyncLocalStorage<boolean>();
+type DatabaseConnection = Pool | PoolClient;
 
 function tenantId(value: string | undefined): string {
   const selected = value ?? 'default';
@@ -126,15 +125,15 @@ export class PostgresSenderState implements SenderState {
   readonly #pool: Pool;
   readonly #key: Buffer;
   readonly #tenantId: string;
-  readonly #client: PoolClient | undefined;
   readonly #randomBytes: (size: number) => Buffer;
+  readonly #connection: DatabaseConnection;
 
-  constructor(options: PostgresSenderStateOptions, client?: PoolClient) {
+  constructor(options: PostgresSenderStateOptions, connection: DatabaseConnection = options.pool) {
     this.#pool = options.pool;
     this.#key = encryptionKey(options.encryptionKey);
     this.#tenantId = tenantId(options.tenantId);
-    this.#client = client;
     this.#randomBytes = options.randomBytes ?? randomBytes;
+    this.#connection = connection;
   }
 
   async withDeliveryLock<T>(
@@ -146,13 +145,13 @@ export class PostgresSenderState implements SenderState {
     }
 
     const client = await this.#pool.connect();
-    let operationFailed = false;
+    let lockAcquired = false;
     let operationError: unknown;
     try {
-      await client.query('BEGIN');
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      await client.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [
         `${this.#tenantId}:${deliveryId}`,
       ]);
+      lockAcquired = true;
       const lockedState = new PostgresSenderState(
         {
           pool: this.#pool,
@@ -162,32 +161,40 @@ export class PostgresSenderState implements SenderState {
         },
         client,
       );
-      const value = await senderLockScope.run(true, () => operation(lockedState));
-      await client.query('COMMIT');
-      return value;
+      return await senderLockScope.run(true, () => operation(lockedState));
     } catch (error) {
-      operationFailed = true;
       operationError = error;
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        throw new AggregateError(
-          [operationError, rollbackError],
-          'Sender delivery-lock operation and rollback both failed',
-        );
-      }
       throw error;
     } finally {
-      client.release(
-        operationFailed && operationError instanceof Error ? operationError : undefined,
-      );
+      let unlockError: unknown;
+      try {
+        if (lockAcquired) {
+          const result = await client.query<{ unlocked: boolean }>(
+            'SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked',
+            [`${this.#tenantId}:${deliveryId}`],
+          );
+          if (result.rows[0]?.unlocked !== true) {
+            throw new Error('PostgreSQL sender delivery lock was not held during release');
+          }
+        }
+      } catch (error) {
+        unlockError = error;
+      }
+      client.release(unlockError instanceof Error ? unlockError : undefined);
+      if (unlockError !== undefined && operationError !== undefined) {
+        throw new AggregateError(
+          [operationError, unlockError],
+          'Sender delivery-lock operation and unlock both failed',
+        );
+      }
+      if (unlockError !== undefined) throw unlockError;
     }
   }
 
   async create(record: SenderDeliveryRecord): Promise<void> {
     const encrypted = this.#encrypt(record);
     try {
-      await this.#connection().query(
+      await this.#connection.query(
         `INSERT INTO sender_deliveries (
            tenant_id, delivery_id, record_ciphertext, record_nonce, record_tag
          ) VALUES ($1, $2, $3, $4, $5)`,
@@ -202,7 +209,7 @@ export class PostgresSenderState implements SenderState {
   }
 
   async get(deliveryId: string): Promise<SenderDeliveryRecord | undefined> {
-    const result = await this.#connection().query<SenderDeliveryRow>(
+    const result = await this.#connection.query<SenderDeliveryRow>(
       `SELECT delivery_id, record_ciphertext, record_nonce, record_tag
        FROM sender_deliveries
        WHERE tenant_id = $1 AND delivery_id = $2`,
@@ -214,7 +221,7 @@ export class PostgresSenderState implements SenderState {
 
   async save(record: SenderDeliveryRecord): Promise<void> {
     const encrypted = this.#encrypt(record);
-    const result = await this.#connection().query(
+    const result = await this.#connection.query(
       `UPDATE sender_deliveries
        SET record_ciphertext = $3,
            record_nonce = $4,
@@ -226,10 +233,6 @@ export class PostgresSenderState implements SenderState {
     if ((result.rowCount ?? 0) === 0) {
       throw new Error('Sender delivery does not exist');
     }
-  }
-
-  #connection(): DatabaseConnection {
-    return this.#client ?? this.#pool;
   }
 
   #encrypt(record: SenderDeliveryRecord): {

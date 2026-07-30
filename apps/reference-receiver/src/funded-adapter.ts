@@ -5,6 +5,7 @@ import {
   type AdapterCapabilities,
   type CreateRequestInput,
   type LedgerCreditView,
+  type MintRedemptionEvidenceView,
   type PaymentRequestView,
   type ProofEvidenceView,
 } from '@cashu-fault-lab/adapter-contract';
@@ -202,6 +203,22 @@ export class FundedReceiverAdapterControl implements ReceiverAdapterControl {
                   : record.phase === 'rejected'
                     ? 'unknown'
                     : 'pending',
+            },
+          ],
+    );
+  }
+
+  async redemptions(): Promise<readonly MintRedemptionEvidenceView[]> {
+    const plans = (await this.#store.settlementPlans()).slice(0, 1_000);
+    const records = await Promise.all(plans.map((plan) => this.#store.current(plan.deliveryId)));
+    return records.flatMap((record): readonly MintRedemptionEvidenceView[] =>
+      record === undefined || record.redemptionStarts === 0
+        ? []
+        : [
+            {
+              deliveryId: record.deliveryId,
+              proofSetHash: record.proofSetHash,
+              starts: record.redemptionStarts,
             },
           ],
     );

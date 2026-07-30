@@ -1,7 +1,13 @@
 import { ScenarioRunner } from '../dist/index.js';
 const driver = {
   reset: async () => {},
-  capabilities: async () => ({}),
+  capabilities: async () => ({
+    componentVersions: { consumer: '1.0.0' },
+    roles: {
+      sender: { profiles: ['delivery-v1'] },
+      receiver: { profiles: ['delivery-v1'] },
+    },
+  }),
   configureFault: async () => {},
   send: async () => ({ value: {}, observations: [] }),
   restart: async () => {},

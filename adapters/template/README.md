@@ -38,6 +38,7 @@ pnpm --filter @cashu-fault-lab/adapter-template build
 | `POST` | `/v1/send`           | Send or resume a logical payment (sender) | Parsing only | Real send | Real send | Real send |
 | `GET`  | `/v1/ledger`         | Return merchant credit evidence           | N/A          | N/A       | N/A       | Required  |
 | `GET`  | `/v1/proofs`         | Return proof-state evidence               | N/A          | N/A       | Required  | Required  |
+| `GET`  | `/v1/redemptions`    | Return mint redemption-start evidence     | N/A          | Required  | Required  | Required  |
 
 ## Evidence tier progression
 

@@ -72,6 +72,30 @@ describe('NUT-18 HTTP payment receiver', () => {
     expect(await store.credits()).toHaveLength(1);
   });
 
+  it('exposes a public no-store delivery status resource', async () => {
+    const { app } = await createApp();
+    const posted = await app.inject({
+      method: 'POST',
+      url: '/pay',
+      headers: { 'content-type': 'application/json' },
+      payload: Buffer.from(serializeDeliveryPayload(payload(requestId, deliveryId, now))),
+    });
+    const status = await app.inject({ method: 'GET', url: `/pay/${deliveryId}` });
+    const missing = await app.inject({
+      method: 'GET',
+      url: '/pay/ICEiIyQlJicoKSorLC0uLw',
+    });
+    const invalid = await app.inject({ method: 'GET', url: '/pay/not-a-protocol-id' });
+
+    expect(status.statusCode).toBe(200);
+    expect(status.headers['cache-control']).toBe('no-store');
+    expect(status.json()).toEqual(posted.json());
+    expect(missing.statusCode).toBe(404);
+    expect(missing.headers['cache-control']).toBe('no-store');
+    expect(invalid.statusCode).toBe(422);
+    expect(invalid.headers['cache-control']).toBe('no-store');
+  });
+
   it('maps delivery conflicts and expiry to stable HTTP errors', async () => {
     const { app } = await createApp();
     const original = serializeDeliveryPayload(payload(requestId, deliveryId, now));
@@ -152,6 +176,12 @@ describe('NUT-18 HTTP payment receiver', () => {
       status: 'processing',
       detail_code: 'recovery_blocked',
     });
+
+    const status = await app.inject({ method: 'GET', url: `/pay/${deliveryId}` });
+    expect(status.statusCode).toBe(202);
+    expect(status.headers['retry-after']).toBe('1');
+    expect(status.headers['cache-control']).toBe('no-store');
+    expect(status.json()).toEqual(response.json());
   });
 
   it('allows only configured CORS origins without credentials', async () => {
@@ -261,6 +291,10 @@ class FakeAdapterControl implements ReceiverAdapterControl {
       },
     ];
   }
+
+  async redemptions() {
+    return [{ deliveryId, proofSetHash: 'a'.repeat(64), starts: 1 }];
+  }
 }
 
 async function adapterFixture(options: { readonly testMode?: boolean; readonly token?: string }) {
@@ -311,6 +345,9 @@ describe('receiver adapter API', () => {
     ).toEqual(adapterReceipt);
     expect((await app.inject({ method: 'GET', url: '/v1/ledger' })).json()).toHaveLength(1);
     expect((await app.inject({ method: 'GET', url: '/v1/proofs' })).json()).toHaveLength(1);
+    expect((await app.inject({ method: 'GET', url: '/v1/redemptions' })).json()).toEqual([
+      { deliveryId, proofSetHash: 'a'.repeat(64), starts: 1 },
+    ]);
   });
 
   it('rejects invalid request creation before control invocation', async () => {

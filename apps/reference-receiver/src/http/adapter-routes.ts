@@ -4,6 +4,7 @@ import {
   type AdapterCapabilities,
   type CreateRequestInput,
   type LedgerCreditView,
+  type MintRedemptionEvidenceView,
   type PaymentRequestView,
   type ProofEvidenceView,
 } from '@cashu-fault-lab/adapter-contract';
@@ -20,6 +21,7 @@ export interface ReceiverAdapterControl {
   delivery(deliveryId: string): Promise<DeliveryReceiptWire>;
   ledger(): Promise<readonly LedgerCreditView[]>;
   proofs(): Promise<readonly ProofEvidenceView[]>;
+  redemptions?(): Promise<readonly MintRedemptionEvidenceView[]>;
 }
 
 export interface ReceiverAdapterRouteOptions {
@@ -137,6 +139,13 @@ export function registerReceiverAdapterRoutes(
         assertResponse('proofs', value);
         return value;
       });
+      if (options.control.redemptions !== undefined) {
+        controlApp.get('/redemptions', async () => {
+          const value = await options.control.redemptions!();
+          assertResponse('redemptions', value);
+          return value;
+        });
+      }
     },
     { prefix: '/v1' },
   );

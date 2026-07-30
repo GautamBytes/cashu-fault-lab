@@ -195,4 +195,187 @@ describe('invariant evidence', () => {
       status: 'not_applicable',
     });
   });
+
+  it('proves no false rejection after an ambiguous receiver crash settles', () => {
+    const selected = evaluateInvariants({
+      model: model([
+        ...observations,
+        { type: 'mint_proofs_state', proofSetHash: 'proofs-a', state: 'SPENT' },
+      ]),
+      commands: [
+        {
+          type: 'arm_crash',
+          component: 'receiver',
+          boundary: 'receiver_after_mint_request_before_response',
+        },
+      ],
+      history: [],
+    }).find((candidate) => candidate.id === 'no-false-rejection-after-possible-consumption');
+
+    expect(selected).toMatchObject({
+      status: 'passed',
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ source: 'receipt' }),
+        expect.objectContaining({ source: 'proofs' }),
+      ]),
+    });
+  });
+
+  it('fails a rejected delivery whose proofs may have been consumed', () => {
+    const rejected = observations.map((observation) =>
+      observation.type === 'receipt_observed'
+        ? { ...observation, status: 'rejected' as const, detailCode: 'mint_unavailable' }
+        : observation,
+    );
+    const selected = evaluateInvariants({
+      model: model([
+        ...rejected,
+        { type: 'mint_proofs_state', proofSetHash: 'proofs-a', state: 'SPENT' },
+      ]),
+      commands: [
+        {
+          type: 'arm_crash',
+          component: 'receiver',
+          boundary: 'receiver_after_mint_response_before_output_persistence',
+        },
+      ],
+      history: [],
+    }).find((candidate) => candidate.id === 'no-false-rejection-after-possible-consumption');
+
+    expect(selected).toMatchObject({
+      status: 'failed',
+      reason: expect.stringMatching(/rejected proofs.*consumed/i),
+    });
+  });
+
+  it('fails a rejection after an ambiguous crash even when the latest proof snapshot is unspent', () => {
+    const rejected = observations.map((observation) =>
+      observation.type === 'receipt_observed'
+        ? { ...observation, status: 'rejected' as const, detailCode: 'mint_unavailable' }
+        : observation,
+    );
+    const selected = evaluateInvariants({
+      model: model([
+        ...rejected,
+        { type: 'mint_proofs_state', proofSetHash: 'proofs-a', state: 'UNSPENT' },
+      ]),
+      commands: [
+        {
+          type: 'arm_crash',
+          component: 'receiver',
+          boundary: 'receiver_after_mint_request_before_response',
+        },
+      ],
+      history: [],
+    }).find((candidate) => candidate.id === 'no-false-rejection-after-possible-consumption');
+
+    expect(selected).toMatchObject({
+      status: 'failed',
+      reason: expect.stringMatching(/rejected.*ambiguous mint request/i),
+    });
+  });
+
+  it('does not use unrelated mint proof evidence to qualify a rejected delivery', () => {
+    const rejected = observations.map((observation) =>
+      observation.type === 'receipt_observed'
+        ? { ...observation, status: 'rejected' as const, detailCode: 'expired' }
+        : observation,
+    );
+    const selected = evaluateInvariants({
+      model: model([
+        ...rejected,
+        { type: 'mint_proofs_state', proofSetHash: 'proofs-other', state: 'UNSPENT' },
+      ]),
+      commands: [{ type: 'send' }, { type: 'assert_quiescent' }],
+      history: [],
+    }).find((candidate) => candidate.id === 'no-false-rejection-after-possible-consumption');
+
+    expect(selected).toMatchObject({
+      status: 'not_observable',
+      reason: expect.stringMatching(/rejected delivery/i),
+    });
+  });
+
+  it('treats a rejection before delivery binding as pre-consumption', () => {
+    const selected = evaluateInvariants({
+      model: model([
+        { type: 'request_observed', requestId: 'request-1', singleUse: true },
+        {
+          type: 'receipt_observed',
+          requestId: 'request-1',
+          deliveryId: 'delivery-rejected',
+          payloadHash: 'payload-rejected',
+          status: 'rejected',
+          detailCode: 'conflict',
+          version: 1,
+          amount: 8,
+          unit: 'sat',
+        },
+        { type: 'mint_proofs_state', proofSetHash: 'proofs-other', state: 'SPENT' },
+      ]),
+      commands: [{ type: 'send' }, { type: 'assert_quiescent' }],
+      history: [],
+    }).find((candidate) => candidate.id === 'no-false-rejection-after-possible-consumption');
+
+    expect(selected).toMatchObject({
+      status: 'not_applicable',
+      reason: expect.stringMatching(/before delivery binding/i),
+    });
+  });
+
+  it('keeps no-false-rejection not applicable without an ambiguous crash or rejection', () => {
+    expect(result('no-false-rejection-after-possible-consumption')).toMatchObject({
+      status: 'not_applicable',
+    });
+  });
+
+  it('does not classify security-only HTTP faults as retry scenarios', () => {
+    const selected = evaluateInvariants({
+      model: model([]),
+      commands: [
+        {
+          type: 'configure_fault',
+          target: 'http',
+          rule: { kind: 'redirect_to_attacker' },
+        },
+      ],
+      history: [],
+    }).find((candidate) => candidate.id === 'retry-convergence');
+
+    expect(selected).toMatchObject({ status: 'not_applicable' });
+  });
+
+  it('treats an observed pre-redemption rejection as having no redemption to count', () => {
+    const results = evaluateInvariants({
+      model: model([
+        observations[0]!,
+        observations[1]!,
+        { type: 'mint_proofs_state', proofSetHash: 'proofs-a', state: 'UNSPENT' },
+        {
+          type: 'receipt_observed',
+          requestId: 'request-1',
+          deliveryId: 'delivery-1',
+          payloadHash: 'payload-a',
+          status: 'rejected',
+          detailCode: 'expired',
+          version: 1,
+          amount: 8,
+          unit: 'sat',
+        },
+      ]),
+      commands: [{ type: 'send' }, { type: 'assert_quiescent' }],
+      history: [],
+    });
+
+    for (const id of [
+      'at-most-once-redemption-start',
+      'at-most-one-merchant-credit-per-request',
+      'at-most-one-merchant-credit-per-delivery',
+      'independent-ledger-evidence',
+    ] as const) {
+      expect(results.find((candidate) => candidate.id === id)).toMatchObject({
+        status: 'not_applicable',
+      });
+    }
+  });
 });

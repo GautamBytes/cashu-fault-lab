@@ -15,6 +15,7 @@ Serve these routes on loopback unless your test network provides equivalent isol
 | `GET`  | `/v1/deliveries/:id` | Read the current receipt                                             |
 | `GET`  | `/v1/ledger`         | Return allowlisted merchant credit evidence                          |
 | `GET`  | `/v1/proofs`         | Return proof-state hashes and states                                 |
+| `GET`  | `/v1/redemptions`    | Return cumulative mint redemption-start evidence                     |
 
 Use `spec/schemas/adapter-capabilities.schema.json` and the request and response types from `@cashu-fault-lab/adapter-contract`. Require a bearer control token outside explicit test mode. Do not place that token in reports.
 

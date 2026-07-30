@@ -1,4 +1,8 @@
-import { DeliveryValidationError, serializeDeliveryReceipt } from '@cashu-fault-lab/delivery-core';
+import {
+  DeliveryValidationError,
+  parseProtocolId,
+  serializeDeliveryReceipt,
+} from '@cashu-fault-lab/delivery-core';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { AcceptDeliveryDependencies } from '../domain/accept-delivery.js';
 import { acceptPayloadBytes } from '../domain/accept-payload.js';
@@ -65,5 +69,35 @@ export function registerPaymentRoute(
       mapPaymentError(error, reply);
       return reply;
     }
+  });
+
+  app.get<{ Params: { deliveryId: string } }>('/pay/:deliveryId', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    let deliveryId: string;
+    try {
+      deliveryId = parseProtocolId(request.params.deliveryId);
+    } catch (error) {
+      if (error instanceof DeliveryValidationError) {
+        return reply.code(422).send({
+          code: error.code,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
+
+    const record = await dependencies.store.current(deliveryId);
+    if (record === undefined) {
+      return reply.code(404).send({
+        code: 'DELIVERY_NOT_FOUND',
+        message: 'Delivery status was not found',
+      });
+    }
+    if (record.receipt.status === 'processing') {
+      reply.header('Retry-After', '1').code(202);
+    } else {
+      reply.code(200);
+    }
+    return serializeDeliveryReceipt(record.receipt);
   });
 }
