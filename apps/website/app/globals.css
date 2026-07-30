@@ -150,9 +150,41 @@ footer {
 }
 
 .footer-inner {
+  align-items: center;
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
   margin: 0 auto;
   max-width: var(--shell-width);
   padding: 1.5rem 1.25rem;
+}
+
+.footer-profiles {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.footer-profiles a {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--sand-300);
+  display: inline-flex;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  gap: 0.35rem;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.55rem 0.7rem;
+  text-decoration: none;
+}
+
+.footer-profiles a:hover,
+.footer-profiles a:focus-visible {
+  background: var(--elevated-surface);
+  color: var(--sand-100);
 }
 
 .skip-link {
@@ -163,6 +195,16 @@ footer {
   position: fixed;
   top: -5rem;
   z-index: 100;
+}
+
+@media (max-width: 560px) {
+  .footer-inner {
+    flex-wrap: wrap;
+  }
+
+  .footer-profiles {
+    width: 100%;
+  }
 }
 
 .skip-link:focus {

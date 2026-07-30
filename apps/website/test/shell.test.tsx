@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { PortalShell } from '../components/portal-shell';
 import { SiteHeader } from '../components/site-header';
 
 const globalsCss = readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8');
@@ -83,6 +84,39 @@ describe('SiteHeader', () => {
     expect(within(search).getByText('⌘K').tagName).toBe('KBD');
     expect(headerCss).toMatch(
       /@media \(max-width: 1040px\)[\s\S]*\.searchLabel,\s*\.searchHint\s*\{[^}]*clip-path:\s*inset\(50%\)/,
+    );
+  });
+});
+
+describe('site footer', () => {
+  it('keeps the maintainer profiles at the bottom right', () => {
+    render(
+      <PortalShell records={[]}>
+        <div>Page content</div>
+      </PortalShell>,
+    );
+
+    const footer = screen.getByRole('contentinfo');
+    const profiles = within(footer).getByRole('navigation', {
+      name: 'Gautam Manchandani profiles',
+    });
+    const links = [
+      ['X', 'https://x.com/GautamM96'],
+      ['LinkedIn', 'https://www.linkedin.com/in/gautam-manchandani/'],
+      ['GitHub', 'https://github.com/GautamBytes'],
+    ] as const;
+
+    for (const [name, href] of links) {
+      expect(within(profiles).getByRole('link', { name })).toHaveAttribute('href', href);
+      expect(within(profiles).getByRole('link', { name })).toHaveAttribute('target', '_blank');
+      expect(within(profiles).getByRole('link', { name })).toHaveAttribute(
+        'rel',
+        'noreferrer noopener',
+      );
+    }
+
+    expect(globalsCss).toMatch(
+      /\.footer-inner\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*space-between/s,
     );
   });
 });

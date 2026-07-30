@@ -57,7 +57,24 @@ export function PortalShell({ children, records }: PortalShellProps) {
       <main id="main-content">{children}</main>
       <ScrollReveal />
       <footer>
-        <div className="footer-inner">Experimental developer preview.</div>
+        <div className="footer-inner">
+          <span>Experimental developer preview.</span>
+          <nav aria-label="Gautam Manchandani profiles" className="footer-profiles">
+            <a href="https://x.com/GautamM96" rel="noreferrer noopener" target="_blank">
+              X <span aria-hidden="true">↗</span>
+            </a>
+            <a
+              href="https://www.linkedin.com/in/gautam-manchandani/"
+              rel="noreferrer noopener"
+              target="_blank"
+            >
+              LinkedIn <span aria-hidden="true">↗</span>
+            </a>
+            <a href="https://github.com/GautamBytes" rel="noreferrer noopener" target="_blank">
+              GitHub <span aria-hidden="true">↗</span>
+            </a>
+          </nav>
+        </div>
       </footer>
     </>
   );
