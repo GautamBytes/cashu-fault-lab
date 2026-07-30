@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.2 — 2026-07-30
+
+- Added a loopback-only maintainer preview for integrating external wallet adapters.
+- Added actionable adapter preflight diagnostics for manifests, authentication, capabilities, roles,
+  routes, evidence authorities, and connectivity.
+- Added capability-aware response-loss and duplicate-delivery checks with automatic fault-gateway
+  orchestration and redacted JSON, HTML, and JUnit feedback bundles.
+- Hardened retry identity, receiver recovery, proof-state evidence, redemption-start accounting, and
+  conflict handling across the reference implementations.
+- Improved the website command experience, maintainer contact links, and architecture documentation.
+
 ## 0.1.1 — 2026-07-30
 
 - Published the self-contained npm CLI with npm 12-compatible executable metadata.

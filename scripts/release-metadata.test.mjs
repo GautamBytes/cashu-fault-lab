@@ -39,7 +39,7 @@ test('workspace and Rust adapter versions identify the v0.1 developer preview', 
     await text('adapters/cdk/Cargo.lock'),
     /name = "cashu-fault-lab-cdk-adapter"\nversion = "0\.1\.0"/u,
   );
-  assert.equal(JSON.parse(await text('apps/npm-cli/package.json')).version, '0.1.1');
+  assert.equal(JSON.parse(await text('apps/npm-cli/package.json')).version, '0.1.2');
 });
 
 test('release docs make the preview, demo, and certification boundary explicit', async () => {
