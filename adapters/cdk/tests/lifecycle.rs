@@ -631,37 +631,35 @@ async fn unresolved_swap_blocks_later_same_value_output_production_durably() {
 
     let reopened_store =
         Arc::new(LifecycleStore::open_with_clock(&path, [46_u8; 32], clock).expect("reopen store"));
-    let reopened = Arc::new(LifecycleEngine::new(reopened_store, wallet.clone()));
-    let later = tokio::spawn({
-        let engine = reopened.clone();
-        async move {
-            engine
-                .start(input("BBBBBBBBBBBBBBBBBBBBBA", LifecycleKind::Swap))
-                .await
-        }
-    });
-    assert!(
-        tokio::time::timeout(Duration::from_millis(100), async {
-            while wallet.executions.load(Ordering::SeqCst) == 1 {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .is_err(),
-        "operation B must not reach the wallet while A is unresolved"
+    let reopened = LifecycleEngine::new(reopened_store, wallet.clone());
+    let later_input = input("BBBBBBBBBBBBBBBBBBBBBA", LifecycleKind::Swap);
+    let pending = tokio::time::timeout(
+        Duration::from_millis(100),
+        reopened.start(later_input.clone()),
+    )
+    .await
+    .expect("operation B must return promptly instead of waiting on A")
+    .expect("return retryable operation B");
+    assert_eq!(pending.phase, LifecyclePhase::Created);
+    assert_eq!(wallet.executions.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        reopened
+            .operation("AAAAAAAAAAAAAAAAAAAAAA")
+            .expect("operation A remains unresolved")
+            .phase,
+        LifecyclePhase::Ambiguous
     );
 
-    let blocked = reopened
-        .resume("AAAAAAAAAAAAAAAAAAAAAA")
+    tokio::time::timeout(Duration::from_secs(1), reopened.reset("next-generation"))
         .await
-        .expect("recover operation A");
-    assert_eq!(blocked.phase, LifecyclePhase::RecoveryBlocked);
-    assert_eq!(wallet.executions.load(Ordering::SeqCst), 1);
-    assert!(
-        tokio::time::timeout(Duration::from_millis(100), later)
-            .await
-            .is_err()
-    );
+        .expect("operation B must release its claim and engine read guard")
+        .expect("reset succeeds while B is pending");
+    let retried = tokio::time::timeout(Duration::from_secs(1), reopened.start(later_input))
+        .await
+        .expect("operation B retry completes after reset")
+        .expect("retry operation B");
+    assert_eq!(retried.phase, LifecyclePhase::Succeeded);
+    assert_eq!(wallet.executions.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]

@@ -518,13 +518,10 @@ impl LifecycleEngine {
         if operation.phase.terminal() {
             return Ok(operation);
         }
-        if input.kind != LifecycleKind::Reconcile {
-            loop {
-                if self.store.try_claim_wallet_mutation(operation_id, token)? {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-            }
+        if input.kind != LifecycleKind::Reconcile
+            && !self.store.try_claim_wallet_mutation(operation_id, token)?
+        {
+            return Ok(operation);
         }
         let mut private_material = self.store.private_material(operation_id)?;
         let execution = if recovery || operation.phase == LifecyclePhase::Ambiguous {
