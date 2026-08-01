@@ -27,6 +27,7 @@ import { preflightLocalAdapters, type AdapterPreflightReport } from './adapter-p
 import { createAdapterPreviewArtifacts, validateLocalFaultGateway } from './adapter-preview.js';
 import { registerAdapterCommands } from './commands/adapter.js';
 import { registerLifecycleCommands } from './commands/lifecycle.js';
+import { createEnvironmentLifecycleRuntime } from './lifecycle-runtime.js';
 import {
   LabDiagnosticError,
   createDiagnostic,
@@ -106,6 +107,7 @@ export interface CliIo {
 
 export interface RunCliDependencies {
   readonly runtime?: LabRuntime;
+  readonly lifecycleRuntime?: import('./commands/lifecycle.js').LifecycleLabRuntime;
   readonly io?: CliIo;
   readonly doctorProbes?: import('./doctor.js').DoctorProbes;
   readonly distribution?: 'workspace' | 'package';
@@ -302,6 +304,7 @@ export async function runCli(
     io,
     runtime,
     distribution: dependencies.distribution ?? 'workspace',
+    lifecycleRuntime: dependencies.lifecycleRuntime ?? createEnvironmentLifecycleRuntime(env),
     ...(doctorProbes === undefined ? {} : { doctorProbes }),
     setExitCode: (code) => {
       exitCode = code;

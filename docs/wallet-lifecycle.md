@@ -8,9 +8,9 @@ release gate.
 
 ## Current implementation
 
-This branch provides the lifecycle identity/state model, language-neutral schemas and HTTP client,
-an implementation-independent value-conservation oracle, a seeded runner with redacted failure
-artifacts, and a restart-safe cashu-ts adapter backed by PostgreSQL.
+The repository provides the lifecycle identity/state model, language-neutral schemas and HTTP
+client, an implementation-independent value-conservation oracle, a seeded runner with redacted
+failure artifacts, and restart-safe cashu-ts and CDK adapters.
 
 The cashu-ts adapter implements `mint`, `swap`, `send`, `receive`, `restore`, and `reconcile`.
 `melt` is advertised only when an independent Lightning settlement probe is configured. The CDK
@@ -19,9 +19,39 @@ when durable encrypted SQLite state is configured; CDK `melt` remains disabled u
 independent settlement authority exists. Runtime capability discovery also removes operations whose
 required NUTs are absent at the configured mint.
 
-This is useful developer-preview infrastructure, not yet a complete Point 2 release suite. The
-semantic mint-fault scenario corpus, lifecycle CLI commands, cross-implementation matrix, and funded
-Lightning regtest lane remain follow-up work. Missing lanes are not reported as passes.
+The developer-preview workflow now includes the semantic mint-fault corpus and `lifecycle run`,
+`lifecycle matrix`, and `lifecycle replay`. The funded cross-implementation matrix and Lightning
+regtest lane remain follow-up work. The matrix reports unavailable lanes as `N/A` and does not count
+them as passes.
+
+## Run a lifecycle scenario
+
+Configure loopback adapter and gateway endpoints. Keep control tokens out of command arguments and
+report files.
+
+```bash
+export CFL_LIFECYCLE_CASHU_TS_URL=http://127.0.0.1:4101
+export CFL_LIFECYCLE_CASHU_TS_TOKEN='<adapter control token>'
+export CFL_HTTP_FAULT_GATEWAY_URL=http://127.0.0.1:4300
+export CFL_HTTP_FAULT_GATEWAY_TOKEN='<gateway control token>'
+
+pnpm lab doctor --suite lifecycle
+pnpm lab lifecycle run mint-response-lost \
+  --adapter cashu-ts \
+  --mint nutshell-local \
+  --seed local-seed
+```
+
+The default report path is `artifacts/lifecycle/<scenario>.json`. Reports contain a
+domain-separated seed hash and sanitized operation evidence. Use these forms for other outputs:
+
+```bash
+pnpm lab lifecycle run swap-response-lost --adapter cashu-ts --mint nutshell-local \
+  --seed local-seed --format junit --output artifacts/lifecycle/swap.xml
+pnpm lab lifecycle matrix --profile wallet-lifecycle-v1 --json
+pnpm lab lifecycle replay artifacts/lifecycle/failure.json \
+  --seed local-seed --adapter cashu-ts --mint nutshell-local
+```
 
 ## State and recovery model
 

@@ -109,6 +109,15 @@ importers:
       '@cashu-fault-lab/scenario-runner':
         specifier: workspace:*
         version: link:../../packages/scenario-runner
+      '@cashu-fault-lab/wallet-lifecycle-contract':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-contract
+      '@cashu-fault-lab/wallet-lifecycle-oracle':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-oracle
+      '@cashu-fault-lab/wallet-lifecycle-runner':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-runner
       commander:
         specifier: 15.0.0
         version: 15.0.0
@@ -315,6 +324,12 @@ importers:
       '@cashu-fault-lab/scenario-runner':
         specifier: workspace:*
         version: link:../scenario-runner
+      '@cashu-fault-lab/wallet-lifecycle-oracle':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-oracle
+      '@cashu-fault-lab/wallet-lifecycle-runner':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-runner
 
   packages/scenario-runner:
     dependencies:

@@ -69,11 +69,24 @@ adapters and clients remain unchanged. The cashu-ts and CDK preview implementati
 request material before side effects, reconcile ambiguous outcomes, and expose only sanitized
 operation, wallet, and evidence views.
 
-Current code includes the pure state model, contract, independent oracle, deterministic replay,
-cashu-ts lifecycle operations, and CDK preview lifecycle operations. CDK melt remains disabled until
-an independent Lightning settlement probe exists; the packaged semantic-fault corpus, lifecycle CLI,
-funded Lightning regtest lane, and release qualification matrix are still pending. Read
+Current code includes the state model, contract, independent oracle, deterministic replay,
+cashu-ts and CDK lifecycle operations, the semantic mint-fault corpus, and lifecycle CLI reports.
+CDK melt remains disabled until an independent Lightning settlement probe exists. The funded
+cross-library matrix, Lightning regtest lane, and release qualification remain pending. Read
 [wallet lifecycle](docs/wallet-lifecycle.md) before running or integrating this surface.
+
+Run one scenario and keep the raw seed outside the report:
+
+```bash
+pnpm lab doctor --suite lifecycle
+pnpm lab lifecycle run mint-response-lost \
+  --adapter cashu-ts \
+  --mint nutshell-local \
+  --seed local-seed
+```
+
+The command writes a redacted JSON report under `artifacts/lifecycle/`. Use `--format junit` or
+`--format html` with `--output <path>` for CI and browser reports.
 
 For workspace development, [open Cashu Fault Lab in GitHub
 Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1) to use the pinned
@@ -257,7 +270,7 @@ a final `spent` state alone cannot prove at-most-once redemption.
 | NIP-17 and cross-transport convergence     | Packaged synthetic T0 lanes                                                                                                                               | Funded wallets and real relay                      |
 | Receiver persistence and recovery          | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, concurrent-worker leasing, and all six funded receiver crash boundaries | Independent receiver implementations               |
 | Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                                                              | Packaged end-to-end lanes with injected clock      |
-| Wallet lifecycle recovery                  | Pure oracle/runner plus restart-safe cashu-ts operations and opt-in authenticated routes                                                                  | CDK, packaged faults, CLI/matrix, funded regtest   |
+| Wallet lifecycle recovery                  | Oracle/runner, restart-safe cashu-ts and CDK operations, semantic faults, CLI, replay, and redacted reports                                               | Funded cross-library matrix and Lightning regtest  |
 | Sender restart                             | Encrypted PostgreSQL reservation/session state and exact-payload replay pass all four funded sender crash boundaries                                      | Independent sender implementations                 |
 
 The packaged `mint-response-lost` scenario exercises recovery orchestration with in-memory fakes. Durable restart claims come only from PostgreSQL integration tests. Scenario artifacts carry versioned capability and invariant evidence, but only `spec/release-policy.json` decides whether that evidence is release-qualifying.
