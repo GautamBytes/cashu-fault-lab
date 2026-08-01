@@ -24,7 +24,7 @@ import type {
 } from './types.js';
 import { createCashuTsNoRedirectRequest, validatedMintOrigin } from './network.js';
 
-export { createCashuTsNoRedirectRequest } from './network.js';
+export { createCashuTsNoRedirectRequest, withCashuTsLifecycleOperation } from './network.js';
 
 export interface CashuTsLifecycleClient {
   readonly keysetId: string;

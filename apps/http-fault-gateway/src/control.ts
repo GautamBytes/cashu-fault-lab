@@ -28,12 +28,22 @@ export interface GatewayEvidence {
   readonly duplicates: number;
   readonly reordered: number;
   readonly statusInjected: number;
+  readonly staleResponses: number;
+  readonly truncated: number;
+  readonly requests: readonly {
+    readonly method: string;
+    readonly path: string;
+    readonly endpointFamily?: RequestMetadata['endpointFamily'];
+    readonly attemptOrdinal: number;
+    readonly bodyDigest: string;
+  }[];
   readonly rules: readonly {
     readonly id: string;
     readonly phase: FaultPhase;
     readonly action: FaultRule['action'];
     readonly method?: string;
     readonly path?: string;
+    readonly endpointFamily?: RequestMetadata['endpointFamily'];
     readonly remaining: number;
     readonly applied: number;
   }[];
@@ -41,8 +51,10 @@ export interface GatewayEvidence {
 
 export class GatewayControl {
   #sequence = 0;
+  #generation = 0;
   readonly #rules: RuleState[] = [];
   readonly #attempts = new Map<string, number>();
+  readonly #requests: Array<GatewayEvidence['requests'][number]> = [];
   readonly #counters = {
     inbound: 0,
     forwarded: 0,
@@ -52,6 +64,8 @@ export class GatewayControl {
     duplicates: 0,
     reordered: 0,
     statusInjected: 0,
+    staleResponses: 0,
+    truncated: 0,
   };
 
   setRule(input: FaultRuleInput): FaultRule {
@@ -60,11 +74,16 @@ export class GatewayControl {
     return structuredClone(rule);
   }
 
+  get generation(): number {
+    return this.#generation;
+  }
+
   clearRules(): void {
     this.#rules.splice(0);
   }
 
   reset(): void {
+    this.#generation += 1;
     this.clearRules();
     this.#attempts.clear();
     this.#counters.inbound = 0;
@@ -75,14 +94,26 @@ export class GatewayControl {
     this.#counters.duplicates = 0;
     this.#counters.reordered = 0;
     this.#counters.statusInjected = 0;
+    this.#counters.staleResponses = 0;
+    this.#counters.truncated = 0;
+    this.#requests.splice(0);
   }
 
   begin(input: Omit<RequestMetadata, 'attemptOrdinal'>): RequestMetadata {
     this.#counters.inbound += 1;
-    const key = `${input.method}\0${input.path}\0${input.deliveryIdHash ?? '-'}`;
+    const key = `${input.method}\0${input.path}\0${input.deliveryIdHash ?? '-'}\0${input.operationIdHash ?? '-'}`;
     const attemptOrdinal = (this.#attempts.get(key) ?? 0) + 1;
     this.#attempts.set(key, attemptOrdinal);
-    return { ...input, attemptOrdinal };
+    const metadata = { ...input, attemptOrdinal };
+    if (this.#requests.length === 1_024) this.#requests.shift();
+    this.#requests.push({
+      method: metadata.method,
+      path: metadata.path,
+      ...(metadata.endpointFamily === undefined ? {} : { endpointFamily: metadata.endpointFamily }),
+      attemptOrdinal,
+      bodyDigest: metadata.bodyDigest,
+    });
+    return metadata;
   }
 
   take(phase: FaultPhase, metadata: RequestMetadata): FaultRule | undefined {
@@ -109,17 +140,23 @@ export class GatewayControl {
     if (action === 'duplicate') this.#counters.duplicates += extra;
     if (action === 'reorder') this.#counters.reordered += 1;
     if (action === 'status') this.#counters.statusInjected += 1;
+    if (action === 'stale_response') this.#counters.staleResponses += 1;
+    if (action === 'truncate') this.#counters.truncated += 1;
   }
 
   snapshot(): GatewayEvidence {
     return {
       ...this.#counters,
+      requests: structuredClone(this.#requests),
       rules: this.#rules.map(({ rule, remaining, applied }) => ({
         id: rule.id,
         phase: rule.phase,
         action: rule.action,
         ...(rule.match?.method === undefined ? {} : { method: rule.match.method.toUpperCase() }),
         ...(rule.match?.path === undefined ? {} : { path: rule.match.path }),
+        ...(rule.match?.endpointFamily === undefined
+          ? {}
+          : { endpointFamily: rule.match.endpointFamily }),
         remaining,
         applied,
       })),

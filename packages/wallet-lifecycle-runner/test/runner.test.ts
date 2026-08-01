@@ -134,4 +134,60 @@ describe('lifecycle scenario runner', () => {
     expect(JSON.stringify(result.artifact)).not.toContain('"body"');
     expect(JSON.stringify(result.artifact)).not.toContain('quoteId');
   });
+
+  test('executes an explicit adapter restart boundary', async () => {
+    const restarts: string[] = [];
+    const driver = {
+      async reset() {},
+      async configureFault() {},
+      async start() {
+        return { observations: [] };
+      },
+      async resume() {
+        return { observations: [] };
+      },
+      async restart(component: 'adapter' | 'mint') {
+        restarts.push(component);
+        return { observations: [] };
+      },
+    };
+    const result = await new LifecycleScenarioRunner(driver).run({
+      id: 'restart-boundary',
+      seed: 'seed-restart',
+      commands: [{ type: 'restart', component: 'adapter' }],
+    } as unknown as LifecycleScenarioSpec);
+
+    expect(result.ok).toBe(true);
+    expect(restarts).toEqual(['adapter']);
+  });
+
+  test('dispatches bounded resume calls concurrently', async () => {
+    let active = 0;
+    let maximumActive = 0;
+    let calls = 0;
+    const driver = {
+      async reset() {},
+      async configureFault() {},
+      async start() {
+        return { observations: [] };
+      },
+      async resume() {
+        calls += 1;
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return { observations: [] };
+      },
+    };
+    const result = await new LifecycleScenarioRunner(driver).run({
+      id: 'concurrent-resume',
+      seed: 'seed-concurrent',
+      commands: [{ type: 'resume_concurrently', operationId: 'AAAAAAAAAAAAAAAAAAAAAA', count: 8 }],
+    } as unknown as LifecycleScenarioSpec);
+
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(8);
+    expect(maximumActive).toBeGreaterThan(1);
+  });
 });

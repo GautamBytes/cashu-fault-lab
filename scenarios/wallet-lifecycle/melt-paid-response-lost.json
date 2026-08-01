@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "melt-paid-response-lost",
+  "description": "The invoice settles but the melt response is lost; resume must prove one settlement and recover change.",
+  "seed": "wallet-lifecycle-v1:melt-paid-response-lost",
+  "requireQuiescence": true,
+  "requiredOperations": ["melt"],
+  "commands": [
+    { "type": "fault", "rule": { "action": "drop_response", "endpoint": "melt", "occurrence": 1 } },
+    {
+      "type": "start",
+      "input": {
+        "operationId": "AAAAAAAAAAAAAAAAAAAAAA",
+        "kind": "melt",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat",
+        "invoice": "lnbcrt1fixture"
+      }
+    },
+    { "type": "clear_faults" },
+    { "type": "resume", "operationId": "AAAAAAAAAAAAAAAAAAAAAA" }
+  ]
+}

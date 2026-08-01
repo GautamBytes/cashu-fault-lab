@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "melt-pending-restart",
+  "description": "A pending asynchronous melt survives adapter restart and remains reserved until independently settled.",
+  "seed": "wallet-lifecycle-v1:melt-pending-restart",
+  "requireQuiescence": true,
+  "requiredOperations": ["melt"],
+  "commands": [
+    {
+      "type": "fault",
+      "rule": { "action": "delay_response", "endpoint": "melt", "occurrence": 1, "delayMs": 1000 }
+    },
+    {
+      "type": "start",
+      "input": {
+        "operationId": "AAAAAAAAAAAAAAAAAAAAAA",
+        "kind": "melt",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat",
+        "invoice": "lnbcrt1fixture",
+        "preferAsync": true
+      }
+    },
+    { "type": "restart", "component": "adapter" },
+    { "type": "clear_faults" },
+    { "type": "resume", "operationId": "AAAAAAAAAAAAAAAAAAAAAA" }
+  ]
+}

@@ -20,18 +20,23 @@ export interface LifecycleFaultRule {
     | 'drop_response'
     | 'delay_request'
     | 'delay_response'
+    | 'duplicate_request'
     | 'reset_connection'
     | 'stale_response'
     | 'truncate_response';
   readonly endpoint: 'mint' | 'swap' | 'melt' | 'quote' | 'proof_state' | 'restore';
   readonly occurrence: number;
+  readonly delayMs?: number;
+  readonly truncateBytes?: number;
 }
 
 export type LifecycleScenarioCommand =
   | { readonly type: 'fault'; readonly rule: LifecycleFaultRule }
   | { readonly type: 'clear_faults' }
   | { readonly type: 'start'; readonly input: LifecycleOperationInput }
-  | { readonly type: 'resume'; readonly operationId: string };
+  | { readonly type: 'resume'; readonly operationId: string }
+  | { readonly type: 'restart'; readonly component: 'adapter' | 'mint' }
+  | { readonly type: 'resume_concurrently'; readonly operationId: string; readonly count: number };
 
 export interface LifecycleScenarioSpec {
   readonly id: string;
@@ -49,6 +54,7 @@ export interface LifecycleDriver {
   configureFault(rule: LifecycleFaultRule | undefined): Promise<void>;
   start(input: LifecycleOperationInput): Promise<LifecycleDriverStep>;
   resume(operationId: string): Promise<LifecycleDriverStep>;
+  restart?(component: 'adapter' | 'mint'): Promise<LifecycleDriverStep>;
 }
 
 export type LifecycleScenarioRunResult =
@@ -113,6 +119,22 @@ export class LifecycleScenarioRunner {
           case 'resume':
             step = await this.driver.resume(command.operationId);
             break;
+          case 'restart':
+            if (!this.driver.restart) throw new Error('Lifecycle driver does not support restart');
+            step = await this.driver.restart(command.component);
+            break;
+          case 'resume_concurrently': {
+            if (!Number.isSafeInteger(command.count) || command.count < 2 || command.count > 32) {
+              throw new Error('Concurrent resume count must be an integer from 2 to 32');
+            }
+            const resumed = await Promise.all(
+              Array.from({ length: command.count }, async () =>
+                this.driver.resume(command.operationId),
+              ),
+            );
+            step = { observations: resumed.flatMap((result) => result.observations) };
+            break;
+          }
         }
         for (const observation of step.observations) {
           model = applyLifecycleObservation(model, observation);

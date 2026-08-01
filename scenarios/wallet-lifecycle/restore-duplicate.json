@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "restore-duplicate",
+  "description": "A restore request is duplicated byte-for-byte; recovered outputs must be persisted and credited once.",
+  "seed": "wallet-lifecycle-v1:restore-duplicate",
+  "requireQuiescence": true,
+  "requiredOperations": ["restore"],
+  "commands": [
+    {
+      "type": "fault",
+      "rule": { "action": "duplicate_request", "endpoint": "restore", "occurrence": 1 }
+    },
+    {
+      "type": "start",
+      "input": {
+        "operationId": "AAAAAAAAAAAAAAAAAAAAAA",
+        "kind": "restore",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat"
+      }
+    },
+    { "type": "clear_faults" },
+    { "type": "resume", "operationId": "AAAAAAAAAAAAAAAAAAAAAA" }
+  ]
+}

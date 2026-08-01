@@ -5,9 +5,22 @@ import {
   NetworkError,
   type RequestFn,
 } from '@cashu/cashu-ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 export const CASHU_TS_LIFECYCLE_MAX_MINT_RESPONSE_BYTES = 1_048_576;
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+const OPERATION_ID_PATTERN = /^[A-Za-z0-9_-]{21}[AQgw]$/u;
+const operationContext = new AsyncLocalStorage<string>();
+
+export function withCashuTsLifecycleOperation<T>(
+  operationId: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  if (!OPERATION_ID_PATTERN.test(operationId)) {
+    throw new Error('Cashu lifecycle operation ID is invalid');
+  }
+  return operationContext.run(operationId, work);
+}
 
 export interface CashuTsLifecycleRequestPolicy {
   readonly defaultTimeoutMs?: number;
@@ -127,11 +140,13 @@ export function createCashuTsNoRedirectRequest(
     try {
       let response: Response;
       try {
+        const operationId = isLoopbackMint(mintUrl) ? operationContext.getStore() : undefined;
         response = await fetch(endpoint, {
           method: args.method ?? (args.requestBody === undefined ? 'GET' : 'POST'),
           headers: {
             ...(args.requestBody === undefined ? {} : { 'content-type': 'application/json' }),
             ...args.headers,
+            ...(operationId === undefined ? {} : { 'x-cashu-fault-operation-id': operationId }),
           },
           ...(requestBody === undefined ? {} : { body: requestBody }),
           signal,
