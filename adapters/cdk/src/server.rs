@@ -14,12 +14,14 @@ use crate::{
     AdapterCapabilities, capabilities,
     funded::{FundedCdkOperations, SendInput},
     funded_capabilities,
+    lifecycle::{LifecycleEngine, LifecycleInput},
 };
 
 #[derive(Clone)]
 struct AppState {
     authorization: HeaderValue,
     operations: Option<Arc<FundedCdkOperations>>,
+    lifecycle: Option<Arc<LifecycleEngine>>,
 }
 
 #[derive(Deserialize)]
@@ -166,9 +168,187 @@ fn error(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
         .into_response()
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LifecycleImplementation {
+    id: &'static str,
+    version: &'static str,
+    language: &'static str,
+    runtime: &'static str,
+    source_digest: &'static str,
+    build_digest: &'static str,
+}
+
+#[derive(Serialize)]
+struct LifecycleMint {
+    id: &'static str,
+    implementation: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LifecycleCapabilities {
+    schema_version: u32,
+    implementation: LifecycleImplementation,
+    operations: Vec<&'static str>,
+    nuts: Vec<u16>,
+    durability: &'static str,
+    recovery: Vec<&'static str>,
+    mints: [LifecycleMint; 1],
+}
+
+async fn lifecycle_capabilities(State(state): State<Arc<AppState>>) -> Response {
+    let Some(engine) = state.lifecycle.as_ref() else {
+        return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    let runtime = match engine.capabilities().await {
+        Ok(runtime) => runtime,
+        Err(message) => return lifecycle_error(&message),
+    };
+    Json(LifecycleCapabilities {
+        schema_version: cashu_fault_lab_wallet_lifecycle_contract::SCHEMA_VERSION,
+        implementation: LifecycleImplementation {
+            id: "cdk",
+            version: env!("CARGO_PKG_VERSION"),
+            language: "rust",
+            runtime: "cdk-0.17.3",
+            source_digest: cashu_fault_lab_wallet_lifecycle_contract::SPEC_DIGEST,
+            build_digest: cashu_fault_lab_wallet_lifecycle_contract::SPEC_DIGEST,
+        },
+        operations: runtime.operations,
+        nuts: runtime.nuts,
+        durability: "restart_safe",
+        recovery: runtime.recovery,
+        mints: [LifecycleMint {
+            id: "configured-mint",
+            implementation: "configured",
+        }],
+    })
+    .into_response()
+}
+
+fn lifecycle_engine(state: &AppState) -> Option<&Arc<LifecycleEngine>> {
+    state.lifecycle.as_ref()
+}
+
+fn lifecycle_error(message: &str) -> Response {
+    if message.contains("not found") {
+        error(
+            StatusCode::NOT_FOUND,
+            "LIFECYCLE_OPERATION_NOT_FOUND",
+            "Lifecycle operation was not found",
+        )
+    } else if message.contains("conflict") {
+        error(
+            StatusCode::CONFLICT,
+            "LIFECYCLE_OPERATION_ID_CONFLICT",
+            "Lifecycle operation identity conflicts",
+        )
+    } else if message.contains("invalid") || message.contains("required") {
+        error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "LIFECYCLE_SCHEMA_INVALID",
+            "Lifecycle request is invalid",
+        )
+    } else {
+        error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "LIFECYCLE_INTERNAL",
+            "Lifecycle operation failed",
+        )
+    }
+}
+
+async fn lifecycle_reset(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<ResetInput>,
+) -> Response {
+    let Some(engine) = lifecycle_engine(&state) else {
+        return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    match engine.reset(&input.seed).await {
+        Ok(()) => (StatusCode::OK, Json(ResetOutput { ok: true })).into_response(),
+        Err(message) => lifecycle_error(&message),
+    }
+}
+
+async fn lifecycle_start(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<LifecycleInput>,
+) -> Response {
+    let Some(engine) = lifecycle_engine(&state) else {
+        return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    match engine.start(input).await {
+        Ok(operation) => (StatusCode::OK, Json(operation)).into_response(),
+        Err(message) => lifecycle_error(&message),
+    }
+}
+
+async fn lifecycle_resume(
+    State(state): State<Arc<AppState>>,
+    Path(operation_id): Path<String>,
+) -> Response {
+    let Some(engine) = lifecycle_engine(&state) else {
+        return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    match engine.resume(&operation_id).await {
+        Ok(operation) => (StatusCode::OK, Json(operation)).into_response(),
+        Err(message) => lifecycle_error(&message),
+    }
+}
+
+async fn lifecycle_operation(
+    State(state): State<Arc<AppState>>,
+    Path(operation_id): Path<String>,
+) -> Response {
+    let Some(engine) = lifecycle_engine(&state) else {
+        return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    match engine.operation(&operation_id) {
+        Ok(operation) => (StatusCode::OK, Json(operation)).into_response(),
+        Err(message) => lifecycle_error(&message),
+    }
+}
+
+async fn lifecycle_wallet(State(state): State<Arc<AppState>>) -> Response {
+    let Some(engine) = lifecycle_engine(&state) else {
+        return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    match engine.wallet().await {
+        Ok(wallet) => (StatusCode::OK, Json(wallet)).into_response(),
+        Err(message) => lifecycle_error(&message),
+    }
+}
+
+async fn lifecycle_evidence(State(state): State<Arc<AppState>>) -> Response {
+    let Some(engine) = lifecycle_engine(&state) else {
+        return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    match engine.evidence() {
+        Ok(evidence) if evidence.len() <= 100_000 => {
+            (StatusCode::OK, Json(evidence)).into_response()
+        }
+        Ok(_) => error(
+            StatusCode::INSUFFICIENT_STORAGE,
+            "LIFECYCLE_RESPONSE_TOO_LARGE",
+            "Lifecycle evidence response exceeds its bound",
+        ),
+        Err(message) => lifecycle_error(&message),
+    }
+}
+
 pub fn router(
     control_token: &str,
     operations: Option<Arc<FundedCdkOperations>>,
+) -> Result<Router, String> {
+    router_with_lifecycle(control_token, operations, None)
+}
+
+pub fn router_with_lifecycle(
+    control_token: &str,
+    operations: Option<Arc<FundedCdkOperations>>,
+    lifecycle: Option<Arc<LifecycleEngine>>,
 ) -> Result<Router, String> {
     if control_token.is_empty() {
         return Err("CASHU_FAULT_LAB_CONTROL_TOKEN cannot be empty".to_owned());
@@ -178,6 +358,7 @@ pub fn router(
     let state = Arc::new(AppState {
         authorization,
         operations,
+        lifecycle,
     });
     Ok(Router::<Arc<AppState>>::new()
         .route("/v1/capabilities", get(get_capabilities))
@@ -187,7 +368,17 @@ pub fn router(
         .route("/v1/deliveries/{id}", get(delivery))
         .route("/v1/ledger", get(ledger))
         .route("/v1/proofs", get(proofs))
-        .layer(DefaultBodyLimit::max(16_384))
+        .route("/v1/lifecycle/capabilities", get(lifecycle_capabilities))
+        .route("/v1/lifecycle/reset", post(lifecycle_reset))
+        .route("/v1/lifecycle/operations", post(lifecycle_start))
+        .route(
+            "/v1/lifecycle/operations/{id}/resume",
+            post(lifecycle_resume),
+        )
+        .route("/v1/lifecycle/operations/{id}", get(lifecycle_operation))
+        .route("/v1/lifecycle/wallet", get(lifecycle_wallet))
+        .route("/v1/lifecycle/evidence", get(lifecycle_evidence))
+        .layer(DefaultBodyLimit::max(300_000))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
         .with_state(state))
 }
