@@ -40,7 +40,7 @@
 - Produces: `transitionOperation(record, next, evidenceCode?): LifecycleOperationRecord`
 - Produces: closed `LifecycleOperationKind` and `LifecyclePhase` unions.
 
-- [ ] **Step 1: Write failing tests for bounded IDs, immutable identity, allowed transitions, and rejected regressions.**
+- [x] **Step 1: Write failing tests for bounded IDs, immutable identity, allowed transitions, and rejected regressions.**
 
 ```ts
 const created = createOperation({
@@ -54,10 +54,10 @@ expect(transitionOperation(created, 'prepared').phase).toBe('prepared');
 expect(() => transitionOperation(created, 'succeeded')).toThrow('invalid lifecycle transition');
 ```
 
-- [ ] **Step 2: Run `pnpm --filter @cashu-fault-lab/wallet-lifecycle-core test`; expect failure because the package implementation is absent.**
-- [ ] **Step 3: Implement the minimal closed state machine and strict validation without network or library dependencies.**
-- [ ] **Step 4: Re-run the focused tests and `pnpm --filter @cashu-fault-lab/wallet-lifecycle-core typecheck`; expect both to pass.**
-- [ ] **Step 5: Commit `feat(lifecycle): add immutable operation state model`.**
+- [x] **Step 2: Run `pnpm --filter @cashu-fault-lab/wallet-lifecycle-core test`; expect failure because the package implementation is absent.**
+- [x] **Step 3: Implement the minimal closed state machine and strict validation without network or library dependencies.**
+- [x] **Step 4: Re-run the focused tests and `pnpm --filter @cashu-fault-lab/wallet-lifecycle-core typecheck`; expect both to pass.**
+- [x] **Step 5: Commit `feat(lifecycle): add immutable operation state model`.**
 
 ### Task 2: Double-entry lifecycle oracle
 
