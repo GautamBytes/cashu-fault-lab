@@ -75,3 +75,38 @@ export {
   type ParseCashuTsSenderStateKeysInput,
   type PostgresCashuTsSenderStoreOptions,
 } from './postgres-sender-store.js';
+export {
+  CashuTsLifecycleOperations,
+  MemoryCashuTsLifecycleStore,
+  cashuTsLifecycleIntentHash,
+  type CashuTsLifecycleOperationsOptions,
+} from './lifecycle/operations.js';
+export {
+  PostgresCashuTsLifecycleStore,
+  migratePostgresCashuTsLifecycleStore,
+  type PostgresCashuTsLifecycleStoreOptions,
+} from './lifecycle/postgres-store.js';
+export type {
+  CashuTsLifecycleAmounts,
+  CashuTsLifecycleCreateResult,
+  CashuTsLifecyclePreparedRequest,
+  CashuTsLifecycleResult,
+  CashuTsLifecycleStore,
+  CashuTsLifecycleWalletPort,
+  CashuTsStoredLifecycleOperation,
+} from './lifecycle/types.js';
+export {
+  CashuTsLifecycleWallet,
+  type CashuTsLifecycleClient,
+  type CashuTsLifecycleWalletOptions,
+} from './lifecycle/wallet.js';
+export {
+  CASHU_TS_LIFECYCLE_MAX_MINT_RESPONSE_BYTES,
+  createCashuTsNoRedirectRequest,
+  type CashuTsLifecycleRequestPolicy,
+} from './lifecycle/network.js';
+export {
+  HttpCashuTsLifecycleLightningProbe,
+  type HttpCashuTsLifecycleLightningProbeOptions,
+} from './lifecycle/lightning-probe.js';
+export { registerCashuTsLifecycleRoutes } from './lifecycle/routes.js';

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schemas/lifecycle-operation.schema.json",
+  "title": "Wallet Lifecycle Operation View",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operationId", "kind", "mint", "unit", "intentHash", "phase"],
+  "properties": {
+    "operationId": { "$ref": "#/$defs/operationId" },
+    "kind": { "$ref": "#/$defs/kind" },
+    "mint": { "type": "string", "format": "uri", "maxLength": 2048 },
+    "unit": { "$ref": "#/$defs/unit" },
+    "intentHash": { "$ref": "#/$defs/hash" },
+    "phase": {
+      "enum": [
+        "created",
+        "prepared",
+        "submitted",
+        "ambiguous",
+        "reconciling",
+        "succeeded",
+        "failed_definitive",
+        "recovery_blocked"
+      ]
+    },
+    "evidenceCode": { "type": "string", "pattern": "^[a-z0-9_]{1,64}$" },
+    "amount": { "$ref": "#/$defs/nonNegativeAmount" },
+    "inputFee": { "$ref": "#/$defs/nonNegativeAmount" },
+    "feeReserve": { "$ref": "#/$defs/nonNegativeAmount" },
+    "actualFee": { "$ref": "#/$defs/nonNegativeAmount" },
+    "change": { "$ref": "#/$defs/nonNegativeAmount" },
+    "requestHash": { "$ref": "#/$defs/hash" },
+    "quoteHash": { "$ref": "#/$defs/hash" },
+    "outputPlanHash": { "$ref": "#/$defs/hash" }
+  },
+  "$defs": {
+    "operationId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$" },
+    "kind": {
+      "enum": ["mint", "swap", "send", "receive", "melt", "restore", "reconcile"]
+    },
+    "unit": { "type": "string", "pattern": "^[a-z0-9_-]{1,16}$" },
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "amount": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "nonNegativeAmount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "input": {
+      "oneOf": [
+        { "$ref": "#/$defs/mintInput" },
+        { "$ref": "#/$defs/swapInput" },
+        { "$ref": "#/$defs/sendInput" },
+        { "$ref": "#/$defs/receiveInput" },
+        { "$ref": "#/$defs/meltInput" },
+        { "$ref": "#/$defs/restoreInput" },
+        { "$ref": "#/$defs/reconcileInput" }
+      ]
+    },
+    "mintInput": {
+      "$ref": "#/$defs/baseInput",
+      "unevaluatedProperties": false,
+      "required": ["amount", "method"],
+      "properties": {
+        "kind": { "const": "mint" },
+        "amount": { "$ref": "#/$defs/amount" },
+        "method": { "const": "bolt11" }
+      }
+    },
+    "swapInput": {
+      "$ref": "#/$defs/baseInput",
+      "unevaluatedProperties": false,
+      "required": ["amount"],
+      "properties": { "kind": { "const": "swap" }, "amount": { "$ref": "#/$defs/amount" } }
+    },
+    "sendInput": {
+      "$ref": "#/$defs/baseInput",
+      "unevaluatedProperties": false,
+      "required": ["amount", "recipient"],
+      "properties": {
+        "kind": { "const": "send" },
+        "amount": { "$ref": "#/$defs/amount" },
+        "recipient": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$" }
+      }
+    },
+    "receiveInput": {
+      "$ref": "#/$defs/baseInput",
+      "unevaluatedProperties": false,
+      "required": ["token"],
+      "properties": {
+        "kind": { "const": "receive" },
+        "token": { "type": "string", "minLength": 1, "maxLength": 262144 }
+      }
+    },
+    "meltInput": {
+      "$ref": "#/$defs/baseInput",
+      "unevaluatedProperties": false,
+      "required": ["invoice"],
+      "properties": {
+        "kind": { "const": "melt" },
+        "invoice": { "type": "string", "minLength": 1, "maxLength": 16384 },
+        "preferAsync": { "type": "boolean" }
+      }
+    },
+    "restoreInput": {
+      "$ref": "#/$defs/baseInput",
+      "unevaluatedProperties": false,
+      "properties": { "kind": { "const": "restore" } }
+    },
+    "reconcileInput": {
+      "$ref": "#/$defs/baseInput",
+      "unevaluatedProperties": false,
+      "required": ["targetOperationId"],
+      "properties": {
+        "kind": { "const": "reconcile" },
+        "targetOperationId": { "$ref": "#/$defs/operationId" }
+      }
+    },
+    "baseInput": {
+      "type": "object",
+      "required": ["operationId", "kind", "mint", "unit"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/operationId" },
+        "kind": { "$ref": "#/$defs/kind" },
+        "mint": { "type": "string", "format": "uri", "maxLength": 2048 },
+        "unit": { "$ref": "#/$defs/unit" }
+      }
+    }
+  }
+}

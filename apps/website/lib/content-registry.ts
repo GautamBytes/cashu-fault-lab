@@ -49,6 +49,16 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
     order: 30,
   },
   {
+    kind: 'markdown',
+    slug: 'wallet-lifecycle',
+    href: '/docs/wallet-lifecycle',
+    sourcePath: 'docs/wallet-lifecycle.md',
+    title: 'Wallet lifecycle',
+    description: 'Crash-safe wallet operations, recovery semantics, and the current preview scope.',
+    group: 'Integrate',
+    order: 35,
+  },
+  {
     kind: 'generated',
     slug: 'architecture',
     href: '/architecture',

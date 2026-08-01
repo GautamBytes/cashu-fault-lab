@@ -29,6 +29,8 @@
     "@cashu-fault-lab/delivery-core": "workspace:*",
     "@cashu-fault-lab/nostr-delivery": "workspace:*",
     "@cashu-fault-lab/reference-receiver": "workspace:*",
+    "@cashu-fault-lab/wallet-lifecycle-contract": "workspace:*",
+    "@cashu-fault-lab/wallet-lifecycle-core": "workspace:*",
     "fastify": "5.10.0",
     "nostr-tools": "2.23.12",
     "pg": "8.22.0"

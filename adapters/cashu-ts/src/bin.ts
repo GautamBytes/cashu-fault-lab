@@ -1,5 +1,16 @@
 #!/usr/bin/env node
+import type { LifecycleCapabilities } from '@cashu-fault-lab/wallet-lifecycle-contract';
+import { developmentIdentity } from '@cashu-fault-lab/adapter-contract';
+import { Pool } from 'pg';
+import { lifecycleListenHost } from './bin-config.js';
 import { buildFundedCashuTsAdapterServer } from './funded-server.js';
+import { CashuTsLifecycleOperations } from './lifecycle/operations.js';
+import { HttpCashuTsLifecycleLightningProbe } from './lifecycle/lightning-probe.js';
+import {
+  PostgresCashuTsLifecycleStore,
+  migratePostgresCashuTsLifecycleStore,
+} from './lifecycle/postgres-store.js';
+import { CashuTsLifecycleWallet } from './lifecycle/wallet.js';
 import { createPostgresCashuTsReceiverStore } from './postgres-receiver-store.js';
 import { PostgresCrashCheckpoint, SigkillProcessTerminator } from './postgres-crash-checkpoint.js';
 import { PostgresCrashArmStore, migratePostgresCrashArmStore } from './postgres-crash-arm-store.js';
@@ -20,14 +31,6 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
     throw new Error(`${name} must be a positive safe integer`);
   }
   return parsed;
-}
-
-function listenHost(value: string | undefined): string {
-  const host = value ?? '127.0.0.1';
-  if (host !== '127.0.0.1' && host !== '0.0.0.0') {
-    throw new Error('CFL_CASHU_TS_HOST must be 127.0.0.1 or 0.0.0.0');
-  }
-  return host;
 }
 
 function optionalBase64UrlKey(name: string): Uint8Array | undefined {
@@ -61,7 +64,7 @@ function optionalCsv(name: string): readonly string[] | undefined {
 }
 
 const port = positiveInteger(process.env.CFL_CASHU_TS_PORT, 4101, 'CFL_CASHU_TS_PORT');
-const host = listenHost(process.env.CFL_CASHU_TS_HOST);
+const requestedHost = process.env.CFL_CASHU_TS_HOST;
 const proofClaimKey = optionalBase64UrlKey('CFL_CASHU_TS_CLAIM_KEY');
 const senderNostrPrivateKey = optionalBase64UrlKey('CFL_CASHU_TS_NOSTR_SENDER_KEY');
 const receiverNostrPrivateKey = optionalBase64UrlKey('CFL_CASHU_TS_NOSTR_RECEIVER_KEY');
@@ -72,6 +75,7 @@ const paymentTarget =
     : (process.env.CFL_CASHU_TS_PAYMENT_TARGET ?? `http://127.0.0.1:${port}/pay`);
 const receiverDatabaseUrl = process.env.CFL_CASHU_TS_RECEIVER_DATABASE_URL;
 const senderDatabaseUrl = process.env.CFL_CASHU_TS_SENDER_DATABASE_URL;
+const mintUrl = required('CFL_CASHU_TS_MINT_URL');
 const durableSender =
   senderDatabaseUrl === undefined || senderDatabaseUrl.length === 0
     ? undefined
@@ -125,8 +129,81 @@ if (crashControlsEnabled && durableSender !== undefined) {
   await migratePostgresCrashArmStore(durableSender.pool);
   await crashControl?.initialize();
 }
+const lifecycleDatabaseUrl = process.env.CFL_CASHU_TS_LIFECYCLE_DATABASE_URL;
+const lifecycleStateKey = optionalBase64UrlKey('CFL_CASHU_TS_LIFECYCLE_STATE_KEY');
+const lightningProbeUrl = process.env.CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_URL;
+const lightningProbeToken = process.env.CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_TOKEN;
+if ((lightningProbeUrl === undefined) !== (lightningProbeToken === undefined)) {
+  throw new Error(
+    'CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_URL and CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_TOKEN must be configured together',
+  );
+}
+const lightningProbe =
+  lightningProbeUrl === undefined || lightningProbeToken === undefined
+    ? undefined
+    : new HttpCashuTsLifecycleLightningProbe({
+        url: lightningProbeUrl,
+        token: lightningProbeToken,
+        allowUnsafeExternal:
+          process.env.CFL_CASHU_TS_LIFECYCLE_ALLOW_UNSAFE_LIGHTNING_PROBE === 'true',
+      });
+if ((lifecycleDatabaseUrl === undefined) !== (lifecycleStateKey === undefined)) {
+  throw new Error(
+    'CFL_CASHU_TS_LIFECYCLE_DATABASE_URL and CFL_CASHU_TS_LIFECYCLE_STATE_KEY must be configured together',
+  );
+}
+const lifecyclePool =
+  lifecycleDatabaseUrl === undefined
+    ? undefined
+    : new Pool({ connectionString: lifecycleDatabaseUrl, max: 10 });
+let lifecycle: CashuTsLifecycleOperations | undefined;
+if (lifecyclePool !== undefined && lifecycleStateKey !== undefined) {
+  await migratePostgresCashuTsLifecycleStore(lifecyclePool);
+  const lifecycleStore = new PostgresCashuTsLifecycleStore({
+    pool: lifecyclePool,
+    key: lifecycleStateKey,
+    runId: required('CFL_CASHU_TS_LIFECYCLE_RUN_ID'),
+    tenantId: process.env.CFL_CASHU_TS_LIFECYCLE_TENANT_ID ?? 'cashu-ts-lifecycle',
+  });
+  const lifecycleCapabilities: LifecycleCapabilities = {
+    schemaVersion: 1,
+    implementation: developmentIdentity({
+      id: 'cashu-ts',
+      version: '4.7.2',
+      language: 'typescript',
+      runtime: 'node-24',
+    }),
+    operations: [
+      'mint',
+      'swap',
+      'send',
+      'receive',
+      ...(lightningProbe === undefined ? [] : (['melt'] as const)),
+      'restore',
+      'reconcile',
+    ],
+    nuts: [3, 4, ...(lightningProbe === undefined ? [] : [5, 8]), 7, 9, 13, 19],
+    durability: 'restart_safe',
+    recovery: ['quote_state', 'proof_state', 'nut09_restore', 'nut13_seed', 'nut19_replay'],
+    mints: [{ id: 'configured-mint', implementation: 'unknown' }],
+  };
+  lifecycle = new CashuTsLifecycleOperations({
+    store: lifecycleStore,
+    wallet: new CashuTsLifecycleWallet({
+      mintUrl,
+      unit: 'sat',
+      store: lifecycleStore,
+      allowUnsafeMint: process.env.CFL_CASHU_TS_LIFECYCLE_ALLOW_UNSAFE_MINT === 'true',
+      ...(lightningProbe === undefined ? {} : { lightning: lightningProbe }),
+    }),
+    mint: mintUrl,
+    unit: 'sat',
+    capabilities: lifecycleCapabilities,
+  });
+}
+const host = lifecycleListenHost(requestedHost, lifecycle !== undefined);
 const app = await buildFundedCashuTsAdapterServer({
-  mintUrl: required('CFL_CASHU_TS_MINT_URL'),
+  mintUrl,
   controlToken: required('CFL_CASHU_TS_CONTROL_TOKEN'),
   fundingAmount: positiveInteger(
     process.env.CFL_CASHU_TS_FUNDING_AMOUNT,
@@ -144,12 +221,14 @@ const app = await buildFundedCashuTsAdapterServer({
   ...(crashControl?.activeRunId() === undefined
     ? {}
     : { resumeRunId: crashControl.activeRunId()! }),
+  ...(lifecycle === undefined ? {} : { lifecycle }),
 });
 
 const close = async (): Promise<void> => {
   await app.close();
   await durableSender?.pool.end();
   await durableReceiver?.pool.end();
+  await lifecyclePool?.end();
   process.exitCode = 0;
 };
 process.once('SIGINT', () => void close());

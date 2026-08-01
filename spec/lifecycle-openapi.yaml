@@ -1,0 +1,119 @@
+openapi: '3.1.0'
+info:
+  title: Cashu Fault Lab — Wallet Lifecycle Adapter Contract
+  version: '1.0.0'
+  description: Authenticated, test-only control contract for wallet lifecycle fault scenarios.
+servers:
+  - url: http://127.0.0.1:4101
+security:
+  - bearerAuth: []
+paths:
+  /v1/lifecycle/capabilities:
+    get:
+      operationId: getLifecycleCapabilities
+      responses:
+        '200':
+          description: Lifecycle capabilities
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/lifecycle-capabilities.schema.json'
+  /v1/lifecycle/reset:
+    post:
+      operationId: resetLifecycleWallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [seed]
+              properties:
+                seed: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /v1/lifecycle/operations:
+    post:
+      operationId: startLifecycleOperation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './schemas/lifecycle-operation.schema.json#/$defs/input'
+      responses:
+        '200':
+          description: Current operation state
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/lifecycle-operation.schema.json'
+  /v1/lifecycle/operations/{operationId}/resume:
+    post:
+      operationId: resumeLifecycleOperation
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: Current operation state
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/lifecycle-operation.schema.json'
+  /v1/lifecycle/operations/{operationId}:
+    get:
+      operationId: getLifecycleOperation
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: Current operation state
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/lifecycle-operation.schema.json'
+  /v1/lifecycle/wallet:
+    get:
+      operationId: getLifecycleWallet
+      responses:
+        '200':
+          description: Sanitized wallet balance and proof evidence
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/lifecycle-wallet.schema.json'
+  /v1/lifecycle/evidence:
+    get:
+      operationId: getLifecycleEvidence
+      responses:
+        '200':
+          description: Sanitized ordered lifecycle evidence
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/lifecycle-wallet.schema.json#/$defs/evidenceList'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{21}[AQgw]$'
+  responses:
+    Ok:
+      description: Successful mutation
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [ok]
+            properties:
+              ok: { const: true }

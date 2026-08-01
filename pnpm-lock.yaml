@@ -49,6 +49,12 @@ importers:
       '@cashu-fault-lab/reference-receiver':
         specifier: workspace:*
         version: link:../../apps/reference-receiver
+      '@cashu-fault-lab/wallet-lifecycle-contract':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-contract
+      '@cashu-fault-lab/wallet-lifecycle-core':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-core
       '@cashu/cashu-ts':
         specifier: 4.7.2
         version: 4.7.2
@@ -343,6 +349,39 @@ importers:
       fast-check:
         specifier: 4.9.0
         version: 4.9.0
+
+  packages/wallet-lifecycle-contract:
+    dependencies:
+      '@cashu-fault-lab/wallet-lifecycle-core':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-core
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
+
+  packages/wallet-lifecycle-core: {}
+
+  packages/wallet-lifecycle-oracle:
+    dependencies:
+      '@cashu-fault-lab/wallet-lifecycle-core':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-core
+    devDependencies:
+      fast-check:
+        specifier: 4.9.0
+        version: 4.9.0
+
+  packages/wallet-lifecycle-runner:
+    dependencies:
+      '@cashu-fault-lab/wallet-lifecycle-contract':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-contract
+      '@cashu-fault-lab/wallet-lifecycle-core':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-core
+      '@cashu-fault-lab/wallet-lifecycle-oracle':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-oracle
 
 packages:
 

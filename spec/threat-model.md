@@ -13,6 +13,7 @@ The lab tests payment-delivery interoperability and fault tolerance. It aims to 
 - Receipt history and recovery state.
 - Deterministic restore secrets and blinding derivation state.
 - Scenario evidence used to claim interoperability.
+- Wallet lifecycle seeds, prepared requests, proof reservations, quote identity, and send handoffs.
 
 ## Trust boundaries
 
@@ -23,6 +24,9 @@ The lab tests payment-delivery interoperability and fault tolerance. It aims to 
 5. Runner to implementation adapters.
 6. Runner report to human or CI consumer.
 7. Adapter capability and build identity claims to the release-policy evaluator.
+8. Lifecycle runner to the authenticated wallet control plane.
+9. Wallet lifecycle journal to PostgreSQL and its encryption key.
+10. Wallet and mint quote state to an independent Lightning settlement probe.
 
 The mint is authoritative for proof state and signatures, but its network can fail at any byte boundary. An adapter is not trusted to self-report a passing result without independent evidence.
 
@@ -66,6 +70,11 @@ Inputs may include:
 - Release decisions require distinct implementation, language, source/build, and mint provenance.
 - Adapter-claimed invariant evidence never qualifies, even when the scenario otherwise passes.
 - Docker or funded-service absence never becomes a release pass.
+- Lifecycle failure artifacts contain seed hashes, never raw deterministic wallet seeds.
+- Submitted lifecycle failures become ambiguous and reconcile before an evidenced terminal failure.
+- Lifecycle mint and Lightning calls are destination-pinned, redirect-free, timed out, and
+  response-size bounded.
+- Melt is capability-gated unless an authenticated independent settlement probe is configured.
 
 ## Out of scope
 
@@ -84,3 +93,7 @@ Inputs may include:
 - Database loss or rollback can defeat local idempotency unless deployment-level durability and backups are sound.
 - Current NUT-26 and NUT-18/NIP-17 descriptions can produce incompatible Nostr messages; the lab surfaces rather than hides this mismatch.
 - Deterministic development digests identify local fixtures but are not substitutes for signed or independently reproduced release-build provenance.
+- A compromised lifecycle database plus its external encryption key exposes prepared proof and
+  request material; deployment must separate the key from database backups and logs.
+- A malicious or compromised Lightning probe can falsely corroborate settlement. Release evidence
+  therefore needs an independently operated and authenticated probe, not the wallet process itself.

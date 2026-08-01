@@ -418,18 +418,25 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bitcoin",
+ "cashu_fault_lab_wallet_lifecycle_contract",
  "cdk",
  "cdk-sqlite",
  "ciborium",
  "getrandom 0.3.4",
  "hex",
  "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
  "tokio",
  "tower",
  "url",
+ "uuid",
 ]
+
+[[package]]
+name = "cashu_fault_lab_wallet_lifecycle_contract"
+version = "0.1.0"
 
 [[package]]
 name = "cbor-diag"

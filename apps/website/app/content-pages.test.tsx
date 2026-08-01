@@ -98,7 +98,7 @@ describe('generated content pages', () => {
     );
   });
 
-  it('orders Architecture after Adapters and includes it in document pagination', async () => {
+  it('orders wallet lifecycle between Adapters and Architecture with document pagination', async () => {
     const document = await getDocument('adapters');
     if (!document) throw new Error('Expected adapters document');
 
@@ -111,17 +111,19 @@ describe('generated content pages', () => {
 
     const links = within(documentationNavigation).getAllByRole('link');
     const adaptersIndex = links.findIndex((link) => link.textContent === 'Adapter guide');
+    const lifecycleIndex = links.findIndex((link) => link.textContent === 'Wallet lifecycle');
     const architectureIndex = links.findIndex((link) => link.textContent === 'Architecture');
 
-    expect(architectureIndex).toBe(adaptersIndex + 1);
+    expect(lifecycleIndex).toBe(adaptersIndex + 1);
+    expect(architectureIndex).toBe(lifecycleIndex + 1);
     const architectureLink = links[architectureIndex];
     if (!architectureLink) throw new Error('Expected Architecture navigation link');
     expect(architectureLink).toHaveAttribute('href', '/architecture');
     expect(
       within(screen.getByRole('navigation', { name: 'Document pagination' })).getByRole('link', {
-        name: /Next\s*Architecture/,
+        name: /Next\s*Wallet lifecycle/,
       }),
-    ).toHaveAttribute('href', '/architecture');
+    ).toHaveAttribute('href', '/docs/wallet-lifecycle');
   });
 
   it('keeps public docs sourced from GitHub and links contributors to the canonical file', async () => {

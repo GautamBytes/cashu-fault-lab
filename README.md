@@ -2,6 +2,11 @@
 
 Cashu Fault Lab checks payment delivery across retries, duplicates, transport loss, and process recovery. Funded cashu-ts has delivery-v1 sender and receiver paths over HTTP and NIP-17 Nostr, PostgreSQL-backed restart-safe sender state, optional T3 receiver evidence, and real SIGKILL coverage at four sender and six receiver boundaries. CDK remains a funded sender adapter against the reference receiver at T1.
 
+The same repository now contains an opt-in wallet lifecycle foundation for mint, swap, send,
+receive, restore, reconcile, and independently verified melt recovery. It is intentionally separate
+from the stable delivery routes and is not part of the current release qualification. See the
+[wallet lifecycle guide](docs/wallet-lifecycle.md) for implemented scope and remaining work.
+
 This is an experimental v0.1 developer preview, not certification. The current supported CLI is
 v0.1.2. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
 identities, trustworthy build provenance, and external integrations. See the
@@ -55,6 +60,20 @@ loopback HTTP origins; remote and hosted wallet adapters are intentionally rejec
 automatically manages its local fault gateway and writes redacted JSON, HTML, JUnit, preflight, and
 replay evidence to `cashu-fault-results/`. Share the bundle for developer feedback, not as release
 qualification or certification.
+
+## Exercise wallet lifecycle recovery
+
+The lifecycle control plane is a developer preview for crash-safe Cashu wallet operations. It adds
+new `/v1/lifecycle/*` routes only when durable lifecycle state is configured, so existing delivery
+adapters and clients remain unchanged. The cashu-ts and CDK preview implementations persist prepared
+request material before side effects, reconcile ambiguous outcomes, and expose only sanitized
+operation, wallet, and evidence views.
+
+Current code includes the pure state model, contract, independent oracle, deterministic replay,
+cashu-ts lifecycle operations, and CDK preview lifecycle operations. CDK melt remains disabled until
+an independent Lightning settlement probe exists; the packaged semantic-fault corpus, lifecycle CLI,
+funded Lightning regtest lane, and release qualification matrix are still pending. Read
+[wallet lifecycle](docs/wallet-lifecycle.md) before running or integrating this surface.
 
 For workspace development, [open Cashu Fault Lab in GitHub
 Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1) to use the pinned
@@ -238,6 +257,7 @@ a final `spent` state alone cannot prove at-most-once redemption.
 | NIP-17 and cross-transport convergence     | Packaged synthetic T0 lanes                                                                                                                               | Funded wallets and real relay                      |
 | Receiver persistence and recovery          | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, concurrent-worker leasing, and all six funded receiver crash boundaries | Independent receiver implementations               |
 | Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                                                              | Packaged end-to-end lanes with injected clock      |
+| Wallet lifecycle recovery                  | Pure oracle/runner plus restart-safe cashu-ts operations and opt-in authenticated routes                                                                  | CDK, packaged faults, CLI/matrix, funded regtest   |
 | Sender restart                             | Encrypted PostgreSQL reservation/session state and exact-payload replay pass all four funded sender crash boundaries                                      | Independent sender implementations                 |
 
 The packaged `mint-response-lost` scenario exercises recovery orchestration with in-memory fakes. Durable restart claims come only from PostgreSQL integration tests. Scenario artifacts carry versioned capability and invariant evidence, but only `spec/release-policy.json` decides whether that evidence is release-qualifying.
@@ -284,6 +304,7 @@ CFL_REAL_MINT_URL=http://127.0.0.1:8085 \
 - `apps/reference-sender`: sender state and retry interfaces; bundled stores are in-memory, so production adapters must provide durable reservation, receipt state, and cross-process delivery locking
 - `apps/reference-receiver`: transactional settlement, PostgreSQL, and recovery
 - `packages/scenario-runner`: virtual scheduler, oracle feed, fault lanes, and replay
+- `packages/wallet-lifecycle-*`: lifecycle identity, contract, independent oracle, and replay runner
 - `apps/http-fault-gateway` and `apps/nostr-fault-relay`: semantic transport faults
 - `adapters`: cashu-ts, CDK, and adapter template
 - `spec`: schemas, public vectors, invariants, and protocol lock

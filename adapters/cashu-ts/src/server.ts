@@ -19,6 +19,7 @@ import {
   type ProofEvidenceView,
   type SendPaymentInput,
 } from '@cashu-fault-lab/adapter-contract';
+import type { LifecycleAdapterClient } from '@cashu-fault-lab/wallet-lifecycle-contract';
 import {
   DeliveryValidationError,
   parseProtocolId,
@@ -27,6 +28,7 @@ import {
 import { ReceiverDomainError } from '@cashu-fault-lab/reference-receiver';
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply } from 'fastify';
 import { createHash } from 'node:crypto';
+import { registerCashuTsLifecycleRoutes } from './lifecycle/routes.js';
 
 const PAYMENT_BODY_LIMIT = 65_536;
 
@@ -79,6 +81,7 @@ export interface CashuTsAdapterServerOptions {
   readonly controlToken?: string;
   readonly testMode?: boolean;
   readonly crashControl?: import('./postgres-crash-checkpoint.js').CrashControl;
+  readonly lifecycle?: LifecycleAdapterClient;
 }
 
 function validateRequest(
@@ -203,6 +206,9 @@ export async function buildCashuTsAdapterServer(
   if (!options.testMode && !options.controlToken) {
     throw new Error('A control token is required outside explicit test mode');
   }
+  if (options.lifecycle !== undefined && !options.controlToken) {
+    throw new Error('Lifecycle routes require an adapter control token');
+  }
   if (options.crashControl !== undefined && !options.controlToken) {
     throw new Error('Crash controls require an adapter control token');
   }
@@ -225,7 +231,9 @@ export async function buildCashuTsAdapterServer(
   let requestOrdinal = 0;
 
   app.addHook('preHandler', async (request, reply) => {
-    if (options.testMode && !request.url.startsWith('/v1/test/crashes')) return;
+    const lifecycleRoute =
+      request.url === '/v1/lifecycle' || request.url.startsWith('/v1/lifecycle/');
+    if (options.testMode && !lifecycleRoute && !request.url.startsWith('/v1/test/crashes')) return;
     if (request.url !== '/v1' && !request.url.startsWith('/v1/')) return;
     if (!secureEqual(request.headers.authorization ?? '', `Bearer ${options.controlToken!}`)) {
       await reply.code(401).header('WWW-Authenticate', 'Bearer').send({
@@ -234,6 +242,10 @@ export async function buildCashuTsAdapterServer(
       });
     }
   });
+
+  if (options.lifecycle !== undefined) {
+    registerCashuTsLifecycleRoutes(app, options.lifecycle);
+  }
 
   app.get('/v1/capabilities', async () => {
     const discovered = (await options.operations?.capabilities?.()) ?? capabilities;
