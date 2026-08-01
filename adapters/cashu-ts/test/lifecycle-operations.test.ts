@@ -62,6 +62,7 @@ const inputs: readonly LifecycleOperationInput[] = [
 
 class RecordingWalletPort implements CashuTsLifecycleWalletPort {
   readonly calls: string[] = [];
+  discoverSupportedNuts?: () => Promise<readonly number[]>;
   nextResult: CashuTsLifecycleResult = { status: 'succeeded', amount: 1 };
 
   async reset(seed: string): Promise<void> {
