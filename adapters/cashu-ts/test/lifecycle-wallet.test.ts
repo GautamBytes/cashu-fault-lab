@@ -1180,6 +1180,35 @@ describe('CashuTsLifecycleWallet recovery', () => {
     });
   });
 
+  test('blocks paid mint recovery without NUT-19 or exact NUT-09 outputs', async () => {
+    const client = new MintClient();
+    client.getMintInfo = () => ({ isSupported: () => ({ supported: false }) });
+    let mintCalls = 0;
+    client.completeMint = async () => {
+      mintCalls += 1;
+      throw new Error('mint committed and response was lost');
+    };
+    client.checkMintQuoteBolt11 = async () => ({
+      quote: 'secret-mint-quote-id',
+      request: 'lnbc-secret-invoice',
+      state: 'PAID',
+      amount: 8,
+      unit: 'sat',
+    });
+    client.restoreOutputs = async () => [];
+    const { operations } = harness(client);
+    await operations.reset('mint-paid-no-replay-no-restore');
+    await expect(operations.start(mintInput)).rejects.toThrow(
+      'mint committed and response was lost',
+    );
+
+    await expect(operations.resume(mintInput.operationId)).resolves.toMatchObject({
+      phase: 'recovery_blocked',
+      evidenceCode: 'nut09_restore_incomplete',
+    });
+    expect(mintCalls).toBe(1);
+  });
+
   test('polls a pending melt quote and recovers NUT-08 change without paying twice', async () => {
     const client = new MintClient();
     client.getMintInfo = () => ({ isSupported: () => ({ supported: false }) });

@@ -99,7 +99,12 @@ function safePositive(value: number): boolean {
 
 function validAccount(value: string): boolean {
   const parts = value.split(':');
-  if (parts[0] === 'external' || parts[0] === 'transfer' || parts[0] === 'lightning') {
+  if (
+    parts[0] === 'external' ||
+    parts[0] === 'transfer' ||
+    parts[0] === 'lightning' ||
+    parts[0] === 'receiver'
+  ) {
     return parts.length === 2 && IDENTIFIER_PATTERN.test(parts[1] ?? '');
   }
   if (parts[0] === 'wallet') {
@@ -120,7 +125,7 @@ function validAccount(value: string): boolean {
 }
 
 function trackedAccount(value: string): boolean {
-  return value.startsWith('wallet:') || value.startsWith('transfer:');
+  return !value.startsWith('external:');
 }
 
 function balanceKey(unit: string, account: string): string {

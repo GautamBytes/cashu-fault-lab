@@ -93,6 +93,14 @@ describe('lifecycle adapter contract', () => {
     });
   });
 
+  test('accepts bodyless resume requests as the canonical contract', () => {
+    expect(validateLifecycleRequest('resume', undefined)).toEqual({ ok: true });
+    expect(validateLifecycleRequest('resume', { operationId })).toMatchObject({
+      ok: false,
+      errorCode: 'SCHEMA_TYPE',
+    });
+  });
+
   test('accepts sanitized operation evidence and rejects bearer material', () => {
     expect(validateLifecycleResponse('operation', operationView)).toEqual({ ok: true });
     for (const secretField of ['proofs', 'secret', 'seed', 'quoteId', 'preimage', 'signature']) {

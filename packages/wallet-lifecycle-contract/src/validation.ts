@@ -339,6 +339,16 @@ export function validateLifecycleRequest(
   value: unknown,
 ): LifecycleValidationResult {
   if (!hasOwn(requestValidators, operation)) return unknownOperation();
+  if (operation === 'resume') {
+    return value === undefined
+      ? { ok: true }
+      : {
+          ok: false,
+          errorCode: 'SCHEMA_TYPE',
+          path: '',
+          message: 'must be undefined',
+        };
+  }
   return validate(requestValidators[operation], value);
 }
 

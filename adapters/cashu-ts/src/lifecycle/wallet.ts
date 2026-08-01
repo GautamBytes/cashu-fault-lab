@@ -2109,20 +2109,12 @@ export class CashuTsLifecycleWallet implements CashuTsLifecycleWalletPort {
         quoteObservations,
       };
     }
-    try {
-      return {
-        ...(await this.submit(prepared)),
-        recoveryMechanism: 'quote_state',
-        quoteObservations,
-      };
-    } catch {
-      return {
-        status: 'recovery_blocked',
-        evidenceCode: 'mint_exact_retry_failed',
-        recoveryMechanism: 'quote_state',
-        quoteObservations,
-      };
-    }
+    return {
+      status: 'recovery_blocked',
+      evidenceCode: 'nut09_restore_incomplete',
+      recoveryMechanism: 'nut09_restore',
+      quoteObservations,
+    };
   }
 
   async #client(): Promise<CashuTsLifecycleClient> {

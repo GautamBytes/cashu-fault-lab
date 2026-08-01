@@ -36,6 +36,24 @@ function operationId(value: string): string {
   }
 }
 
+function legacyResumeOperationId(value: unknown, reply: FastifyReply): string | undefined {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 1 ||
+    typeof (value as { readonly operationId?: unknown }).operationId !== 'string'
+  ) {
+    void reply.code(422).send({
+      code: 'SCHEMA_TYPE',
+      path: '',
+      message: 'Legacy resume body must contain only operationId',
+    });
+    return undefined;
+  }
+  return operationId((value as { readonly operationId: string }).operationId);
+}
+
 export function registerCashuTsLifecycleRoutes(
   app: FastifyInstance,
   lifecycle: LifecycleAdapterClient,
@@ -71,16 +89,15 @@ export function registerCashuTsLifecycleRoutes(
       const selected = operationId(request.params.id);
       // The OpenAPI contract identifies the operation in the path. Continue accepting the
       // pre-contract body echo so existing lifecycle clients remain compatible.
-      if (request.body !== undefined && !validateRequest('resume', request.body, reply))
-        return reply;
-      if (
-        request.body !== undefined &&
-        (request.body as { readonly operationId: string }).operationId !== selected
-      ) {
-        return reply.code(409).send({
-          code: 'LIFECYCLE_OPERATION_ID_CONFLICT',
-          message: 'Lifecycle operation identity conflicts',
-        });
+      if (request.body !== undefined) {
+        const echoed = legacyResumeOperationId(request.body, reply);
+        if (echoed === undefined) return reply;
+        if (echoed !== selected) {
+          return reply.code(409).send({
+            code: 'LIFECYCLE_OPERATION_ID_CONFLICT',
+            message: 'Lifecycle operation identity conflicts',
+          });
+        }
       }
       const value = await lifecycle.resume(selected);
       assertResponse('resume', value);

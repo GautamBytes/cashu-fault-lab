@@ -78,6 +78,43 @@ describe('HTTP lifecycle adapter client', () => {
     ]);
   });
 
+  test('sends resume as a bodyless path operation', async () => {
+    const requests: Array<{
+      method: string | undefined;
+      url: string | undefined;
+      authorization: string | undefined;
+      contentType: string | undefined;
+      body: string;
+    }> = [];
+    const baseUrl = await fixture((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk) => chunks.push(chunk as Buffer));
+      request.on('end', () => {
+        requests.push({
+          method: request.method,
+          url: request.url,
+          authorization: request.headers.authorization,
+          contentType: request.headers['content-type'],
+          body: Buffer.concat(chunks).toString('utf8'),
+        });
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify(operation));
+      });
+    });
+    const client = new HttpLifecycleAdapterClient({ baseUrl, token: 'control-token' });
+
+    await expect(client.resume(operationId)).resolves.toEqual(operation);
+    expect(requests).toEqual([
+      {
+        method: 'POST',
+        url: `/v1/lifecycle/operations/${operationId}/resume`,
+        authorization: 'Bearer control-token',
+        contentType: undefined,
+        body: '',
+      },
+    ]);
+  });
+
   test('forbids redirects without forwarding the bearer token', async () => {
     let leaked = false;
     const target = await fixture((request, response) => {
@@ -126,9 +163,18 @@ describe('HTTP lifecycle adapter client', () => {
   });
 
   test('validates constructor secrets and origins', () => {
-    for (const baseUrl of ['not-a-url', 'http://user:pass@127.0.0.1:4101', 'file:///tmp/x']) {
+    for (const baseUrl of [
+      'not-a-url',
+      'http://user:pass@127.0.0.1:4101',
+      'file:///tmp/x',
+      'https://adapter.example.com',
+      'http://localhost:4101',
+    ]) {
       expect(() => new HttpLifecycleAdapterClient({ baseUrl, token: 'token' })).toThrow('base URL');
     }
+    expect(
+      () => new HttpLifecycleAdapterClient({ baseUrl: 'http://[::1]:4101', token: 'token' }),
+    ).not.toThrow();
     expect(
       () => new HttpLifecycleAdapterClient({ baseUrl: 'http://127.0.0.1:4101', token: '' }),
     ).toThrow('control token');

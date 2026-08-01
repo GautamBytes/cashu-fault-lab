@@ -267,6 +267,21 @@ impl LifecycleExecution {
         self
     }
 
+    fn submitted_failure_requires_reconcile(mut self) -> Self {
+        if self.phase == LifecyclePhase::FailedDefinitive {
+            self.phase = LifecyclePhase::Ambiguous;
+            self.evidence_code = Some("submitted_failure_requires_reconcile");
+            self.event = "submitted_failure_requires_reconcile".to_owned();
+            self.amount = None;
+            self.input_fee = None;
+            self.fee_reserve = None;
+            self.actual_fee = None;
+            self.change = None;
+            self.send_handoff = None;
+        }
+        self
+    }
+
     fn failure(phase: LifecyclePhase, code: &'static str) -> Self {
         Self {
             phase,
@@ -634,6 +649,11 @@ impl LifecycleEngine {
         execution: LifecycleExecution,
         token: u64,
     ) -> Result<LifecycleOperation, String> {
+        let execution = if operation.phase == LifecyclePhase::Submitted {
+            execution.submitted_failure_requires_reconcile()
+        } else {
+            execution
+        };
         operation.phase = execution.phase;
         operation.evidence_code = execution.evidence_code.map(str::to_owned);
         operation.amount = execution.amount.or(operation.amount);
@@ -1364,7 +1384,6 @@ impl NativeCdkLifecycleWallet {
                 | LifecycleKind::Swap
                 | LifecycleKind::Send
                 | LifecycleKind::Receive
-                | LifecycleKind::Melt
                 | LifecycleKind::Restore
                 | LifecycleKind::Reconcile
         )
@@ -2353,7 +2372,8 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
                 .nut04
                 .get_settings(&self.unit, &PaymentMethod::BOLT11)
                 .is_some();
-        let supports_melt = !info.nuts.nut05.disabled
+        let supports_melt = Self::operation_bound(LifecycleKind::Melt)
+            && !info.nuts.nut05.disabled
             && info
                 .nuts
                 .nut05

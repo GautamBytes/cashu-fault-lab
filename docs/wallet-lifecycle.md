@@ -13,12 +13,15 @@ an implementation-independent value-conservation oracle, a seeded runner with re
 artifacts, and a restart-safe cashu-ts adapter backed by PostgreSQL.
 
 The cashu-ts adapter implements `mint`, `swap`, `send`, `receive`, `restore`, and `reconcile`.
-`melt` is advertised only when an independent Lightning settlement probe is configured. Runtime
-capability discovery also removes operations whose required NUTs are absent at the configured mint.
+`melt` is advertised only when an independent Lightning settlement probe is configured. The CDK
+preview adapter exposes restart-safe `mint`, `swap`, `send`, `receive`, `restore`, and `reconcile`
+when durable encrypted SQLite state is configured; CDK `melt` remains disabled until the same
+independent settlement authority exists. Runtime capability discovery also removes operations whose
+required NUTs are absent at the configured mint.
 
-This is useful developer-preview infrastructure, not yet a complete Point 2 release suite. The CDK
-adapter, semantic mint-fault scenario corpus, lifecycle CLI commands, cross-implementation matrix,
-and funded Lightning regtest lane remain follow-up work. Missing lanes are not reported as passes.
+This is useful developer-preview infrastructure, not yet a complete Point 2 release suite. The
+semantic mint-fault scenario corpus, lifecycle CLI commands, cross-implementation matrix, and funded
+Lightning regtest lane remain follow-up work. Missing lanes are not reported as passes.
 
 ## State and recovery model
 

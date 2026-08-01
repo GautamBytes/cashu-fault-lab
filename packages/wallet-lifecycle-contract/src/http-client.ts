@@ -53,8 +53,10 @@ function adapterOrigin(value: string): string {
   } catch {
     throw new Error('Lifecycle adapter base URL is invalid');
   }
+  const loopbackHost = url.hostname === '127.0.0.1' || url.hostname === '[::1]';
   if (
-    !['http:', 'https:'].includes(url.protocol) ||
+    url.protocol !== 'http:' ||
+    !loopbackHost ||
     url.origin === 'null' ||
     url.username !== '' ||
     url.password !== '' ||
@@ -63,7 +65,7 @@ function adapterOrigin(value: string): string {
     url.hash !== '' ||
     (value !== url.origin && value !== `${url.origin}/`)
   ) {
-    throw new Error('Lifecycle adapter base URL must contain only an HTTP or HTTPS origin');
+    throw new Error('Lifecycle adapter base URL must be a loopback HTTP origin');
   }
   return url.origin;
 }
@@ -240,10 +242,7 @@ export class HttpLifecycleAdapterClient implements LifecycleAdapterClient {
 
   resume(operationId: string): Promise<LifecycleOperationView> {
     parseOperationId(operationId);
-    return this.#request('resume', 'POST', `/v1/lifecycle/operations/${operationId}/resume`, {
-      operation: 'resume',
-      value: { operationId },
-    });
+    return this.#request('resume', 'POST', `/v1/lifecycle/operations/${operationId}/resume`);
   }
 
   operation(operationId: string): Promise<LifecycleOperationView> {

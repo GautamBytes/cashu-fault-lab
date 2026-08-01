@@ -1,7 +1,7 @@
 # Wallet Lifecycle Fault Lab Design
 
-**Date:** 2026-08-01  
-**Status:** Approved in conversation  
+**Date:** 2026-08-01
+**Status:** Approved in conversation
 **Branch:** `codex/wallet-lifecycle-v1`
 
 ## 1. Outcome

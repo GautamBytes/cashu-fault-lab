@@ -64,15 +64,16 @@ qualification or certification.
 ## Exercise wallet lifecycle recovery
 
 The lifecycle control plane is a developer preview for crash-safe Cashu wallet operations. It adds
-new `/v1/lifecycle/*` routes only when encrypted PostgreSQL lifecycle state is configured, so
-existing delivery adapters and clients remain unchanged. The cashu-ts implementation persists
-prepared request material before side effects, reconciles ambiguous outcomes, and exposes only
-sanitized operation, wallet, and evidence views.
+new `/v1/lifecycle/*` routes only when durable lifecycle state is configured, so existing delivery
+adapters and clients remain unchanged. The cashu-ts and CDK preview implementations persist prepared
+request material before side effects, reconcile ambiguous outcomes, and expose only sanitized
+operation, wallet, and evidence views.
 
-Current code includes the pure state model, contract, independent oracle, deterministic replay, and
-cashu-ts implementation. CDK lifecycle support, the packaged semantic-fault corpus, lifecycle CLI,
-and qualification matrix are still pending. Read [wallet lifecycle](docs/wallet-lifecycle.md) before
-running or integrating this surface.
+Current code includes the pure state model, contract, independent oracle, deterministic replay,
+cashu-ts lifecycle operations, and CDK preview lifecycle operations. CDK melt remains disabled until
+an independent Lightning settlement probe exists; the packaged semantic-fault corpus, lifecycle CLI,
+funded Lightning regtest lane, and release qualification matrix are still pending. Read
+[wallet lifecycle](docs/wallet-lifecycle.md) before running or integrating this surface.
 
 For workspace development, [open Cashu Fault Lab in GitHub
 Codespaces](https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1) to use the pinned

@@ -103,6 +103,8 @@ struct RecordingWallet {
 
 struct ResetFailWallet;
 
+struct SubmittedFailureWallet;
+
 struct DeferredGcFailWallet;
 
 struct UnsafeNumericWallet;
@@ -225,6 +227,25 @@ impl LifecycleWalletPort for ResetFailWallet {
         _private_material: Option<&[u8]>,
     ) -> LifecycleExecution {
         LifecycleExecution::recovery_blocked("not_used")
+    }
+}
+
+#[async_trait]
+impl LifecycleWalletPort for SubmittedFailureWallet {
+    async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    async fn execute(&self, _request: &LifecycleInput) -> LifecycleExecution {
+        LifecycleExecution::failed_definitive("dependency_claimed_terminal_failure")
+    }
+
+    async fn recover(
+        &self,
+        _request: &LifecycleInput,
+        _private_material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        LifecycleExecution::failed_definitive("dependency_reconciled_terminal_failure")
     }
 }
 
@@ -1256,12 +1277,42 @@ fn native_cdk_policy_includes_adapter_bound_swap_send_and_reconcile() {
         LifecycleKind::Swap,
         LifecycleKind::Send,
         LifecycleKind::Receive,
-        LifecycleKind::Melt,
         LifecycleKind::Restore,
         LifecycleKind::Reconcile,
     ] {
         assert!(NativeCdkLifecycleWallet::operation_bound(kind));
     }
+    assert!(
+        !NativeCdkLifecycleWallet::operation_bound(LifecycleKind::Melt),
+        "CDK lifecycle melt needs an independent Lightning settlement probe before it is executable"
+    );
+}
+
+#[tokio::test]
+async fn submitted_definitive_failures_become_ambiguous_until_reconciled() {
+    let path = database_path("submitted-failure-ambiguous");
+    let store = Arc::new(LifecycleStore::open(path, [39_u8; 32]).expect("open lifecycle store"));
+    let engine = LifecycleEngine::new(store.clone(), Arc::new(SubmittedFailureWallet));
+    let operation_id = "FFFFFFFFFFFFFFFFFFFFFA";
+
+    let result = engine
+        .start(input(operation_id, LifecycleKind::Mint))
+        .await
+        .expect("submitted failure is persisted for recovery");
+
+    assert_eq!(result.phase, LifecyclePhase::Ambiguous);
+    assert_eq!(
+        result.evidence_code.as_deref(),
+        Some("submitted_failure_requires_reconcile")
+    );
+    assert_eq!(
+        store
+            .get(operation_id)
+            .expect("load persisted operation")
+            .expect("operation exists")
+            .phase,
+        LifecyclePhase::Ambiguous
+    );
 }
 
 #[tokio::test]

@@ -66,23 +66,32 @@ describe('lifecycle value safety', () => {
     expect(() => assertLifecycleSafety(model)).toThrow('effect funding_1 conflicts');
   });
 
-  test('rejects a wallet or transfer account becoming negative', () => {
-    const model = observe(
-      { type: 'operation_observed', operation },
-      {
-        type: 'value_moved',
-        operationId,
-        effectId: 'overspend_1',
-        unit: 'sat',
-        amount: 1,
-        from: 'wallet:alice:available',
-        to: 'external:fixture',
-      },
-    );
+  test('rejects internal typed accounts becoming negative', () => {
+    for (const [index, account] of [
+      'wallet:alice:available',
+      'wallet:alice:reserved',
+      'wallet:alice:recoverable',
+      'transfer:handoff',
+      'receiver:bob',
+      'lightning:settlement',
+      'fee:mint:input',
+      'fee:lightning:routing',
+    ].entries()) {
+      const model = observe(
+        { type: 'operation_observed', operation },
+        {
+          type: 'value_moved',
+          operationId,
+          effectId: `overspend_${index}`,
+          unit: 'sat',
+          amount: 1,
+          from: account,
+          to: 'external:fixture',
+        },
+      );
 
-    expect(() => assertLifecycleSafety(model)).toThrow(
-      'wallet:alice:available cannot become negative',
-    );
+      expect(() => assertLifecycleSafety(model)).toThrow(`${account} cannot become negative`);
+    }
   });
 
   test('rejects invalid amounts, self transfers, and malformed accounts', () => {
