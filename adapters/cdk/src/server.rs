@@ -15,8 +15,16 @@ use crate::{
     AdapterCapabilities, capabilities,
     funded::{FundedCdkOperations, SendInput},
     funded_capabilities,
-    lifecycle::{LifecycleEngine, LifecycleInput, LifecycleKind},
+    lifecycle::{
+        LifecycleEngine, LifecycleEvidence, LifecycleInput, LifecycleKind, LifecycleOperation,
+        LifecycleWalletView,
+    },
 };
+
+// 262,144 Unicode scalar values can require 12 JSON bytes each when encoded as a surrogate pair,
+// plus the bounded lifecycle request envelope.
+const LIFECYCLE_OPERATION_BODY_LIMIT: usize = 3_200_000;
+const JAVASCRIPT_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
 #[derive(Clone)]
 struct AppState {
@@ -477,6 +485,39 @@ fn lifecycle_error(message: &str) -> Response {
     }
 }
 
+fn lifecycle_number_bound_error() -> Response {
+    error(
+        StatusCode::INSUFFICIENT_STORAGE,
+        "LIFECYCLE_RESPONSE_TOO_LARGE",
+        "Lifecycle response contains a number above the JavaScript safe-integer bound",
+    )
+}
+
+fn operation_numbers_are_safe(operation: &LifecycleOperation) -> bool {
+    [
+        operation.amount,
+        operation.input_fee,
+        operation.fee_reserve,
+        operation.actual_fee,
+        operation.change,
+    ]
+    .into_iter()
+    .flatten()
+    .all(|value| value <= JAVASCRIPT_SAFE_INTEGER)
+}
+
+fn wallet_numbers_are_safe(wallet: &LifecycleWalletView) -> bool {
+    wallet.balances.available <= JAVASCRIPT_SAFE_INTEGER
+        && wallet.balances.reserved <= JAVASCRIPT_SAFE_INTEGER
+        && wallet.balances.recoverable <= JAVASCRIPT_SAFE_INTEGER
+}
+
+fn evidence_numbers_are_safe(evidence: &[LifecycleEvidence]) -> bool {
+    evidence
+        .iter()
+        .all(|item| item.sequence <= JAVASCRIPT_SAFE_INTEGER)
+}
+
 async fn lifecycle_reset(
     State(state): State<Arc<AppState>>,
     input: Result<Json<ResetInput>, JsonRejection>,
@@ -518,7 +559,10 @@ async fn lifecycle_start(
         }
     };
     match engine.start(input.into()).await {
-        Ok(operation) => (StatusCode::OK, Json(operation)).into_response(),
+        Ok(operation) if operation_numbers_are_safe(&operation) => {
+            (StatusCode::OK, Json(operation)).into_response()
+        }
+        Ok(_) => lifecycle_number_bound_error(),
         Err(message) => lifecycle_error(&message),
     }
 }
@@ -531,7 +575,10 @@ async fn lifecycle_resume(
         return not_applicable("Durable CDK lifecycle operations are not configured");
     };
     match engine.resume(&operation_id).await {
-        Ok(operation) => (StatusCode::OK, Json(operation)).into_response(),
+        Ok(operation) if operation_numbers_are_safe(&operation) => {
+            (StatusCode::OK, Json(operation)).into_response()
+        }
+        Ok(_) => lifecycle_number_bound_error(),
         Err(message) => lifecycle_error(&message),
     }
 }
@@ -544,7 +591,10 @@ async fn lifecycle_operation(
         return not_applicable("Durable CDK lifecycle operations are not configured");
     };
     match engine.operation(&operation_id) {
-        Ok(operation) => (StatusCode::OK, Json(operation)).into_response(),
+        Ok(operation) if operation_numbers_are_safe(&operation) => {
+            (StatusCode::OK, Json(operation)).into_response()
+        }
+        Ok(_) => lifecycle_number_bound_error(),
         Err(message) => lifecycle_error(&message),
     }
 }
@@ -554,7 +604,7 @@ async fn lifecycle_wallet(State(state): State<Arc<AppState>>) -> Response {
         return not_applicable("Durable CDK lifecycle operations are not configured");
     };
     match engine.wallet().await {
-        Ok(wallet) if wallet.proofs.len() <= 10_000 => {
+        Ok(wallet) if wallet.proofs.len() <= 10_000 && wallet_numbers_are_safe(&wallet) => {
             (StatusCode::OK, Json(wallet)).into_response()
         }
         Ok(_) => error(
@@ -571,7 +621,7 @@ async fn lifecycle_evidence(State(state): State<Arc<AppState>>) -> Response {
         return not_applicable("Durable CDK lifecycle operations are not configured");
     };
     match engine.evidence() {
-        Ok(evidence) if evidence.len() <= 100_000 => {
+        Ok(evidence) if evidence.len() <= 100_000 && evidence_numbers_are_safe(&evidence) => {
             (StatusCode::OK, Json(evidence)).into_response()
         }
         Ok(_) => error(
@@ -617,7 +667,7 @@ pub fn router_with_lifecycle(
         .route("/v1/lifecycle/reset", post(lifecycle_reset))
         .route(
             "/v1/lifecycle/operations",
-            post(lifecycle_start).layer(DefaultBodyLimit::max(300_000)),
+            post(lifecycle_start).layer(DefaultBodyLimit::max(LIFECYCLE_OPERATION_BODY_LIMIT)),
         )
         .route(
             "/v1/lifecycle/operations/{id}/resume",

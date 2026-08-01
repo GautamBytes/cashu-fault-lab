@@ -8,7 +8,7 @@ use bitcoin::hashes::{Hash, sha256};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::lifecycle::{
-    LifecycleEvidence, LifecycleInput, LifecycleOperation, LifecycleSendHandoff,
+    LifecycleEvidence, LifecycleInput, LifecycleOperation, LifecyclePhase, LifecycleSendHandoff,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -82,6 +82,15 @@ impl LifecycleStore {
                    effect_id TEXT PRIMARY KEY,
                    sequence INTEGER NOT NULL UNIQUE,
                    value BLOB NOT NULL
+                 );
+                 CREATE TABLE IF NOT EXISTS lifecycle_wallet_barrier (
+                   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                   operation_id TEXT NOT NULL,
+                   claim_owner TEXT NOT NULL,
+                   claimed_until INTEGER NOT NULL,
+                   claim_token INTEGER NOT NULL,
+                   FOREIGN KEY(operation_id) REFERENCES lifecycle_operations(operation_id)
+                     ON DELETE CASCADE
                  );
                  CREATE TABLE IF NOT EXISTS lifecycle_send_outbox (
                    operation_id TEXT PRIMARY KEY,
@@ -178,7 +187,8 @@ impl LifecycleStore {
             .map_err(|_| "lifecycle reset transaction failed")?;
         require_reset_claim(&transaction, &self.claim_owner, token, now)?;
         transaction
-            .execute("DELETE FROM lifecycle_send_outbox", [])
+            .execute("DELETE FROM lifecycle_wallet_barrier", [])
+            .and_then(|_| transaction.execute("DELETE FROM lifecycle_send_outbox", []))
             .and_then(|_| transaction.execute("DELETE FROM lifecycle_evidence", []))
             .and_then(|_| transaction.execute("DELETE FROM lifecycle_operations", []))
             .and_then(|_| {
@@ -384,6 +394,61 @@ impl LifecycleStore {
         Ok((changed == 1).then_some(token))
     }
 
+    pub fn try_claim_wallet_mutation(
+        &self,
+        operation_id: &str,
+        token: u64,
+    ) -> Result<bool, String> {
+        let now = self.clock.now()?;
+        let claimed_until = now.saturating_add(CLAIM_LEASE_SECONDS);
+        let connection = self.lock()?;
+        let transaction = connection
+            .unchecked_transaction()
+            .map_err(|_| "lifecycle wallet barrier transaction failed")?;
+        require_operation_claim(&transaction, operation_id, &self.claim_owner, token, now)?;
+        let existing: Option<(String, String, u64)> = transaction
+            .query_row(
+                "SELECT operation_id, claim_owner, claimed_until
+                 FROM lifecycle_wallet_barrier WHERE singleton = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(|_| "lifecycle wallet barrier lookup failed")?;
+        let acquired = match existing {
+            None => {
+                transaction
+                    .execute(
+                        "INSERT INTO lifecycle_wallet_barrier
+                     (singleton, operation_id, claim_owner, claimed_until, claim_token)
+                     VALUES (1, ?1, ?2, ?3, ?4)",
+                        params![operation_id, self.claim_owner, claimed_until, token],
+                    )
+                    .map_err(|_| "lifecycle wallet barrier claim failed")?
+                    == 1
+            }
+            Some((barrier_operation, barrier_owner, barrier_until))
+                if barrier_operation == operation_id
+                    && (barrier_owner == self.claim_owner || barrier_until <= now) =>
+            {
+                transaction
+                    .execute(
+                        "UPDATE lifecycle_wallet_barrier
+                         SET claim_owner = ?2, claimed_until = ?3, claim_token = ?4
+                         WHERE singleton = 1 AND operation_id = ?1",
+                        params![operation_id, self.claim_owner, claimed_until, token],
+                    )
+                    .map_err(|_| "lifecycle wallet barrier claim failed")?
+                    == 1
+            }
+            Some(_) => false,
+        };
+        transaction
+            .commit()
+            .map_err(|_| "lifecycle wallet barrier commit failed")?;
+        Ok(acquired)
+    }
+
     pub fn try_claim_reset(&self) -> Result<Option<u64>, String> {
         let now = self.clock.now()?;
         let claimed_until = now.saturating_add(CLAIM_LEASE_SECONDS);
@@ -463,7 +528,10 @@ impl LifecycleStore {
         let now = self.clock.now()?;
         let claimed_until = now.saturating_add(CLAIM_LEASE_SECONDS);
         let connection = self.lock()?;
-        let changed = connection
+        let transaction = connection
+            .unchecked_transaction()
+            .map_err(|_| "lifecycle operation claim renewal transaction failed")?;
+        let changed = transaction
             .execute(
                 "UPDATE lifecycle_operations SET claimed_until = ?3
                  WHERE operation_id = ?1 AND claim_owner = ?2
@@ -474,6 +542,30 @@ impl LifecycleStore {
         if changed != 1 {
             return Err("lifecycle operation claim was lost".to_owned());
         }
+        let barrier_operation: Option<String> = transaction
+            .query_row(
+                "SELECT operation_id FROM lifecycle_wallet_barrier WHERE singleton = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|_| "lifecycle wallet barrier lookup failed")?;
+        if barrier_operation.as_deref() == Some(operation_id) {
+            let changed = transaction
+                .execute(
+                    "UPDATE lifecycle_wallet_barrier SET claimed_until = ?4
+                     WHERE singleton = 1 AND operation_id = ?1 AND claim_owner = ?2
+                       AND claim_token = ?3 AND claimed_until > ?5",
+                    params![operation_id, self.claim_owner, token, claimed_until, now],
+                )
+                .map_err(|_| "lifecycle wallet barrier renewal failed")?;
+            if changed != 1 {
+                return Err("lifecycle wallet barrier was lost".to_owned());
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|_| "lifecycle operation claim renewal commit failed")?;
         Ok(())
     }
 
@@ -578,6 +670,19 @@ impl LifecycleStore {
             if changed != 1 {
                 return Err("lifecycle send handoff identity conflicts".to_owned());
             }
+        }
+        if matches!(
+            operation.phase,
+            LifecyclePhase::Succeeded | LifecyclePhase::FailedDefinitive
+        ) {
+            transaction
+                .execute(
+                    "DELETE FROM lifecycle_wallet_barrier
+                     WHERE singleton = 1 AND operation_id = ?1 AND claim_owner = ?2
+                       AND claim_token = ?3 AND claimed_until > ?4",
+                    params![operation.operation_id, self.claim_owner, token, now],
+                )
+                .map_err(|_| "lifecycle wallet barrier release failed")?;
         }
         transaction
             .commit()
@@ -849,6 +954,28 @@ fn require_reset_claim(
         || stored_until.is_none_or(|until| until <= now)
     {
         return Err("lifecycle reset claim was lost".to_owned());
+    }
+    Ok(())
+}
+
+fn require_operation_claim(
+    connection: &Connection,
+    operation_id: &str,
+    owner: &str,
+    token: u64,
+    now: u64,
+) -> Result<(), String> {
+    let active: u64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM lifecycle_operations
+             WHERE operation_id = ?1 AND claim_owner = ?2 AND claim_token = ?3
+               AND claimed_until > ?4",
+            params![operation_id, owner, token, now],
+            |row| row.get(0),
+        )
+        .map_err(|_| "lifecycle operation claim lookup failed")?;
+    if active != 1 {
+        return Err("lifecycle operation claim was lost".to_owned());
     }
     Ok(())
 }

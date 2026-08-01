@@ -25,3 +25,4 @@ cashu_fault_lab_wallet_lifecycle_contract = { path = "../../packages/wallet-life
 
 [dev-dependencies]
 tower = { version = "=0.5.3", features = ["util"] }
+uuid = "=1.24.0"

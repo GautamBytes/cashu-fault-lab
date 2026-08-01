@@ -295,6 +295,9 @@ pub trait LifecycleWalletPort: Send + Sync {
     async fn commit_reset(&self) -> Result<(), &'static str> {
         Ok(())
     }
+    async fn post_commit_reset_cleanup(&self) -> Result<(), &'static str> {
+        Ok(())
+    }
     async fn prepare(
         &self,
         _request: &LifecycleInput,
@@ -373,7 +376,13 @@ impl LifecycleEngine {
         };
         let result = match wallet_result {
             Ok(()) => match self.store.reset(seed, generation, token) {
-                Ok(()) => self.wallet.commit_reset().await.map_err(str::to_owned),
+                Ok(()) => match self.wallet.commit_reset().await {
+                    Ok(()) => {
+                        let _ = self.wallet.post_commit_reset_cleanup().await;
+                        Ok(())
+                    }
+                    Err(error) => Err(error.to_owned()),
+                },
                 Err(error) => match self.wallet.rollback_reset().await {
                     Ok(()) => Err(error),
                     Err(_) => Err("wallet reset rollback failed".to_owned()),
@@ -508,6 +517,14 @@ impl LifecycleEngine {
         let mut operation = self.operation(operation_id)?;
         if operation.phase.terminal() {
             return Ok(operation);
+        }
+        if input.kind != LifecycleKind::Reconcile {
+            loop {
+                if self.store.try_claim_wallet_mutation(operation_id, token)? {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
         }
         let mut private_material = self.store.private_material(operation_id)?;
         let execution = if recovery || operation.phase == LifecyclePhase::Ambiguous {
@@ -889,6 +906,7 @@ pub fn deterministic_exact_amount_plan(
 
 const MAX_SWAP_PLAN_PROOFS: usize = 10_000;
 const MAX_SWAP_PLAN_STATES: usize = 250_000;
+const MAX_SWAP_PLAN_WORK: usize = 1_000_000;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FeeAwareProof {
@@ -910,8 +928,28 @@ pub struct FeeAwareExactAmountPlan {
 /// The requested amount is the net value returned by the swap. A valid plan therefore satisfies
 /// `gross_input == net_output + ceil(sum(input_fee_ppk) / 1000)`.
 pub fn deterministic_fee_aware_exact_amount_plan(
+    proofs: Vec<FeeAwareProof>,
+    net_output: u64,
+) -> Result<Option<FeeAwareExactAmountPlan>, &'static str> {
+    fee_aware_exact_amount_plan_with_limits(
+        proofs,
+        net_output,
+        MAX_SWAP_PLAN_WORK,
+        MAX_SWAP_PLAN_STATES,
+    )
+}
+
+#[derive(Clone, Copy)]
+struct SwapPlanNode {
+    previous: Option<usize>,
+    proof_index: usize,
+}
+
+pub fn fee_aware_exact_amount_plan_with_limits(
     mut proofs: Vec<FeeAwareProof>,
     net_output: u64,
+    maximum_work: usize,
+    maximum_states: usize,
 ) -> Result<Option<FeeAwareExactAmountPlan>, &'static str> {
     if proofs.len() > MAX_SWAP_PLAN_PROOFS {
         return Err("wallet_proof_limit_exceeded");
@@ -932,14 +970,20 @@ pub fn deterministic_fee_aware_exact_amount_plan(
     let maximum_gross = net_output
         .checked_add(maximum_fee)
         .ok_or("swap_plan_value_overflow")?;
-    let mut plans = std::collections::BTreeMap::from([((0_u64, 0_u64), Vec::new())]);
+    let mut plans = std::collections::BTreeMap::from([((0_u64, 0_u64), None)]);
+    let mut nodes = Vec::<SwapPlanNode>::new();
+    let mut work = 0_usize;
 
-    for proof in proofs {
+    for (proof_index, proof) in proofs.iter().enumerate() {
         let prior = plans
             .iter()
-            .map(|(state, selected)| (*state, selected.clone()))
+            .map(|(state, node)| (*state, *node))
             .collect::<Vec<_>>();
-        for ((gross_input, fee_ppk), mut selected) in prior {
+        for ((gross_input, fee_ppk), previous) in prior {
+            work = work.checked_add(1).ok_or("swap_plan_work_bound_exceeded")?;
+            if work > maximum_work {
+                return Err("swap_plan_work_bound_exceeded");
+            }
             let Some(next_gross) = gross_input.checked_add(proof.amount) else {
                 continue;
             };
@@ -949,18 +993,30 @@ pub fn deterministic_fee_aware_exact_amount_plan(
             if next_gross > maximum_gross || plans.contains_key(&(next_gross, next_fee_ppk)) {
                 continue;
             }
-            selected.push(proof.id.clone());
+            let node = nodes.len();
+            nodes.push(SwapPlanNode {
+                previous,
+                proof_index,
+            });
             let input_fee = next_fee_ppk.saturating_add(999) / 1_000;
             if next_gross == net_output.saturating_add(input_fee) {
+                let mut proof_ids = Vec::new();
+                let mut cursor = Some(node);
+                while let Some(index) = cursor {
+                    let selected = nodes[index];
+                    proof_ids.push(proofs[selected.proof_index].id.clone());
+                    cursor = selected.previous;
+                }
+                proof_ids.reverse();
                 return Ok(Some(FeeAwareExactAmountPlan {
-                    proof_ids: selected,
+                    proof_ids,
                     gross_input: next_gross,
                     input_fee,
                     net_output,
                 }));
             }
-            plans.insert((next_gross, next_fee_ppk), selected);
-            if plans.len() > MAX_SWAP_PLAN_STATES {
+            plans.insert((next_gross, next_fee_ppk), Some(node));
+            if plans.len() > maximum_states {
                 return Err("swap_plan_search_bound_exceeded");
             }
         }
@@ -1001,6 +1057,45 @@ pub fn exact_nut07_input_state(
 
 pub const fn swap_recovery_report_is_complete(skipped: usize, failed: usize) -> bool {
     skipped == 0 && failed == 0
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SendRecoveryDisposition {
+    ReplayConfirmation,
+    Confirmed,
+    Blocked,
+}
+
+pub fn send_recovery_disposition(
+    expected_ys: &[String],
+    observed: &[(String, State)],
+) -> SendRecoveryDisposition {
+    if expected_ys.is_empty() || observed.len() != expected_ys.len() {
+        return SendRecoveryDisposition::Blocked;
+    }
+    let expected = expected_ys
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::HashSet<_>>();
+    let observed_ys = observed
+        .iter()
+        .map(|(y, _)| y.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    if expected.len() != expected_ys.len()
+        || observed_ys.len() != observed.len()
+        || expected != observed_ys
+    {
+        return SendRecoveryDisposition::Blocked;
+    }
+    let state = observed[0].1;
+    if observed.iter().any(|(_, observed)| *observed != state) {
+        return SendRecoveryDisposition::Blocked;
+    }
+    match state {
+        State::Reserved => SendRecoveryDisposition::ReplayConfirmation,
+        State::PendingSpent | State::Spent => SendRecoveryDisposition::Confirmed,
+        _ => SendRecoveryDisposition::Blocked,
+    }
 }
 
 pub fn operation_bound_recovery_mechanisms(
@@ -1114,6 +1209,35 @@ async fn correlated_swap_outputs(
     }
     outputs.sort();
     Ok(outputs)
+}
+
+async fn observed_local_proof_states(
+    wallet: &Wallet,
+    expected_ys: &[String],
+) -> Result<Vec<(String, State)>, &'static str> {
+    let expected = expected_ys
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::HashSet<_>>();
+    let mut observed = Vec::new();
+    for state in [
+        State::Unspent,
+        State::Reserved,
+        State::PendingSpent,
+        State::Spent,
+    ] {
+        let proofs = wallet
+            .get_proofs_by_states(vec![state])
+            .await
+            .map_err(|_| "send_state_unavailable")?;
+        for proof in proofs {
+            let y = proof.y().map_err(|_| "send_state_unavailable")?.to_string();
+            if expected.contains(y.as_str()) {
+                observed.push((y, state));
+            }
+        }
+    }
+    Ok(observed)
 }
 
 fn remove_wallet_files(path: &std::path::Path) -> Result<(), &'static str> {
@@ -1324,7 +1448,7 @@ impl NativeCdkLifecycleWallet {
         let path = self.path_for_generation(generation);
         let wallet = self.initialize_at(seed, path).await?;
         *self.wallet.lock().await = Some(wallet);
-        garbage_collect_inactive_wallet_generations(&self.database_path, generation)?;
+        let _ = garbage_collect_inactive_wallet_generations(&self.database_path, generation);
         Ok(())
     }
 
@@ -1365,10 +1489,6 @@ impl NativeCdkLifecycleWallet {
             )
             .map_err(|_| "wallet_initialization_failed")?,
         );
-        wallet
-            .recover_incomplete_sagas()
-            .await
-            .map_err(|_| "wallet_saga_recovery_failed")?;
         Ok(wallet)
     }
 
@@ -1705,40 +1825,92 @@ impl NativeCdkLifecycleWallet {
             NativePreparedPlan::Send {
                 amount,
                 recipient,
+                operation_id,
+                proofs_to_swap,
                 proofs_to_send,
+                swap_fee,
+                send_fee,
                 token,
-                ..
             } if request.kind == LifecycleKind::Send
                 && request.amount == Some(amount)
                 && request.recipient.as_deref() == Some(recipient.as_str()) =>
             {
-                let planned_ys: std::collections::HashSet<_> = proofs_to_send
+                let planned_ys = proofs_to_send
                     .iter()
-                    .filter_map(|proof| proof.y().ok())
-                    .map(|y| y.to_string())
-                    .collect();
-                let correlated = wallet
-                    .get_proofs_by_states(vec![State::Reserved, State::PendingSpent, State::Spent])
-                    .await
-                    .map(|proofs| {
-                        proofs
-                            .iter()
-                            .filter_map(|proof| proof.y().ok())
-                            .map(|y| y.to_string())
-                            .collect::<std::collections::HashSet<_>>()
-                    });
-                match correlated {
-                    Ok(observed)
-                        if planned_ys.len() == proofs_to_send.len()
-                            && planned_ys.iter().all(|y| observed.contains(y)) =>
-                    {
+                    .map(|proof| proof.y().map(|y| y.to_string()))
+                    .collect::<Result<Vec<_>, _>>();
+                let Ok(planned_ys) = planned_ys else {
+                    return LifecycleExecution::recovery_blocked("send_state_unbound")
+                        .with_private_material(material.to_vec());
+                };
+                let observed = match observed_local_proof_states(wallet, &planned_ys).await {
+                    Ok(observed) => observed,
+                    Err(code) => {
+                        return LifecycleExecution::recovery_blocked(code)
+                            .with_private_material(material.to_vec());
+                    }
+                };
+                match send_recovery_disposition(&planned_ys, &observed) {
+                    SendRecoveryDisposition::Confirmed => {
                         LifecycleExecution::send_succeeded(amount, &recipient, &token)
                             .with_private_material(material.to_vec())
                     }
-                    Ok(_) => LifecycleExecution::recovery_blocked("send_state_unbound")
-                        .with_private_material(material.to_vec()),
-                    Err(_) => LifecycleExecution::recovery_blocked("send_state_unavailable")
-                        .with_private_material(material.to_vec()),
+                    SendRecoveryDisposition::ReplayConfirmation => {
+                        let operation_id = match operation_id.parse() {
+                            Ok(operation_id) => operation_id,
+                            Err(_) => {
+                                return LifecycleExecution::recovery_blocked("send_plan_invalid")
+                                    .with_private_material(material.to_vec());
+                            }
+                        };
+                        let options = SendOptions {
+                            send_kind: SendKind::OfflineExact,
+                            ..Default::default()
+                        };
+                        match wallet
+                            .confirm_send(
+                                operation_id,
+                                Amount::from(amount),
+                                options,
+                                proofs_to_swap,
+                                proofs_to_send,
+                                Amount::from(swap_fee),
+                                Amount::from(send_fee),
+                                None,
+                            )
+                            .await
+                        {
+                            Ok(observed_token) if observed_token.to_string() == token => {
+                                let observed =
+                                    observed_local_proof_states(wallet, &planned_ys).await;
+                                match observed {
+                                    Ok(observed)
+                                        if send_recovery_disposition(&planned_ys, &observed)
+                                            == SendRecoveryDisposition::Confirmed =>
+                                    {
+                                        LifecycleExecution::send_succeeded(
+                                            amount, &recipient, &token,
+                                        )
+                                        .with_private_material(material.to_vec())
+                                    }
+                                    _ => LifecycleExecution::recovery_blocked(
+                                        "send_confirmation_state_unbound",
+                                    )
+                                    .with_private_material(material.to_vec()),
+                                }
+                            }
+                            Ok(_) => LifecycleExecution::recovery_blocked("send_token_conflict")
+                                .with_private_material(material.to_vec()),
+                            Err(_) => LifecycleExecution::recovery_blocked(
+                                "send_confirmation_replay_failed",
+                            )
+                            .with_private_material(material.to_vec()),
+                        }
+                    }
+                    SendRecoveryDisposition::Blocked => {
+                        LifecycleExecution::recovery_blocked("send_state_unbound")
+                            .with_private_material(material.to_vec())
+                    }
                 }
             }
             _ => LifecycleExecution::recovery_blocked("operation_plan_conflict")
@@ -1929,6 +2101,13 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         }
         self.reset_previous.lock().await.take();
         self.reset_new_path.lock().await.take();
+        Ok(())
+    }
+
+    async fn post_commit_reset_cleanup(&self) -> Result<(), &'static str> {
+        if self.facade.is_some() {
+            return Ok(());
+        }
         let generation = self
             .reset_generation
             .lock()
@@ -2064,6 +2243,11 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
             return LifecycleExecution::failed_definitive("mint_or_unit_not_configured");
         }
         if let Some(facade) = self.facade.as_ref() {
+            if matches!(request.kind, LifecycleKind::Swap | LifecycleKind::Send) {
+                return LifecycleExecution::recovery_blocked(
+                    "injected_economic_recovery_unavailable",
+                );
+            }
             return facade
                 .recover(request, private_material)
                 .await

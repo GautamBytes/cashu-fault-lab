@@ -1,5 +1,6 @@
 use std::{
     path::PathBuf,
+    str::FromStr,
     sync::{
         Arc,
         atomic::{AtomicU64, AtomicUsize, Ordering},
@@ -18,16 +19,29 @@ use cashu_fault_lab_cdk_adapter::{
         FeeAwareProof, LifecycleBalances, LifecycleEngine, LifecycleEvidence, LifecycleExecution,
         LifecycleInput, LifecycleKind, LifecyclePhase, LifecycleProofView,
         LifecycleRuntimeCapabilities, LifecycleWalletPort, LifecycleWalletView, NativeCdkFacade,
-        NativeCdkLifecycleWallet, deterministic_exact_amount_plan,
+        NativeCdkLifecycleWallet, SendRecoveryDisposition, deterministic_exact_amount_plan,
         deterministic_fee_aware_exact_amount_plan, exact_nut07_input_state,
-        garbage_collect_inactive_wallet_generations, operation_bound_recovery_mechanisms,
-        supports_nut19_swap_replay, swap_recovery_report_is_complete,
+        fee_aware_exact_amount_plan_with_limits, garbage_collect_inactive_wallet_generations,
+        operation_bound_recovery_mechanisms, send_recovery_disposition, supports_nut19_swap_replay,
+        swap_recovery_report_is_complete,
     },
     lifecycle_store::{LifecycleClock, LifecycleStore},
     server::router_with_lifecycle,
 };
-use cdk::nuts::State;
 use cdk::nuts::nut19::{CachedEndpoint, Method as Nut19Method, Path as Nut19Path};
+use cdk::{
+    Amount, Wallet,
+    cdk_database::WalletDatabase,
+    mint_url::MintUrl,
+    nuts::{CurrencyUnit, Id, KeySetInfo, Proof, SecretKey, State},
+    secret::Secret,
+    wallet::{
+        SendKind, SendOptions,
+        types::{
+            OperationData, ProofInfo, SendOperationData, SendSagaState, WalletSaga, WalletSagaState,
+        },
+    },
+};
 use tower::ServiceExt;
 
 static NEXT_DATABASE: AtomicUsize = AtomicUsize::new(0);
@@ -88,6 +102,112 @@ struct RecordingWallet {
 }
 
 struct ResetFailWallet;
+
+struct DeferredGcFailWallet;
+
+struct UnsafeNumericWallet;
+
+struct UnspentSendRecoveryWallet;
+
+#[async_trait]
+impl LifecycleWalletPort for UnspentSendRecoveryWallet {
+    async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    async fn execute(&self, _request: &LifecycleInput) -> LifecycleExecution {
+        LifecycleExecution::ambiguous("send_confirmation_response_lost")
+    }
+
+    async fn recover(
+        &self,
+        request: &LifecycleInput,
+        _private_material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        let expected = vec!["send-y".to_owned()];
+        let observed = vec![("send-y".to_owned(), State::Unspent)];
+        if send_recovery_disposition(&expected, &observed) == SendRecoveryDisposition::Confirmed {
+            LifecycleExecution::send_succeeded(
+                request.amount.expect("send amount"),
+                request.recipient.as_deref().expect("recipient"),
+                "cashuA-token-that-must-not-be-published",
+            )
+        } else {
+            LifecycleExecution::recovery_blocked("send_proofs_unspent")
+        }
+    }
+}
+
+#[async_trait]
+impl LifecycleWalletPort for UnsafeNumericWallet {
+    async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    async fn execute(&self, _request: &LifecycleInput) -> LifecycleExecution {
+        LifecycleExecution::succeeded(Some(9_007_199_254_740_992), "unsafe_numeric_value")
+    }
+
+    async fn recover(
+        &self,
+        request: &LifecycleInput,
+        _private_material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        self.execute(request).await
+    }
+}
+
+#[async_trait]
+impl LifecycleWalletPort for DeferredGcFailWallet {
+    async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    async fn post_commit_reset_cleanup(&self) -> Result<(), &'static str> {
+        Err("injected_wallet_database_unlink_failure")
+    }
+
+    async fn execute(&self, request: &LifecycleInput) -> LifecycleExecution {
+        LifecycleExecution::succeeded(request.amount, "unused")
+    }
+
+    async fn recover(
+        &self,
+        _request: &LifecycleInput,
+        _private_material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        LifecycleExecution::recovery_blocked("unused")
+    }
+}
+
+#[derive(Default)]
+struct OutputAttributionWallet {
+    executions: AtomicUsize,
+}
+
+#[async_trait]
+impl LifecycleWalletPort for OutputAttributionWallet {
+    async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    async fn execute(&self, request: &LifecycleInput) -> LifecycleExecution {
+        self.executions.fetch_add(1, Ordering::SeqCst);
+        if request.operation_id == "AAAAAAAAAAAAAAAAAAAAAA" {
+            LifecycleExecution::ambiguous("swap_response_ambiguous")
+        } else {
+            LifecycleExecution::succeeded(request.amount, "unrelated_same_value_outputs")
+        }
+    }
+
+    async fn recover(
+        &self,
+        _request: &LifecycleInput,
+        _private_material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        LifecycleExecution::recovery_blocked("swap_output_value_conflict")
+    }
+}
 
 #[async_trait]
 impl LifecycleWalletPort for ResetFailWallet {
@@ -493,6 +613,58 @@ async fn concurrent_resume_claims_one_recovery() {
 }
 
 #[tokio::test]
+async fn unresolved_swap_blocks_later_same_value_output_production_durably() {
+    let path = database_path("wallet-mutation-barrier");
+    let wallet = Arc::new(OutputAttributionWallet::default());
+    let clock = Arc::new(ManualClock::new(10));
+    let first_store = Arc::new(
+        LifecycleStore::open_with_clock(&path, [46_u8; 32], clock.clone()).expect("open store"),
+    );
+    let first = LifecycleEngine::new(first_store, wallet.clone());
+    let ambiguous = first
+        .start(input("AAAAAAAAAAAAAAAAAAAAAA", LifecycleKind::Swap))
+        .await
+        .expect("start ambiguous swap");
+    assert_eq!(ambiguous.phase, LifecyclePhase::Ambiguous);
+    drop(first);
+    clock.set(131);
+
+    let reopened_store =
+        Arc::new(LifecycleStore::open_with_clock(&path, [46_u8; 32], clock).expect("reopen store"));
+    let reopened = Arc::new(LifecycleEngine::new(reopened_store, wallet.clone()));
+    let later = tokio::spawn({
+        let engine = reopened.clone();
+        async move {
+            engine
+                .start(input("BBBBBBBBBBBBBBBBBBBBBA", LifecycleKind::Swap))
+                .await
+        }
+    });
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), async {
+            while wallet.executions.load(Ordering::SeqCst) == 1 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .is_err(),
+        "operation B must not reach the wallet while A is unresolved"
+    );
+
+    let blocked = reopened
+        .resume("AAAAAAAAAAAAAAAAAAAAAA")
+        .await
+        .expect("recover operation A");
+    assert_eq!(blocked.phase, LifecyclePhase::RecoveryBlocked);
+    assert_eq!(wallet.executions.load(Ordering::SeqCst), 1);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), later)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
 async fn reconcile_recovers_only_its_named_target_across_a_restart_boundary() {
     let path = database_path("target-reconcile");
     let wallet = Arc::new(RecordingWallet {
@@ -511,14 +683,31 @@ async fn reconcile_recovers_only_its_named_target_across_a_restart_boundary() {
             .phase,
         LifecyclePhase::Ambiguous
     );
-    assert_eq!(
-        engine
-            .start(input(second_id, LifecycleKind::Swap))
-            .await
-            .expect("second ambiguous target")
-            .phase,
-        LifecyclePhase::Ambiguous
-    );
+    let second_request = input(second_id, LifecycleKind::Swap);
+    let second_operation = cashu_fault_lab_cdk_adapter::lifecycle::LifecycleOperation {
+        operation_id: second_id.to_owned(),
+        kind: LifecycleKind::Swap,
+        mint: second_request.mint.clone(),
+        unit: second_request.unit.clone(),
+        intent_hash: "b".repeat(64),
+        phase: LifecyclePhase::FailedDefinitive,
+        evidence_code: Some("unrelated_terminal_operation".to_owned()),
+        amount: None,
+        input_fee: None,
+        fee_reserve: None,
+        actual_fee: None,
+        change: None,
+        request_hash: None,
+        quote_hash: None,
+        output_plan_hash: None,
+    };
+    let (_, second_token) = store
+        .create_and_claim(&second_request, &second_operation)
+        .expect("persist unrelated terminal operation")
+        .expect("claim unrelated terminal operation");
+    store
+        .release(second_id, second_token)
+        .expect("release unrelated terminal operation");
     let mut reconcile = input("QQQQQQQQQQQQQQQQQQQQQA", LifecycleKind::Reconcile);
     reconcile.target_operation_id = Some(first_id.to_owned());
     assert_eq!(
@@ -535,7 +724,7 @@ async fn reconcile_recovers_only_its_named_target_across_a_restart_boundary() {
     );
     assert_eq!(
         engine.operation(second_id).expect("second target").phase,
-        LifecyclePhase::Ambiguous
+        LifecyclePhase::FailedDefinitive
     );
 
     let mut persisted = engine
@@ -839,6 +1028,72 @@ async fn successful_send_commits_a_recipient_bound_encrypted_outbox() {
     );
 }
 
+#[test]
+fn reserved_or_unspent_send_proofs_are_never_a_confirmed_handoff() {
+    let expected = vec!["y-a".to_owned(), "y-b".to_owned()];
+    assert_eq!(
+        send_recovery_disposition(
+            &expected,
+            &[
+                ("y-a".to_owned(), State::Reserved),
+                ("y-b".to_owned(), State::Reserved),
+            ],
+        ),
+        SendRecoveryDisposition::ReplayConfirmation
+    );
+    assert_eq!(
+        send_recovery_disposition(
+            &expected,
+            &[
+                ("y-a".to_owned(), State::Unspent),
+                ("y-b".to_owned(), State::Unspent),
+            ],
+        ),
+        SendRecoveryDisposition::Blocked
+    );
+    assert_eq!(
+        send_recovery_disposition(
+            &expected,
+            &[
+                ("y-b".to_owned(), State::PendingSpent),
+                ("y-a".to_owned(), State::PendingSpent),
+            ],
+        ),
+        SendRecoveryDisposition::Confirmed
+    );
+}
+
+#[tokio::test]
+async fn unspent_send_ys_cannot_coexist_with_a_token_outbox() {
+    let path = database_path("unspent-send-no-outbox");
+    let store = Arc::new(LifecycleStore::open(path, [47_u8; 32]).expect("open store"));
+    let engine = LifecycleEngine::new(store.clone(), Arc::new(UnspentSendRecoveryWallet));
+    let operation_id = "YYYYYYYYYYYYYYYYYYYYYA";
+    assert_eq!(
+        engine
+            .start(input(operation_id, LifecycleKind::Send))
+            .await
+            .expect("start ambiguous send")
+            .phase,
+        LifecyclePhase::Ambiguous
+    );
+    assert_eq!(
+        engine
+            .resume(operation_id)
+            .await
+            .expect("observe exact unspent send Ys")
+            .phase,
+        LifecyclePhase::RecoveryBlocked
+    );
+    assert!(
+        store
+            .claim_send_handoff("delivery-worker")
+            .expect("query outbox")
+            .is_none(),
+        "an outbox token must not coexist with exact planned Ys returning Unspent"
+    );
+}
+
 #[tokio::test]
 async fn expired_send_handoff_claim_is_reclaimed_with_a_new_fence() {
     let path = database_path("send-outbox-lease");
@@ -1031,6 +1286,154 @@ async fn native_cdk_requires_initialized_durable_state_before_native_side_effect
 }
 
 #[tokio::test]
+async fn native_sqlcipher_reopen_preserves_preconfirmation_send_saga_for_lifecycle_replay() {
+    let path = database_path("native-sqlcipher-send-saga-reopen");
+    let password = "q".repeat(64);
+    let mint_url = MintUrl::from_str("http://127.0.0.1:3338").expect("mint URL");
+    let keyset_id = Id::from_str("0094d5a774c40a32").expect("keyset ID");
+    let proof = Proof {
+        amount: Amount::from(8),
+        keyset_id,
+        secret: Secret::generate(),
+        c: SecretKey::generate().public_key(),
+        witness: None,
+        dleq: None,
+        p2pk_e: None,
+    };
+    let proof_for_confirmation = proof.clone();
+    let proof_info = ProofInfo::new(proof, mint_url.clone(), State::Unspent, CurrencyUnit::Sat)
+        .expect("proof info");
+    let proof_y = proof_info.y;
+    let saga_id = uuid::Uuid::now_v7();
+    let database = cdk_sqlite::WalletSqliteDatabase::new((path.clone(), password.clone()))
+        .await
+        .expect("create SQLCipher wallet");
+    database
+        .add_mint(mint_url.clone(), None)
+        .await
+        .expect("persist mint");
+    database
+        .add_mint_keysets(
+            mint_url.clone(),
+            vec![KeySetInfo {
+                id: keyset_id,
+                unit: CurrencyUnit::Sat,
+                active: true,
+                input_fee_ppk: 1_000,
+                final_expiry: None,
+            }],
+        )
+        .await
+        .expect("persist fee-bearing keyset");
+    database
+        .update_proofs(vec![proof_info], vec![])
+        .await
+        .expect("persist proof");
+    database
+        .reserve_proofs(vec![proof_y], &saga_id)
+        .await
+        .expect("reserve proof for send");
+    database
+        .add_saga(WalletSaga::new(
+            saga_id,
+            WalletSagaState::Send(SendSagaState::ProofsReserved),
+            Amount::from(8),
+            mint_url,
+            CurrencyUnit::Sat,
+            OperationData::Send(SendOperationData {
+                amount: Amount::from(8),
+                memo: None,
+                counter_start: None,
+                counter_end: None,
+                token: None,
+                proofs: None,
+            }),
+        ))
+        .await
+        .expect("persist prepared send saga");
+    drop(database);
+
+    let wallet = NativeCdkLifecycleWallet::new(
+        "http://127.0.0.1:3338",
+        "sat",
+        path.clone(),
+        password.clone(),
+    )
+    .expect("native wallet");
+    wallet
+        .load_generation("native-reopen-seed", 0)
+        .await
+        .expect("reopen SQLCipher wallet without global compensation");
+
+    let reopened = Arc::new(
+        cdk_sqlite::WalletSqliteDatabase::new((path, password))
+            .await
+            .expect("reopen SQLCipher database"),
+    );
+    assert!(
+        reopened
+            .get_saga(&saga_id)
+            .await
+            .expect("read saga")
+            .is_some(),
+        "startup must leave the saga for operation-specific confirm_send replay"
+    );
+    let reserved = reopened
+        .get_reserved_proofs(&saga_id)
+        .await
+        .expect("read reserved proofs");
+    assert_eq!(reserved.len(), 1);
+    assert_eq!(reserved[0].state, State::Reserved);
+    assert_eq!(reserved[0].used_by_operation, Some(saga_id));
+
+    let cdk_wallet = Wallet::new(
+        "http://127.0.0.1:3338",
+        CurrencyUnit::Sat,
+        reopened.clone(),
+        [7_u8; 64],
+        None,
+    )
+    .expect("construct reopened CDK wallet");
+    let fee = cdk_wallet
+        .get_proofs_fee(&vec![proof_for_confirmation.clone()])
+        .await
+        .expect("read NUT-02 fee through reopened CDK database");
+    assert_eq!(fee.total.to_u64(), 1);
+    let token = cdk_wallet
+        .confirm_send(
+            saga_id,
+            Amount::from(8),
+            SendOptions {
+                send_kind: SendKind::OfflineExact,
+                ..Default::default()
+            },
+            Vec::new(),
+            vec![proof_for_confirmation],
+            Amount::ZERO,
+            Amount::ZERO,
+            None,
+        )
+        .await
+        .expect("operation-specific confirm_send replay");
+    assert!(token.to_string().starts_with("cashu"));
+    let confirmed = reopened
+        .get_proofs_by_ys(vec![proof_y])
+        .await
+        .expect("read confirmed proof");
+    assert_eq!(confirmed.len(), 1);
+    assert_eq!(confirmed[0].state, State::PendingSpent);
+    let saga = reopened
+        .get_saga(&saga_id)
+        .await
+        .expect("read confirmed saga")
+        .expect("confirmed saga remains pending delivery");
+    assert_eq!(
+        saga.state,
+        WalletSagaState::Send(SendSagaState::TokenCreated)
+    );
+}
+
+#[tokio::test]
 async fn injected_native_facade_binds_arguments_sanitizes_errors_and_recovers_quotes() {
     let facade = Arc::new(RecordingNativeFacade {
         observed: std::sync::Mutex::new(Vec::new()),
@@ -1072,11 +1475,19 @@ async fn injected_native_facade_binds_arguments_sanitizes_errors_and_recovers_qu
     let recovered = wallet.recover(&mint, Some(b"quote-correlation")).await;
     assert_eq!(recovered.amount(), Some(8));
     assert_eq!(recovered.evidence_code(), None);
+
+    let send = input("SSSSSSSSSSSSSSSSSSSSSA", LifecycleKind::Send);
+    let fabricated = wallet.recover(&send, Some(b"opaque-facade-plan")).await;
+    assert_eq!(
+        fabricated.evidence_code(),
+        Some("injected_economic_recovery_unavailable")
+    );
 }
 
 #[tokio::test]
-async fn native_swap_and_send_resume_the_persisted_plan_after_process_restart() {
+async fn injected_facade_cannot_fabricate_economic_recovery_after_process_restart() {
     let path = database_path("native-crash-plans");
+    let clock = Arc::new(ManualClock::new(10));
     let facade = Arc::new(RecordingNativeFacade {
         observed: std::sync::Mutex::new(Vec::new()),
         fail_execute: std::sync::atomic::AtomicBool::new(true),
@@ -1088,26 +1499,27 @@ async fn native_swap_and_send_resume_the_persisted_plan_after_process_restart() 
                 .expect("injected native wallet"),
         )
     };
-    let first_store = Arc::new(LifecycleStore::open(&path, [45_u8; 32]).expect("open first store"));
+    let first_store = Arc::new(
+        LifecycleStore::open_with_clock(&path, [45_u8; 32], clock.clone())
+            .expect("open first store"),
+    );
     let first = LifecycleEngine::new(first_store, make_wallet());
-    for (id, kind) in [
-        ("RRRRRRRRRRRRRRRRRRRRRA", LifecycleKind::Swap),
-        ("SSSSSSSSSSSSSSSSSSSSSA", LifecycleKind::Send),
-    ] {
-        assert_eq!(
-            first
-                .start(input(id, kind))
-                .await
-                .expect("submit plan")
-                .phase,
-            LifecyclePhase::Ambiguous
-        );
-    }
+    assert_eq!(
+        first
+            .start(input("RRRRRRRRRRRRRRRRRRRRRA", LifecycleKind::Swap,))
+            .await
+            .expect("submit plan")
+            .phase,
+        LifecyclePhase::Ambiguous
+    );
     drop(first);
 
     facade.fail_execute.store(false, Ordering::SeqCst);
-    let reopened_store =
-        Arc::new(LifecycleStore::open(&path, [45_u8; 32]).expect("reopen durable lifecycle store"));
+    clock.set(131);
+    let reopened_store = Arc::new(
+        LifecycleStore::open_with_clock(&path, [45_u8; 32], clock)
+            .expect("reopen durable lifecycle store"),
+    );
     let reopened = LifecycleEngine::new(reopened_store.clone(), make_wallet());
     assert_eq!(
         reopened
@@ -1115,24 +1527,16 @@ async fn native_swap_and_send_resume_the_persisted_plan_after_process_restart() 
             .await
             .expect("recover swap")
             .phase,
-        LifecyclePhase::Succeeded
+        LifecyclePhase::RecoveryBlocked
     );
-    assert_eq!(
-        reopened
-            .resume("SSSSSSSSSSSSSSSSSSSSSA")
-            .await
-            .expect("recover send")
-            .phase,
-        LifecyclePhase::Succeeded
+    assert!(
+        reopened_store
+            .claim_send_handoff("native-delivery-worker")
+            .expect("query outbox")
+            .is_none()
     );
-    let handoff = reopened_store
-        .claim_send_handoff("native-delivery-worker")
-        .expect("claim recovered send")
-        .expect("recovered send outbox");
-    assert_eq!(handoff.recipient, "receiver");
-    assert_eq!(handoff.token, "cashuA-recovered-native-token");
-    assert_eq!(facade.recoveries.load(Ordering::SeqCst), 2);
-    assert_eq!(facade.observed.lock().expect("observations").len(), 2);
+    assert_eq!(facade.recoveries.load(Ordering::SeqCst), 0);
+    assert_eq!(facade.observed.lock().expect("observations").len(), 1);
 }
 
 #[test]
@@ -1243,6 +1647,21 @@ fn native_swap_plan_accounts_for_nonzero_nut02_input_fees() {
 }
 
 #[test]
+fn native_swap_planner_bounds_aggregate_work_for_ten_thousand_unreachable_proofs() {
+    let proofs = (0..10_000)
+        .map(|index| FeeAwareProof {
+            id: format!("proof-{index:05}"),
+            amount: 2,
+            input_fee_ppk: 0,
+        })
+        .collect();
+    assert_eq!(
+        fee_aware_exact_amount_plan_with_limits(proofs, 19_999, 100_000, 250_000),
+        Err("swap_plan_work_bound_exceeded")
+    );
+}
+
+#[test]
 fn native_swap_recovery_rejects_vacuous_truncated_and_mismatched_nut07() {
     let expected = vec!["y-a".to_owned(), "y-b".to_owned()];
 
@@ -1334,6 +1753,24 @@ async fn failed_wallet_reset_preserves_the_existing_journal() {
             .expect("read operation")
             .is_some()
     );
+}
+
+#[tokio::test]
+async fn post_commit_generation_unlink_failure_does_not_fail_reset() {
+    let path = database_path("deferred-generation-gc-failure");
+    let store = Arc::new(LifecycleStore::open(path, [48_u8; 32]).expect("open store"));
+    let engine = LifecycleEngine::new(store.clone(), Arc::new(DeferredGcFailWallet));
+
+    engine
+        .reset("committed-generation")
+        .await
+        .expect("post-commit cleanup is deferred");
+    assert!(
+        store
+            .verify_seed("committed-generation")
+            .expect("verify seed")
+    );
+    assert_eq!(store.active_generation().expect("active generation"), 1);
 }
 
 #[tokio::test]
@@ -1748,4 +2185,67 @@ async fn lifecycle_http_matches_the_discriminated_shared_contract() {
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn lifecycle_route_accepts_a_contract_maximum_unicode_token() {
+    let path = database_path("http-maximum-unicode-token");
+    let store = Arc::new(LifecycleStore::open(path, [47_u8; 32]).expect("open lifecycle store"));
+    let engine = Arc::new(LifecycleEngine::new(
+        store,
+        Arc::new(RecordingWallet::default()),
+    ));
+    let app = router_with_lifecycle("control-token", None, Some(engine)).expect("build router");
+    let body = serde_json::json!({
+        "operationId": "YYYYYYYYYYYYYYYYYYYYYA",
+        "kind": "receive",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat",
+        "token": "🧾".repeat(262_144),
+    })
+    .to_string();
+    assert!(body.len() > 1_000_000);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/lifecycle/operations")
+                .header("authorization", "Bearer control-token")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn lifecycle_routes_never_publish_numbers_above_javascript_safe_integer() {
+    let path = database_path("http-js-safe-response");
+    let store = Arc::new(LifecycleStore::open(path, [49_u8; 32]).expect("open lifecycle store"));
+    let engine = Arc::new(LifecycleEngine::new(store, Arc::new(UnsafeNumericWallet)));
+    let app = router_with_lifecycle("control-token", None, Some(engine)).expect("build router");
+    let body = serde_json::json!({
+        "operationId": "000000000000000000049A",
+        "kind": "receive",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat",
+        "token": "cashu-test",
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/lifecycle/operations")
+                .header("authorization", "Bearer control-token")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::INSUFFICIENT_STORAGE);
 }
