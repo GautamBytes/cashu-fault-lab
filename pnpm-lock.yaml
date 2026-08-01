@@ -365,6 +365,18 @@ importers:
         specifier: 4.9.0
         version: 4.9.0
 
+  packages/wallet-lifecycle-runner:
+    dependencies:
+      '@cashu-fault-lab/wallet-lifecycle-contract':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-contract
+      '@cashu-fault-lab/wallet-lifecycle-core':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-core
+      '@cashu-fault-lab/wallet-lifecycle-oracle':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-oracle
+
 packages:
 
   '@adobe/css-tools@4.5.0':

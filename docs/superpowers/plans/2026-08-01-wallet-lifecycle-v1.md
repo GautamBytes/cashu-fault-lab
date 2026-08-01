@@ -154,12 +154,12 @@ expect(() => assertLifecycleSafety(model)).not.toThrow();
 - Consumes: lifecycle contract clients and lifecycle oracle observations.
 - Produces: seeded `LifecycleScenarioRunner`, replay artifacts, minimized command traces, and a capability-aware matrix.
 
-- [ ] **Step 1: Write a failing in-memory scenario proving a dropped mint response enters `ambiguous`, resumes the same operation ID, and records the same request digest.**
-- [ ] **Step 2: Run the focused test and verify the lifecycle runner is missing.**
-- [ ] **Step 3: Implement sequential commands, seeded scheduling, observation normalization, invariant checks after every command, and quiescent checks after faults stop.**
-- [ ] **Step 4: Write and pass a replay test comparing the complete normalized observation history and failure identity, not only invariant arrays.**
-- [ ] **Step 5: Add matrix tests requiring distinct implementation identities and explicit `not_applicable` results.**
-- [ ] **Step 6: Commit `feat(lifecycle): add deterministic scenario runner and replay`.**
+- [x] **Step 1: Write a failing in-memory scenario proving a dropped mint response enters `ambiguous`, resumes the same operation ID, and records the same request digest.**
+- [x] **Step 2: Run the focused test and verify the lifecycle runner is missing.**
+- [x] **Step 3: Implement sequential commands, seeded scheduling, observation normalization, invariant checks after every command, and quiescent checks after faults stop.**
+- [x] **Step 4: Write and pass a replay test comparing the complete normalized observation history and failure identity, not only invariant arrays.**
+- [x] **Step 5: Add matrix tests requiring distinct implementation identities and explicit `not_applicable` results.**
+- [x] **Step 6: Commit `feat(lifecycle): add deterministic scenario runner and replay`.**
 
 ### Task 5: Durable cashu-ts lifecycle adapter
 
