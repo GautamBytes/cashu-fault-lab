@@ -54,12 +54,16 @@ export function registerCashuTsLifecycleRoutes(
     return value;
   });
 
-  app.post<{ Body: unknown }>('/v1/lifecycle/operations', async (request, reply) => {
-    if (!validateRequest('start', request.body, reply)) return reply;
-    const value = await lifecycle.start(request.body as LifecycleOperationInput);
-    assertResponse('start', value);
-    return value;
-  });
+  app.post<{ Body: unknown }>(
+    '/v1/lifecycle/operations',
+    { bodyLimit: 300_000 },
+    async (request, reply) => {
+      if (!validateRequest('start', request.body, reply)) return reply;
+      const value = await lifecycle.start(request.body as LifecycleOperationInput);
+      assertResponse('start', value);
+      return value;
+    },
+  );
 
   app.post<{ Params: { id: string }; Body: unknown }>(
     '/v1/lifecycle/operations/:id/resume',

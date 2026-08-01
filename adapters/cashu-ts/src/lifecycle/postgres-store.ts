@@ -4,7 +4,7 @@ import {
   createHash,
   randomBytes as secureRandomBytes,
 } from 'node:crypto';
-import { Pool, type QueryResultRow } from 'pg';
+import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import type {
   LifecycleEvidenceView,
   LifecycleWalletView,
@@ -26,9 +26,29 @@ interface LifecycleRow extends QueryResultRow {
 }
 
 interface SeedRow extends QueryResultRow {
+  readonly seed_fingerprint: string;
   readonly seed_ciphertext: Buffer;
   readonly seed_nonce: Buffer;
   readonly seed_tag: Buffer;
+}
+
+interface CounterContextRow extends QueryResultRow {
+  readonly seed_fingerprint: string;
+  readonly counter_epoch: string;
+}
+
+interface CounterReservationRow extends QueryResultRow {
+  readonly start_counter: string | number;
+  readonly counter_count: string | number;
+}
+
+interface SendHandoffRow extends QueryResultRow {
+  readonly operation_id: string;
+  readonly recipient: string;
+  readonly token_hash: string;
+  readonly token_ciphertext: Buffer;
+  readonly token_nonce: Buffer;
+  readonly token_tag: Buffer;
 }
 
 interface ProofRow extends QueryResultRow {
@@ -38,6 +58,7 @@ interface ProofRow extends QueryResultRow {
   readonly amount: string | number;
   readonly state: CashuTsLifecycleStoredProof['state'];
   readonly bucket: CashuTsLifecycleStoredProof['bucket'];
+  readonly reserved_by_operation_id: string | null;
   readonly material_hash: string;
   readonly proof_ciphertext: Buffer;
   readonly proof_nonce: Buffer;
@@ -178,6 +199,7 @@ export async function migratePostgresCashuTsLifecycleStore(pool: Pool): Promise<
       amount bigint NOT NULL CHECK (amount > 0),
       state text NOT NULL CHECK (state IN ('UNSPENT', 'PENDING', 'SPENT')),
       bucket text NOT NULL CHECK (bucket IN ('available', 'reserved', 'recoverable')),
+      reserved_by_operation_id char(22),
       material_hash char(64) NOT NULL CHECK (material_hash ~ '^[0-9a-f]{64}$'),
       proof_ciphertext bytea NOT NULL CHECK (octet_length(proof_ciphertext) > 0),
       proof_nonce bytea NOT NULL CHECK (octet_length(proof_nonce) = 12),
@@ -195,13 +217,49 @@ export async function migratePostgresCashuTsLifecycleStore(pool: Pool): Promise<
       UNIQUE (tenant_id, run_id, operation_id, output_plan_hash),
       FOREIGN KEY (tenant_id, run_id, operation_id) REFERENCES cashu_lifecycle_operations (tenant_id, run_id, operation_id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS cashu_lifecycle_seed_counters (
+      tenant_id text NOT NULL,
+      seed_fingerprint char(64) NOT NULL CHECK (seed_fingerprint ~ '^[0-9a-f]{64}$'),
+      keyset_id text NOT NULL,
+      next_counter bigint NOT NULL CHECK (next_counter >= 0),
+      PRIMARY KEY (tenant_id, seed_fingerprint, keyset_id)
+    );
+    CREATE TABLE IF NOT EXISTS cashu_lifecycle_counter_reservations (
+      tenant_id text NOT NULL,
+      seed_fingerprint char(64) NOT NULL CHECK (seed_fingerprint ~ '^[0-9a-f]{64}$'),
+      keyset_id text NOT NULL,
+      reservation_id text NOT NULL,
+      start_counter bigint NOT NULL CHECK (start_counter >= 0),
+      counter_count bigint NOT NULL CHECK (counter_count > 0),
+      PRIMARY KEY (tenant_id, seed_fingerprint, keyset_id, reservation_id)
+    );
+    CREATE TABLE IF NOT EXISTS cashu_lifecycle_send_handoffs (
+      tenant_id text NOT NULL,
+      run_id text NOT NULL,
+      operation_id char(22) NOT NULL,
+      recipient text NOT NULL CHECK (length(recipient) > 0),
+      token_hash char(64) NOT NULL CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+      token_ciphertext bytea NOT NULL CHECK (octet_length(token_ciphertext) > 0),
+      token_nonce bytea NOT NULL CHECK (octet_length(token_nonce) = 12),
+      token_tag bytea NOT NULL CHECK (octet_length(token_tag) = 16),
+      claimed_by text,
+      claimed_at timestamptz,
+      acknowledged_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (tenant_id, run_id, operation_id),
+      FOREIGN KEY (tenant_id, run_id, operation_id)
+        REFERENCES cashu_lifecycle_operations (tenant_id, run_id, operation_id) ON DELETE CASCADE
+    );
     CREATE INDEX IF NOT EXISTS cashu_lifecycle_recoverable
       ON cashu_lifecycle_operations (tenant_id, run_id, updated_at, operation_id)
       WHERE phase IN ('submitted', 'ambiguous', 'reconciling');
+    ALTER TABLE cashu_lifecycle_proofs
+      ADD COLUMN IF NOT EXISTS reserved_by_operation_id char(22);
   `);
 }
 
 export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
+  readonly sendHandoffDurability = 'persistent' as const;
   readonly #pool: Pool;
   readonly #key: Buffer;
   readonly #tenantId: string;
@@ -254,7 +312,7 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
 
   async loadSeed(): Promise<string | undefined> {
     const result = await this.#pool.query<SeedRow>(
-      `SELECT seed_ciphertext, seed_nonce, seed_tag
+      `SELECT seed_fingerprint, seed_ciphertext, seed_nonce, seed_tag
        FROM cashu_lifecycle_runs
        WHERE tenant_id = $1 AND run_id = $2`,
       [this.#tenantId, this.#runId],
@@ -264,6 +322,277 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
     return this.#decryptBytes('seed', row.seed_ciphertext, row.seed_nonce, row.seed_tag).toString(
       'utf8',
     );
+  }
+
+  async reserveCounterRange(
+    keysetId: string,
+    reservationId: string,
+    count: number,
+  ): Promise<{ readonly start: number; readonly count: number }> {
+    if (
+      keysetId.length === 0 ||
+      keysetId.length > 128 ||
+      reservationId.length === 0 ||
+      reservationId.length > 128
+    ) {
+      throw new Error('Lifecycle counter reservation identity is invalid');
+    }
+    if (!Number.isSafeInteger(count) || count < 1) {
+      throw new Error('Lifecycle counter reservation count is invalid');
+    }
+    const client = await this.#pool.connect();
+    try {
+      await client.query('BEGIN');
+      const context = await client.query<CounterContextRow>(
+        `SELECT seed_fingerprint, encode(seed_nonce, 'hex') AS counter_epoch
+         FROM cashu_lifecycle_runs
+         WHERE tenant_id = $1 AND run_id = $2`,
+        [this.#tenantId, this.#runId],
+      );
+      const row = context.rows[0];
+      if (row === undefined) throw new Error('Lifecycle seed is unavailable');
+      const scopedReservationId = `${this.#runId}:${row.counter_epoch}:${reservationId}`;
+      await client.query(
+        `INSERT INTO cashu_lifecycle_seed_counters (
+           tenant_id, seed_fingerprint, keyset_id, next_counter
+         ) VALUES ($1, $2, $3, 0)
+         ON CONFLICT (tenant_id, seed_fingerprint, keyset_id) DO NOTHING`,
+        [this.#tenantId, row.seed_fingerprint, keysetId],
+      );
+      const counter = await client.query<{ next_counter: string | number }>(
+        `SELECT next_counter FROM cashu_lifecycle_seed_counters
+         WHERE tenant_id = $1 AND seed_fingerprint = $2 AND keyset_id = $3
+         FOR UPDATE`,
+        [this.#tenantId, row.seed_fingerprint, keysetId],
+      );
+      const next = safeAmount(counter.rows[0]?.next_counter ?? -1, 'Lifecycle counter');
+      const existing = await client.query<CounterReservationRow>(
+        `SELECT start_counter, counter_count
+         FROM cashu_lifecycle_counter_reservations
+         WHERE tenant_id = $1 AND seed_fingerprint = $2 AND keyset_id = $3
+           AND reservation_id = $4`,
+        [this.#tenantId, row.seed_fingerprint, keysetId, scopedReservationId],
+      );
+      const reservation = existing.rows[0];
+      if (reservation !== undefined) {
+        const previousCount = safeAmount(
+          reservation.counter_count,
+          'Lifecycle counter reservation count',
+        );
+        if (previousCount !== count) {
+          throw new Error('Lifecycle counter reservation identity conflicts');
+        }
+        const start = safeAmount(reservation.start_counter, 'Lifecycle counter start');
+        await client.query('COMMIT');
+        return { start, count };
+      }
+      if (!Number.isSafeInteger(next + count))
+        throw new Error('Lifecycle counter range is exhausted');
+      await client.query(
+        `INSERT INTO cashu_lifecycle_counter_reservations (
+           tenant_id, seed_fingerprint, keyset_id, reservation_id, start_counter, counter_count
+         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [this.#tenantId, row.seed_fingerprint, keysetId, scopedReservationId, next, count],
+      );
+      await client.query(
+        `UPDATE cashu_lifecycle_seed_counters SET next_counter = $4
+         WHERE tenant_id = $1 AND seed_fingerprint = $2 AND keyset_id = $3`,
+        [this.#tenantId, row.seed_fingerprint, keysetId, next + count],
+      );
+      await client.query('COMMIT');
+      return { start: next, count };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async counterHighWatermark(keysetId: string): Promise<number> {
+    const result = await this.#pool.query<{ next_counter: string | number }>(
+      `SELECT counters.next_counter
+       FROM cashu_lifecycle_runs AS runs
+       LEFT JOIN cashu_lifecycle_seed_counters AS counters
+         ON counters.tenant_id = runs.tenant_id
+        AND counters.seed_fingerprint = runs.seed_fingerprint
+        AND counters.keyset_id = $3
+       WHERE runs.tenant_id = $1 AND runs.run_id = $2`,
+      [this.#tenantId, this.#runId, keysetId],
+    );
+    const value = result.rows[0]?.next_counter;
+    return value === undefined || value === null
+      ? 0
+      : safeAmount(value, 'Lifecycle counter high watermark');
+  }
+
+  async counterHighWatermarks(): Promise<
+    readonly { readonly keysetId: string; readonly nextCounter: number }[]
+  > {
+    const result = await this.#pool.query<{
+      keyset_id: string;
+      next_counter: string | number;
+    }>(
+      `SELECT counters.keyset_id, counters.next_counter
+       FROM cashu_lifecycle_runs AS runs
+       JOIN cashu_lifecycle_seed_counters AS counters
+         ON counters.tenant_id = runs.tenant_id
+        AND counters.seed_fingerprint = runs.seed_fingerprint
+       WHERE runs.tenant_id = $1 AND runs.run_id = $2
+       ORDER BY counters.keyset_id`,
+      [this.#tenantId, this.#runId],
+    );
+    return result.rows.map((row) => ({
+      keysetId: row.keyset_id,
+      nextCounter: safeAmount(row.next_counter, 'Lifecycle counter high watermark'),
+    }));
+  }
+
+  async putSendHandoff(operationId: string, recipient: string, token: string): Promise<string> {
+    if (recipient.length === 0 || token.length === 0) {
+      throw new Error('Lifecycle send handoff is invalid');
+    }
+    const tokenHash = createHash('sha256')
+      .update('cashu-fault-lab/cashu-ts-lifecycle-send-token/v1\0')
+      .update(token)
+      .digest('hex');
+    const envelope = this.#encrypt(`handoff:${operationId}`, token);
+    const result = await this.#pool.query(
+      `INSERT INTO cashu_lifecycle_send_handoffs AS existing (
+         tenant_id, run_id, operation_id, recipient, token_hash,
+         token_ciphertext, token_nonce, token_tag
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (tenant_id, run_id, operation_id) DO UPDATE
+       SET operation_id = EXCLUDED.operation_id
+       WHERE existing.recipient = EXCLUDED.recipient
+         AND existing.token_hash = EXCLUDED.token_hash
+       RETURNING operation_id`,
+      [
+        this.#tenantId,
+        this.#runId,
+        operationId,
+        recipient,
+        tokenHash,
+        envelope.ciphertext,
+        envelope.nonce,
+        envelope.tag,
+      ],
+    );
+    if (result.rowCount !== 1) throw new Error('Lifecycle send handoff identity conflicts');
+    return tokenHash;
+  }
+
+  async loadSendHandoff(
+    operationId: string,
+  ): Promise<
+    { readonly recipient: string; readonly token: string; readonly tokenHash: string } | undefined
+  > {
+    const result = await this.#pool.query<SendHandoffRow>(
+      `SELECT operation_id, recipient, token_hash, token_ciphertext, token_nonce, token_tag
+       FROM cashu_lifecycle_send_handoffs
+       WHERE tenant_id = $1 AND run_id = $2 AND operation_id = $3`,
+      [this.#tenantId, this.#runId, operationId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) return undefined;
+    const token = this.#decryptBytes(
+      `handoff:${operationId}`,
+      row.token_ciphertext,
+      row.token_nonce,
+      row.token_tag,
+    ).toString('utf8');
+    const tokenHash = createHash('sha256')
+      .update('cashu-fault-lab/cashu-ts-lifecycle-send-token/v1\0')
+      .update(token)
+      .digest('hex');
+    if (tokenHash !== row.token_hash) throw new Error('Lifecycle send handoff hash conflicts');
+    return { recipient: row.recipient, token, tokenHash };
+  }
+
+  async claimSendHandoff(consumerId: string): Promise<
+    | {
+        readonly operationId: string;
+        readonly recipient: string;
+        readonly token: string;
+        readonly tokenHash: string;
+      }
+    | undefined
+  > {
+    if (!ID_PATTERN.test(consumerId)) {
+      throw new Error('Lifecycle send handoff consumer is invalid');
+    }
+    const client = await this.#pool.connect();
+    try {
+      await client.query('BEGIN');
+      const selected = await client.query<SendHandoffRow>(
+        `SELECT operation_id, recipient, token_hash, token_ciphertext, token_nonce, token_tag
+         FROM cashu_lifecycle_send_handoffs
+         WHERE tenant_id = $1
+           AND run_id = $2
+           AND acknowledged_at IS NULL
+           AND (
+             claimed_by IS NULL
+             OR claimed_by = $3
+             OR claimed_at < now() - interval '5 minutes'
+           )
+         ORDER BY created_at, operation_id
+         FOR UPDATE SKIP LOCKED
+         LIMIT 1`,
+        [this.#tenantId, this.#runId, consumerId],
+      );
+      const row = selected.rows[0];
+      if (row === undefined) {
+        await client.query('COMMIT');
+        return undefined;
+      }
+      const token = this.#decryptBytes(
+        `handoff:${row.operation_id}`,
+        row.token_ciphertext,
+        row.token_nonce,
+        row.token_tag,
+      ).toString('utf8');
+      const tokenHash = createHash('sha256')
+        .update('cashu-fault-lab/cashu-ts-lifecycle-send-token/v1\0')
+        .update(token)
+        .digest('hex');
+      if (tokenHash !== row.token_hash) throw new Error('Lifecycle send handoff hash conflicts');
+      await client.query(
+        `UPDATE cashu_lifecycle_send_handoffs
+         SET claimed_by = $4, claimed_at = now()
+         WHERE tenant_id = $1 AND run_id = $2 AND operation_id = $3`,
+        [this.#tenantId, this.#runId, row.operation_id, consumerId],
+      );
+      await client.query('COMMIT');
+      return {
+        operationId: row.operation_id,
+        recipient: row.recipient,
+        token,
+        tokenHash,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async ackSendHandoff(operationId: string, tokenHash: string, consumerId: string): Promise<void> {
+    if (!ID_PATTERN.test(consumerId)) {
+      throw new Error('Lifecycle send handoff consumer is invalid');
+    }
+    const result = await this.#pool.query(
+      `UPDATE cashu_lifecycle_send_handoffs
+       SET acknowledged_at = COALESCE(acknowledged_at, now())
+       WHERE tenant_id = $1
+         AND run_id = $2
+         AND operation_id = $3
+         AND token_hash = $4
+         AND claimed_by = $5
+       RETURNING operation_id`,
+      [this.#tenantId, this.#runId, operationId, tokenHash, consumerId],
+    );
+    if (result.rowCount !== 1) throw new Error('Lifecycle send handoff claim conflicts');
   }
 
   async create(operation: CashuTsStoredLifecycleOperation): Promise<CashuTsLifecycleCreateResult> {
@@ -299,6 +628,14 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
   }
 
   async put(operation: CashuTsStoredLifecycleOperation): Promise<void> {
+    await this.commit(operation);
+  }
+
+  async commit(
+    operation: CashuTsStoredLifecycleOperation,
+    proofChanges?: Omit<CashuTsLifecycleProofChanges, 'operationId'>,
+    evidence: readonly CashuTsLifecycleEvidenceInput[] = [],
+  ): Promise<void> {
     const envelope = this.#encrypt(operation.view.operationId, operation);
     const client = await this.#pool.connect();
     try {
@@ -308,7 +645,8 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
          SET kind = $4, mint = $5, unit = $6, intent_hash = $7, phase = $8,
              request_hash = $9, quote_hash = $10, output_plan_hash = $11,
              record_ciphertext = $12, record_nonce = $13, record_tag = $14, updated_at = now()
-         WHERE tenant_id = $1 AND run_id = $2 AND operation_id = $3 AND intent_hash = $7`,
+         WHERE tenant_id = $1 AND run_id = $2 AND operation_id = $3
+           AND kind = $4 AND mint = $5 AND unit = $6 AND intent_hash = $7`,
         this.#values(operation, envelope),
       );
       if (result.rowCount !== 1) throw new Error('Lifecycle operation identity conflicts');
@@ -325,6 +663,13 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
         );
         if (plan.rowCount !== 1) throw new Error('Lifecycle output plan identity conflicts');
       }
+      if (proofChanges !== undefined) {
+        await this.#applyProofChanges(client, {
+          operationId: operation.view.operationId,
+          ...proofChanges,
+        });
+      }
+      for (const item of evidence) await this.#appendEvidence(client, item);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
@@ -370,7 +715,7 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
 
   async listProofs(mint: string, unit: string): Promise<readonly CashuTsLifecycleStoredProof[]> {
     const result = await this.#pool.query<ProofRow>(
-      `SELECT proof_id, mint, unit, amount, state, bucket, material_hash,
+      `SELECT proof_id, mint, unit, amount, state, bucket, reserved_by_operation_id, material_hash,
               proof_ciphertext, proof_nonce, proof_tag
        FROM cashu_lifecycle_proofs
        WHERE tenant_id = $1 AND run_id = $2 AND mint = $3 AND unit = $4
@@ -396,6 +741,9 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
         amount: safeAmount(row.amount, 'Lifecycle proof amount'),
         state: row.state,
         bucket: row.bucket,
+        ...(row.reserved_by_operation_id === null
+          ? {}
+          : { reservedByOperationId: row.reserved_by_operation_id }),
         material,
       };
     });
@@ -405,14 +753,28 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
     const client = await this.#pool.connect();
     try {
       await client.query('BEGIN');
-      for (const proof of changes.add) {
-        const hash = materialHash(proof.material);
-        const envelope = this.#encrypt(`proof:${proof.proofId}`, proof.material);
-        const inserted = await client.query(
-          `INSERT INTO cashu_lifecycle_proofs AS existing (
+      await this.#applyProofChanges(client, changes);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async #applyProofChanges(
+    client: PoolClient,
+    changes: CashuTsLifecycleProofChanges,
+  ): Promise<void> {
+    for (const proof of changes.add) {
+      const hash = materialHash(proof.material);
+      const envelope = this.#encrypt(`proof:${proof.proofId}`, proof.material);
+      const inserted = await client.query(
+        `INSERT INTO cashu_lifecycle_proofs AS existing (
              tenant_id, run_id, proof_id, operation_id, mint, unit, amount, state, bucket,
-             material_hash, proof_ciphertext, proof_nonce, proof_tag
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+             reserved_by_operation_id, material_hash, proof_ciphertext, proof_nonce, proof_tag
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
            ON CONFLICT (tenant_id, run_id, proof_id) DO UPDATE
            SET proof_id = EXCLUDED.proof_id
            WHERE existing.mint = EXCLUDED.mint
@@ -420,51 +782,64 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
              AND existing.amount = EXCLUDED.amount
              AND existing.state = EXCLUDED.state
              AND existing.bucket = EXCLUDED.bucket
+             AND existing.reserved_by_operation_id IS NOT DISTINCT FROM EXCLUDED.reserved_by_operation_id
              AND existing.material_hash = EXCLUDED.material_hash
            RETURNING proof_id`,
-          [
-            this.#tenantId,
-            this.#runId,
-            proof.proofId,
-            changes.operationId,
-            proof.mint,
-            proof.unit,
-            proof.amount,
-            proof.state,
-            proof.bucket,
-            hash,
-            envelope.ciphertext,
-            envelope.nonce,
-            envelope.tag,
-          ],
-        );
-        if (inserted.rowCount !== 1) throw new Error('Lifecycle proof identity conflicts');
-      }
-      for (const update of changes.update) {
-        const current = await client.query<{ state: CashuTsLifecycleStoredProof['state'] }>(
-          `SELECT state FROM cashu_lifecycle_proofs
+        [
+          this.#tenantId,
+          this.#runId,
+          proof.proofId,
+          changes.operationId,
+          proof.mint,
+          proof.unit,
+          proof.amount,
+          proof.state,
+          proof.bucket,
+          proof.reservedByOperationId ?? null,
+          hash,
+          envelope.ciphertext,
+          envelope.nonce,
+          envelope.tag,
+        ],
+      );
+      if (inserted.rowCount !== 1) throw new Error('Lifecycle proof identity conflicts');
+    }
+    for (const update of changes.update) {
+      const current = await client.query<{
+        state: CashuTsLifecycleStoredProof['state'];
+        reserved_by_operation_id: string | null;
+      }>(
+        `SELECT state, reserved_by_operation_id FROM cashu_lifecycle_proofs
            WHERE tenant_id = $1 AND run_id = $2 AND proof_id = $3
            FOR UPDATE`,
-          [this.#tenantId, this.#runId, update.proofId],
-        );
-        const previous = current.rows[0];
-        if (previous === undefined) throw new Error('Lifecycle proof was not found');
-        if (!validProofTransition(previous.state, update.state)) {
-          throw new Error('Lifecycle proof state transition is invalid');
-        }
-        await client.query(
-          `UPDATE cashu_lifecycle_proofs
-           SET state = $4, bucket = $5, updated_at = now()
-           WHERE tenant_id = $1 AND run_id = $2 AND proof_id = $3`,
-          [this.#tenantId, this.#runId, update.proofId, update.state, update.bucket],
-        );
+        [this.#tenantId, this.#runId, update.proofId],
+      );
+      const previous = current.rows[0];
+      if (previous === undefined) throw new Error('Lifecycle proof was not found');
+      if (!validProofTransition(previous.state, update.state)) {
+        throw new Error('Lifecycle proof state transition is invalid');
       }
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw error;
-    } finally {
-      client.release();
+      const reservationOperationId = update.reservationOperationId ?? changes.operationId;
+      if (
+        previous.state === 'PENDING' &&
+        previous.reserved_by_operation_id !== reservationOperationId
+      ) {
+        throw new Error('Lifecycle proof is reserved by another operation');
+      }
+      const reservedByOperationId = update.state === 'PENDING' ? reservationOperationId : null;
+      await client.query(
+        `UPDATE cashu_lifecycle_proofs
+           SET state = $4, bucket = $5, reserved_by_operation_id = $6, updated_at = now()
+           WHERE tenant_id = $1 AND run_id = $2 AND proof_id = $3`,
+        [
+          this.#tenantId,
+          this.#runId,
+          update.proofId,
+          update.state,
+          update.bucket,
+          reservedByOperationId,
+        ],
+      );
     }
   }
 
@@ -488,7 +863,14 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
   }
 
   async appendEvidence(evidence: CashuTsLifecycleEvidenceInput): Promise<void> {
-    const result = await this.#pool.query(
+    await this.#appendEvidence(this.#pool, evidence);
+  }
+
+  async #appendEvidence(
+    queryable: Pick<Pool, 'query'> | Pick<PoolClient, 'query'>,
+    evidence: CashuTsLifecycleEvidenceInput,
+  ): Promise<void> {
+    const result = await queryable.query(
       `INSERT INTO cashu_lifecycle_effects AS existing (
          tenant_id, run_id, effect_id, operation_id, source, event, data_hash
        ) VALUES ($1, $2, $3, $4, $5, $6, $7)

@@ -1,4 +1,5 @@
 import type {
+  LifecycleCapabilities,
   LifecycleOperationInput,
   LifecycleOperationView,
 } from '@cashu-fault-lab/wallet-lifecycle-contract';
@@ -91,6 +92,103 @@ class RecordingWalletPort implements CashuTsLifecycleWalletPort {
 }
 
 describe('CashuTsLifecycleOperations', () => {
+  test('reserves monotonic counter ranges for a seed and never reuses them after reset', async () => {
+    const store = new MemoryCashuTsLifecycleStore();
+    await store.reset('counter-seed');
+
+    await expect(store.reserveCounterRange('00aa', 'op-a', 64)).resolves.toEqual({
+      start: 0,
+      count: 64,
+    });
+    await expect(store.reserveCounterRange('00aa', 'op-a', 64)).resolves.toEqual({
+      start: 0,
+      count: 64,
+    });
+    await expect(store.reserveCounterRange('00aa', 'op-b', 64)).resolves.toEqual({
+      start: 64,
+      count: 64,
+    });
+
+    await store.reset('counter-seed');
+    await expect(store.reserveCounterRange('00aa', 'op-a', 64)).resolves.toEqual({
+      start: 128,
+      count: 64,
+    });
+    await expect(store.counterHighWatermark('00aa')).resolves.toBe(192);
+
+    await store.reset('other-counter-seed');
+    await expect(store.reserveCounterRange('00aa', 'op-a', 64)).resolves.toEqual({
+      start: 0,
+      count: 64,
+    });
+    await store.reset('counter-seed');
+    await expect(store.reserveCounterRange('00aa', 'op-c', 64)).resolves.toEqual({
+      start: 192,
+      count: 64,
+    });
+  });
+
+  test('offers send outbox entries to one trusted worker until acknowledged', async () => {
+    const store = new MemoryCashuTsLifecycleStore();
+    await store.reset('send-outbox-seed');
+    await store.create({
+      input: inputs[2]!,
+      view: {
+        operationId: inputs[2]!.operationId,
+        kind: 'send',
+        mint,
+        unit: 'sat',
+        intentHash: 'a'.repeat(64),
+        phase: 'created',
+      },
+      attemptCount: 0,
+    });
+    const tokenHash = await store.putSendHandoff(inputs[2]!.operationId, 'bob', 'cashuB-token');
+
+    await expect(store.claimSendHandoff('worker-a')).resolves.toEqual({
+      operationId: inputs[2]!.operationId,
+      recipient: 'bob',
+      token: 'cashuB-token',
+      tokenHash,
+    });
+    await expect(store.claimSendHandoff('worker-b')).resolves.toBeUndefined();
+    await expect(
+      store.ackSendHandoff(inputs[2]!.operationId, tokenHash, 'worker-b'),
+    ).rejects.toThrow('Lifecycle send handoff claim conflicts');
+    await store.ackSendHandoff(inputs[2]!.operationId, tokenHash, 'worker-a');
+    await expect(store.claimSendHandoff('worker-a')).resolves.toBeUndefined();
+  });
+
+  test('does not execute operations absent from advertised capabilities', async () => {
+    const capabilities: LifecycleCapabilities = {
+      schemaVersion: 1,
+      implementation: {
+        id: 'cashu-ts',
+        version: '4.7.2',
+        language: 'typescript',
+        runtime: 'node-24',
+        sourceDigest: `sha256:${'a'.repeat(64)}`,
+        buildDigest: `sha256:${'b'.repeat(64)}`,
+      },
+      operations: ['mint'],
+      nuts: [4, 13],
+      durability: 'restart_safe',
+      recovery: ['quote_state', 'nut13_seed'],
+      mints: [{ id: 'configured-mint', implementation: 'configured' }],
+    };
+    const wallet = new RecordingWalletPort();
+    const operations = new CashuTsLifecycleOperations({
+      store: new MemoryCashuTsLifecycleStore(),
+      wallet,
+      capabilities,
+    });
+
+    await expect(operations.start(inputs[1]!)).rejects.toThrow(
+      'Lifecycle operation is not advertised',
+    );
+    expect(wallet.calls).toEqual([]);
+  });
+
   test('projects encrypted-store proof state into wallet and evidence views', async () => {
     const store = new MemoryCashuTsLifecycleStore();
     const operations = new CashuTsLifecycleOperations({
@@ -131,15 +229,24 @@ describe('CashuTsLifecycleOperations', () => {
       balances: { available: 8, reserved: 0, recoverable: 0 },
       proofs: [{ proofId: 'c'.repeat(64), state: 'UNSPENT' }],
     });
-    await expect(operations.evidence()).resolves.toEqual([
-      {
-        sequence: 1,
-        operationId: inputs[0]!.operationId,
-        source: 'durable_state',
-        event: 'proofs_persisted',
-        dataHash: 'd'.repeat(64),
-      },
-    ]);
+    await expect(operations.evidence()).resolves.toEqual(
+      expect.arrayContaining([
+        {
+          sequence: expect.any(Number),
+          operationId: inputs[0]!.operationId,
+          source: 'adapter',
+          event: 'submission_succeeded',
+          dataHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        },
+        {
+          sequence: expect.any(Number),
+          operationId: inputs[0]!.operationId,
+          source: 'durable_state',
+          event: 'proofs_persisted',
+          dataHash: 'd'.repeat(64),
+        },
+      ]),
+    );
     expect(JSON.stringify(await operations.wallet())).not.toContain('never-return-this');
   });
 
@@ -214,6 +321,131 @@ describe('CashuTsLifecycleOperations', () => {
     expect(events[0]).toBe('store:created');
   });
 
+  test('atomically persists prepared material and proof reservations before submission', async () => {
+    const store = new MemoryCashuTsLifecycleStore();
+    const wallet = new RecordingWalletPort();
+    const operations = new CashuTsLifecycleOperations({ store, wallet });
+    await operations.reset('atomic-proof-reservation');
+    await operations.start(inputs[0]!);
+    await store.applyProofChanges({
+      operationId: inputs[0]!.operationId,
+      add: [
+        {
+          proofId: 'e'.repeat(64),
+          mint,
+          unit: 'sat',
+          amount: 8,
+          state: 'UNSPENT',
+          bucket: 'available',
+          material: { secret: 'reserved-proof-secret' },
+        },
+      ],
+      update: [],
+    });
+    wallet.prepare = async () => ({
+      requestMaterial: { kind: 'swap', exact: 'prepared-request' },
+      requestHash: 'c'.repeat(64),
+      outputPlanHash: 'd'.repeat(64),
+      proofChanges: {
+        add: [],
+        update: [{ proofId: 'e'.repeat(64), state: 'PENDING', bucket: 'reserved' }],
+      },
+    });
+    wallet.submit = async () => {
+      expect(await store.listProofs(mint, 'sat')).toEqual([
+        expect.objectContaining({
+          proofId: 'e'.repeat(64),
+          state: 'PENDING',
+          bucket: 'reserved',
+        }),
+      ]);
+      return { status: 'succeeded', amount: 4 };
+    };
+
+    await expect(operations.start(inputs[1]!)).resolves.toMatchObject({
+      phase: 'succeeded',
+    });
+  });
+
+  test('does not allow two operations to reserve the same proof', async () => {
+    const store = new MemoryCashuTsLifecycleStore();
+    const wallet = new RecordingWalletPort();
+    const operations = new CashuTsLifecycleOperations({ store, wallet });
+    await operations.reset('exclusive-proof-reservation');
+    await operations.start(inputs[0]!);
+    await store.applyProofChanges({
+      operationId: inputs[0]!.operationId,
+      add: [
+        {
+          proofId: 'f'.repeat(64),
+          mint,
+          unit: 'sat',
+          amount: 8,
+          state: 'UNSPENT',
+          bucket: 'available',
+          material: { secret: 'one-owner-only' },
+        },
+      ],
+      update: [],
+    });
+    wallet.prepare = async (input) => ({
+      requestMaterial: { kind: input.kind, exact: 'prepared-request' },
+      proofChanges: {
+        add: [],
+        update: [{ proofId: 'f'.repeat(64), state: 'PENDING', bucket: 'reserved' }],
+      },
+    });
+    wallet.nextResult = { status: 'ambiguous' };
+
+    await expect(operations.start(inputs[1]!)).resolves.toMatchObject({ phase: 'ambiguous' });
+    await expect(operations.start(inputs[2]!)).rejects.toThrow(
+      'Lifecycle proof is reserved by another operation',
+    );
+  });
+
+  test('rolls back terminal state and proof changes when evidence cannot commit', async () => {
+    const store = new MemoryCashuTsLifecycleStore();
+    const wallet = new RecordingWalletPort();
+    wallet.nextResult = {
+      status: 'succeeded',
+      amount: 8,
+      proofChanges: {
+        add: [
+          {
+            proofId: '9'.repeat(64),
+            mint,
+            unit: 'sat',
+            amount: 8,
+            state: 'UNSPENT',
+            bucket: 'available',
+            material: { secret: 'must-roll-back' },
+          },
+        ],
+        update: [],
+      },
+      evidence: [
+        {
+          effectId: 'invalid-evidence',
+          operationId: inputs[0]!.operationId,
+          source: 'durable_state',
+          event: 'proofs_persisted',
+          dataHash: 'invalid',
+        },
+      ],
+    } as CashuTsLifecycleResult;
+    const operations = new CashuTsLifecycleOperations({ store, wallet });
+    await operations.reset('atomic-result-evidence');
+
+    await expect(operations.start(inputs[0]!)).rejects.toThrow(
+      'Lifecycle evidence hash is invalid',
+    );
+    await expect(operations.operation(inputs[0]!.operationId)).resolves.toMatchObject({
+      phase: 'submitted',
+    });
+    await expect(store.listProofs(mint, 'sat')).resolves.toEqual([]);
+    await expect(operations.evidence()).resolves.toEqual([]);
+  });
+
   test('resumes an ambiguous operation under one exclusive claim', async () => {
     const store = new MemoryCashuTsLifecycleStore();
     const wallet = new RecordingWalletPort();
@@ -232,6 +464,50 @@ describe('CashuTsLifecycleOperations', () => {
     expect(left.phase).toBe('succeeded');
     expect(right).toEqual(left);
     expect(wallet.calls.filter((call) => call === 'recover:mint')).toHaveLength(1);
+  });
+
+  test('journals attempt count and the successful recovery mechanism', async () => {
+    const store = new MemoryCashuTsLifecycleStore();
+    const wallet = new RecordingWalletPort();
+    wallet.nextResult = { status: 'ambiguous' };
+    const operations = new CashuTsLifecycleOperations({ store, wallet });
+    await operations.start(inputs[0]!);
+    wallet.nextResult = {
+      status: 'succeeded',
+      amount: 8,
+      recoveryMechanism: 'nut09_restore',
+    } as CashuTsLifecycleResult;
+
+    await operations.resume(inputs[0]!.operationId);
+
+    await expect(store.get(inputs[0]!.operationId)).resolves.toMatchObject({
+      attemptCount: 2,
+      recoveryMechanism: 'nut09_restore',
+    });
+  });
+
+  test('blocks recovery on quote-state regression across attempts', async () => {
+    const store = new MemoryCashuTsLifecycleStore();
+    const wallet = new RecordingWalletPort();
+    wallet.nextResult = { status: 'ambiguous' };
+    const operations = new CashuTsLifecycleOperations({ store, wallet });
+    await operations.start(inputs[4]!);
+    wallet.nextResult = {
+      status: 'ambiguous',
+      recoveryMechanism: 'quote_state',
+      quoteObservations: [{ kind: 'melt', state: 'PENDING', dataHash: '1'.repeat(64) }],
+    } as CashuTsLifecycleResult;
+    await operations.resume(inputs[4]!.operationId);
+    wallet.nextResult = {
+      status: 'ambiguous',
+      recoveryMechanism: 'quote_state',
+      quoteObservations: [{ kind: 'melt', state: 'UNPAID', dataHash: '2'.repeat(64) }],
+    } as CashuTsLifecycleResult;
+
+    await expect(operations.resume(inputs[4]!.operationId)).resolves.toMatchObject({
+      phase: 'recovery_blocked',
+      evidenceCode: 'quote_state_regressed',
+    });
   });
 
   test('maps definitive and blocked outcomes to evidence-bearing terminal phases', async () => {

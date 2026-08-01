@@ -80,6 +80,30 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')('PostgresCashuTsLifecycleS
     await container?.stop();
   }, 30_000);
 
+  test('atomically reserves durable non-overlapping counter ranges', async () => {
+    if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+    const options = {
+      pool,
+      key: Buffer.alloc(32, 41),
+      tenantId: 'cashu-ts-lifecycle-test',
+      runId: 'counter-reservations',
+    } as const;
+    const left = new PostgresCashuTsLifecycleStore(options);
+    const right = new PostgresCashuTsLifecycleStore(options);
+    await left.reset('counter-seed');
+
+    const ranges = await Promise.all([
+      left.reserveCounterRange('00aa', 'left', 64),
+      right.reserveCounterRange('00aa', 'right', 64),
+    ]);
+    expect(ranges.map(({ start }) => start).sort((a, b) => a - b)).toEqual([0, 64]);
+    await expect(left.reserveCounterRange('00aa', 'left', 64)).resolves.toEqual(ranges[0]);
+    await expect(right.counterHighWatermark('00aa')).resolves.toBe(128);
+    await expect(right.counterHighWatermarks()).resolves.toEqual([
+      { keysetId: '00aa', nextCounter: 128 },
+    ]);
+  });
+
   test('encrypts exact request material and resumes once after process replacement', async () => {
     if (pool === undefined) throw new Error('PostgreSQL pool did not start');
     const key = Buffer.alloc(32, 42);
@@ -102,6 +126,35 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')('PostgresCashuTsLifecycleS
     );
     expect(raw.rows).toHaveLength(1);
     expect(raw.rows[0]!.record_ciphertext.includes(Buffer.from(input.token))).toBe(false);
+
+    const handoffToken = 'cashuB-encrypted-send-handoff-token';
+    await firstStore.putSendHandoff(input.operationId, 'recipient-1', handoffToken);
+    await expect(firstStore.loadSendHandoff(input.operationId)).resolves.toMatchObject({
+      recipient: 'recipient-1',
+      token: handoffToken,
+      tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    const claimed = await firstStore.claimSendHandoff('delivery-worker-a');
+    expect(claimed).toMatchObject({
+      operationId: input.operationId,
+      recipient: 'recipient-1',
+      token: handoffToken,
+      tokenHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    await expect(
+      new PostgresCashuTsLifecycleStore(options).claimSendHandoff('delivery-worker-b'),
+    ).resolves.toBeUndefined();
+    await expect(
+      firstStore.ackSendHandoff(input.operationId, claimed!.tokenHash, 'delivery-worker-b'),
+    ).rejects.toThrow('Lifecycle send handoff claim conflicts');
+    await firstStore.ackSendHandoff(input.operationId, claimed!.tokenHash, 'delivery-worker-a');
+    await expect(firstStore.claimSendHandoff('delivery-worker-a')).resolves.toBeUndefined();
+    const rawHandoff = await pool.query<{ token_ciphertext: Buffer }>(
+      `SELECT token_ciphertext FROM cashu_lifecycle_send_handoffs
+       WHERE tenant_id = $1 AND run_id = $2 AND operation_id = $3`,
+      [options.tenantId, options.runId, input.operationId],
+    );
+    expect(rawHandoff.rows[0]!.token_ciphertext.includes(Buffer.from(handoffToken))).toBe(false);
 
     const replacementWallet = new RecoveringWallet();
     replacementWallet.result = { status: 'succeeded', amount: 8 };
@@ -261,6 +314,94 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')('PostgresCashuTsLifecycleS
         balances: { available: 0, reserved: 8, recoverable: 0 },
         proofs: [{ proofId: 'e'.repeat(64), state: 'PENDING' }],
       },
+    );
+  });
+
+  test('rolls back the prepared transition when its proof reservation cannot commit', async () => {
+    if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+    const options = {
+      pool,
+      key: Buffer.alloc(32, 47),
+      tenantId: 'cashu-ts-lifecycle-test',
+      runId: 'atomic-prepared-reservation',
+    } as const;
+    const store = new PostgresCashuTsLifecycleStore(options);
+    const wallet = new RecoveringWallet();
+    wallet.prepare = async () => ({
+      requestMaterial: { exact: 'prepared-request' },
+      requestHash: 'a'.repeat(64),
+      outputPlanHash: 'b'.repeat(64),
+      proofChanges: {
+        add: [],
+        update: [
+          { proofId: 'f'.repeat(64), state: 'PENDING' as const, bucket: 'reserved' as const },
+        ],
+      },
+    });
+    const operations = new CashuTsLifecycleOperations({ store, wallet });
+    await operations.reset('atomic-prepared-reservation');
+
+    await expect(operations.start(input)).rejects.toThrow('Lifecycle proof was not found');
+    await expect(store.get(input.operationId)).resolves.toMatchObject({
+      view: { phase: 'created' },
+    });
+  });
+
+  test('serializes proof reservations across different operation claims', async () => {
+    if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+    const store = new PostgresCashuTsLifecycleStore({
+      pool,
+      key: Buffer.alloc(32, 48),
+      tenantId: 'cashu-ts-lifecycle-test',
+      runId: 'exclusive-proof-reservation',
+    });
+    const origin = new CashuTsLifecycleOperations({ store, wallet: new RecoveringWallet() });
+    await origin.reset('exclusive-proof-reservation');
+    await origin.start(input);
+    await store.applyProofChanges({
+      operationId: input.operationId,
+      add: [
+        {
+          proofId: 'f'.repeat(64),
+          mint: input.mint,
+          unit: input.unit,
+          amount: 8,
+          state: 'UNSPENT',
+          bucket: 'available',
+          material: { id: '00aa', secret: 'exclusive-proof', C: `02${'12'.repeat(32)}` },
+        },
+      ],
+      update: [],
+    });
+    const wallet = new RecoveringWallet();
+    wallet.prepare = async (operation) => ({
+      requestMaterial: { kind: operation.kind },
+      outputPlanHash: createHash('sha256').update(operation.operationId).digest('hex'),
+      proofChanges: {
+        add: [],
+        update: [{ proofId: 'f'.repeat(64), state: 'PENDING', bucket: 'reserved' }],
+      },
+    });
+    const operations = new CashuTsLifecycleOperations({ store, wallet });
+    const swap: LifecycleOperationInput = {
+      operationId: 'AAAAAAAAAAAAAAAAAAAAAQ',
+      kind: 'swap',
+      mint: input.mint,
+      unit: input.unit,
+      amount: 4,
+    };
+    const send: LifecycleOperationInput = {
+      operationId: 'AAAAAAAAAAAAAAAAAAAABA',
+      kind: 'send',
+      mint: input.mint,
+      unit: input.unit,
+      amount: 4,
+      recipient: 'bob',
+    };
+
+    await expect(operations.start(swap)).resolves.toMatchObject({ phase: 'ambiguous' });
+    await expect(operations.start(send)).rejects.toThrow(
+      'Lifecycle proof is reserved by another operation',
     );
   });
 });

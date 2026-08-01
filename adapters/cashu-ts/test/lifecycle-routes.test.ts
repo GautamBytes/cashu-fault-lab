@@ -121,6 +121,26 @@ describe('cashu-ts lifecycle routes', () => {
     await app.close();
   });
 
+  test('accepts receive tokens up to the lifecycle contract limit despite the global limit', async () => {
+    const lifecycle = new LifecycleOperations();
+    const app = await buildCashuTsAdapterServer({
+      now: () => 0,
+      controlToken: 'lifecycle-control-token',
+      lifecycle,
+    });
+    const token = `cashuB-${'x'.repeat(20_000)}`;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/lifecycle/operations',
+      headers: { authorization: 'Bearer lifecycle-control-token' },
+      payload: { operationId, kind: 'receive', mint, unit: 'sat', token },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(lifecycle.lastInput).toMatchObject({ token });
+    await app.close();
+  });
+
   test('serves the complete contract surface with validated responses', async () => {
     const app = await buildCashuTsAdapterServer({
       now: () => 0,
@@ -145,6 +165,37 @@ describe('cashu-ts lifecycle routes', () => {
       });
       expect(response.statusCode, `${method} ${url}: ${response.body}`).toBe(200);
     }
+    await app.close();
+  });
+
+  test('rejects secret-bearing evidence responses without reflecting the secret', async () => {
+    const lifecycle = new LifecycleOperations();
+    const canary = 'secret-evidence-canary-never-return';
+    lifecycle.evidence = async () =>
+      [
+        {
+          sequence: 1,
+          operationId,
+          source: 'durable_state' as const,
+          event: 'proofs_persisted',
+          dataHash: 'f'.repeat(64),
+          secret: canary,
+        },
+      ] as never;
+    const app = await buildCashuTsAdapterServer({
+      now: () => 0,
+      controlToken: 'lifecycle-control-token',
+      lifecycle,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/lifecycle/evidence',
+      headers: { authorization: 'Bearer lifecycle-control-token' },
+    });
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({ code: 'INTERNAL_ERROR', message: 'Internal server error' });
+    expect(response.body).not.toContain(canary);
     await app.close();
   });
 });

@@ -16,6 +16,7 @@ import type {
   CashuTsLifecycleEvidenceInput,
   CashuTsLifecyclePreparedRequest,
   CashuTsLifecycleProofChanges,
+  CashuTsLifecycleQuoteObservation,
   CashuTsLifecycleResult,
   CashuTsLifecycleStore,
   CashuTsLifecycleStoredProof,
@@ -70,29 +71,153 @@ export interface MemoryCashuTsLifecycleStoreOptions {
 }
 
 export class MemoryCashuTsLifecycleStore implements CashuTsLifecycleStore {
+  readonly sendHandoffDurability = 'process-local' as const;
   readonly #records = new Map<string, CashuTsStoredLifecycleOperation>();
   readonly #proofs = new Map<string, CashuTsLifecycleStoredProof>();
   readonly #evidenceByEffect = new Map<string, CashuTsLifecycleEvidenceInput>();
   readonly #evidenceLog: LifecycleEvidenceView[] = [];
   readonly #claims = new Map<string, Promise<void>>();
+  readonly #counterNext = new Map<string, number>();
+  readonly #counterKeysets = new Map<string, Set<string>>();
+  readonly #counterReservations = new Map<
+    string,
+    { readonly start: number; readonly count: number }
+  >();
+  readonly #sendHandoffs = new Map<
+    string,
+    {
+      readonly recipient: string;
+      readonly token: string;
+      readonly tokenHash: string;
+      claimedBy?: string;
+      acknowledged?: boolean;
+    }
+  >();
   readonly #onWrite: ((phase: LifecyclePhase) => void) | undefined;
   #seed: string | undefined;
+  #counterEpoch = 0;
 
   constructor(options: MemoryCashuTsLifecycleStoreOptions = {}) {
     this.#onWrite = options.onWrite;
   }
 
   async reset(seed: string): Promise<void> {
+    this.#counterEpoch += 1;
     this.#seed = seed;
     this.#records.clear();
     this.#proofs.clear();
     this.#evidenceByEffect.clear();
     this.#evidenceLog.length = 0;
     this.#claims.clear();
+    this.#sendHandoffs.clear();
   }
 
   async loadSeed(): Promise<string | undefined> {
     return this.#seed;
+  }
+
+  async reserveCounterRange(
+    keysetId: string,
+    reservationId: string,
+    count: number,
+  ): Promise<{ readonly start: number; readonly count: number }> {
+    if (!Number.isSafeInteger(count) || count < 1) {
+      throw new Error('Lifecycle counter reservation count is invalid');
+    }
+    if (this.#seed === undefined) throw new Error('Lifecycle seed is unavailable');
+    const counterIdentity = JSON.stringify([this.#seed, keysetId]);
+    const identity = JSON.stringify([this.#seed, this.#counterEpoch, keysetId, reservationId]);
+    const previous = this.#counterReservations.get(identity);
+    if (previous !== undefined) return clone(previous);
+    const start = this.#counterNext.get(counterIdentity) ?? 0;
+    if (!Number.isSafeInteger(start + count)) {
+      throw new Error('Lifecycle counter range is exhausted');
+    }
+    const range = { start, count } as const;
+    this.#counterNext.set(counterIdentity, start + count);
+    const keysets = this.#counterKeysets.get(this.#seed) ?? new Set<string>();
+    keysets.add(keysetId);
+    this.#counterKeysets.set(this.#seed, keysets);
+    this.#counterReservations.set(identity, range);
+    return clone(range);
+  }
+
+  async counterHighWatermark(keysetId: string): Promise<number> {
+    if (this.#seed === undefined) throw new Error('Lifecycle seed is unavailable');
+    return this.#counterNext.get(JSON.stringify([this.#seed, keysetId])) ?? 0;
+  }
+
+  async counterHighWatermarks(): Promise<
+    readonly { readonly keysetId: string; readonly nextCounter: number }[]
+  > {
+    if (this.#seed === undefined) throw new Error('Lifecycle seed is unavailable');
+    return [...(this.#counterKeysets.get(this.#seed) ?? [])]
+      .map((keysetId) => ({
+        keysetId,
+        nextCounter: this.#counterNext.get(JSON.stringify([this.#seed, keysetId])) ?? 0,
+      }))
+      .sort((left, right) => left.keysetId.localeCompare(right.keysetId));
+  }
+
+  async putSendHandoff(operationId: string, recipient: string, token: string): Promise<string> {
+    const tokenHash = createHash('sha256')
+      .update('cashu-fault-lab/cashu-ts-lifecycle-send-token/v1\0')
+      .update(token)
+      .digest('hex');
+    const previous = this.#sendHandoffs.get(operationId);
+    if (
+      previous !== undefined &&
+      (previous.recipient !== recipient || previous.tokenHash !== tokenHash)
+    ) {
+      throw new Error('Lifecycle send handoff identity conflicts');
+    }
+    this.#sendHandoffs.set(operationId, previous ?? { recipient, token, tokenHash });
+    return tokenHash;
+  }
+
+  async loadSendHandoff(
+    operationId: string,
+  ): Promise<
+    { readonly recipient: string; readonly token: string; readonly tokenHash: string } | undefined
+  > {
+    const handoff = this.#sendHandoffs.get(operationId);
+    return handoff === undefined ? undefined : clone(handoff);
+  }
+
+  async claimSendHandoff(consumerId: string): Promise<
+    | {
+        readonly operationId: string;
+        readonly recipient: string;
+        readonly token: string;
+        readonly tokenHash: string;
+      }
+    | undefined
+  > {
+    if (consumerId.length === 0) throw new Error('Lifecycle send handoff consumer is invalid');
+    for (const [operationId, handoff] of this.#sendHandoffs) {
+      if (handoff.acknowledged === true) continue;
+      if (handoff.claimedBy !== undefined && handoff.claimedBy !== consumerId) continue;
+      handoff.claimedBy = consumerId;
+      return {
+        operationId,
+        recipient: handoff.recipient,
+        token: handoff.token,
+        tokenHash: handoff.tokenHash,
+      };
+    }
+    return undefined;
+  }
+
+  async ackSendHandoff(operationId: string, tokenHash: string, consumerId: string): Promise<void> {
+    const handoff = this.#sendHandoffs.get(operationId);
+    if (
+      handoff === undefined ||
+      handoff.tokenHash !== tokenHash ||
+      handoff.claimedBy !== consumerId
+    ) {
+      throw new Error('Lifecycle send handoff claim conflicts');
+    }
+    handoff.acknowledged = true;
   }
 
   async create(operation: CashuTsStoredLifecycleOperation): Promise<CashuTsLifecycleCreateResult> {
@@ -121,6 +246,40 @@ export class MemoryCashuTsLifecycleStore implements CashuTsLifecycleStore {
       throw new Error('Lifecycle operation identity conflicts');
     }
     this.#records.set(operation.view.operationId, clone(operation));
+    this.#onWrite?.(operation.view.phase);
+  }
+
+  async commit(
+    operation: CashuTsStoredLifecycleOperation,
+    proofChanges?: Omit<CashuTsLifecycleProofChanges, 'operationId'>,
+    evidence: readonly CashuTsLifecycleEvidenceInput[] = [],
+  ): Promise<void> {
+    const previous = this.#records.get(operation.view.operationId);
+    if (previous === undefined) throw new Error('Lifecycle operation is not journaled');
+    if (!sameIdentity(previous, operation)) {
+      throw new Error('Lifecycle operation identity conflicts');
+    }
+    const nextProofs = new Map(this.#proofs);
+    if (proofChanges !== undefined) {
+      applyMemoryProofChanges(nextProofs, {
+        operationId: operation.view.operationId,
+        ...proofChanges,
+      });
+    }
+    const nextEvidenceByEffect = new Map(this.#evidenceByEffect);
+    const nextEvidenceLog = this.#evidenceLog.map(clone);
+    for (const item of evidence) {
+      appendMemoryEvidence(nextEvidenceByEffect, nextEvidenceLog, item);
+    }
+    this.#records.set(operation.view.operationId, clone(operation));
+    this.#proofs.clear();
+    for (const [proofId, proof] of nextProofs) this.#proofs.set(proofId, proof);
+    this.#evidenceByEffect.clear();
+    for (const [effectId, item] of nextEvidenceByEffect) {
+      this.#evidenceByEffect.set(effectId, item);
+    }
+    this.#evidenceLog.length = 0;
+    this.#evidenceLog.push(...nextEvidenceLog);
     this.#onWrite?.(operation.view.phase);
   }
 
@@ -153,26 +312,7 @@ export class MemoryCashuTsLifecycleStore implements CashuTsLifecycleStore {
       throw new Error('Lifecycle proof operation was not found');
     }
     const next = new Map(this.#proofs);
-    for (const proof of changes.add) {
-      assertStoredProof(proof);
-      const previous = next.get(proof.proofId);
-      if (
-        previous !== undefined &&
-        JSON.stringify(canonical(previous)) !== JSON.stringify(canonical(proof))
-      ) {
-        throw new Error('Lifecycle proof identity conflicts');
-      }
-      next.set(proof.proofId, clone(previous ?? proof));
-    }
-    for (const update of changes.update) {
-      assertProofId(update.proofId);
-      const previous = next.get(update.proofId);
-      if (previous === undefined) throw new Error('Lifecycle proof was not found');
-      if (!validProofTransition(previous.state, update.state)) {
-        throw new Error('Lifecycle proof state transition is invalid');
-      }
-      next.set(update.proofId, { ...previous, state: update.state, bucket: update.bucket });
-    }
+    applyMemoryProofChanges(next, changes);
     this.#proofs.clear();
     for (const [proofId, proof] of next) this.#proofs.set(proofId, proof);
   }
@@ -197,21 +337,66 @@ export class MemoryCashuTsLifecycleStore implements CashuTsLifecycleStore {
   }
 
   async appendEvidence(evidence: CashuTsLifecycleEvidenceInput): Promise<void> {
-    assertEvidence(evidence);
-    const previous = this.#evidenceByEffect.get(evidence.effectId);
-    if (previous !== undefined) {
-      if (JSON.stringify(previous) !== JSON.stringify(evidence)) {
-        throw new Error('Lifecycle evidence effect identity conflicts');
-      }
-      return;
-    }
-    this.#evidenceByEffect.set(evidence.effectId, clone(evidence));
-    const { effectId: _effectId, ...view } = evidence;
-    this.#evidenceLog.push({ sequence: this.#evidenceLog.length + 1, ...clone(view) });
+    appendMemoryEvidence(this.#evidenceByEffect, this.#evidenceLog, evidence);
   }
 
   async evidence(): Promise<readonly LifecycleEvidenceView[]> {
     return this.#evidenceLog.map(clone);
+  }
+}
+
+function appendMemoryEvidence(
+  evidenceByEffect: Map<string, CashuTsLifecycleEvidenceInput>,
+  evidenceLog: LifecycleEvidenceView[],
+  evidence: CashuTsLifecycleEvidenceInput,
+): void {
+  assertEvidence(evidence);
+  const previous = evidenceByEffect.get(evidence.effectId);
+  if (previous !== undefined) {
+    if (JSON.stringify(previous) !== JSON.stringify(evidence)) {
+      throw new Error('Lifecycle evidence effect identity conflicts');
+    }
+    return;
+  }
+  evidenceByEffect.set(evidence.effectId, clone(evidence));
+  const { effectId: _effectId, ...view } = evidence;
+  evidenceLog.push({ sequence: evidenceLog.length + 1, ...clone(view) });
+}
+
+function applyMemoryProofChanges(
+  proofs: Map<string, CashuTsLifecycleStoredProof>,
+  changes: CashuTsLifecycleProofChanges,
+): void {
+  for (const proof of changes.add) {
+    assertStoredProof(proof);
+    const previous = proofs.get(proof.proofId);
+    if (
+      previous !== undefined &&
+      JSON.stringify(canonical(previous)) !== JSON.stringify(canonical(proof))
+    ) {
+      throw new Error('Lifecycle proof identity conflicts');
+    }
+    proofs.set(proof.proofId, clone(previous ?? proof));
+  }
+  for (const update of changes.update) {
+    assertProofId(update.proofId);
+    const previous = proofs.get(update.proofId);
+    if (previous === undefined) throw new Error('Lifecycle proof was not found');
+    if (!validProofTransition(previous.state, update.state)) {
+      throw new Error('Lifecycle proof state transition is invalid');
+    }
+    const reservationOperationId = update.reservationOperationId ?? changes.operationId;
+    if (previous.state === 'PENDING' && previous.reservedByOperationId !== reservationOperationId) {
+      throw new Error('Lifecycle proof is reserved by another operation');
+    }
+    const reservedByOperationId = update.state === 'PENDING' ? reservationOperationId : undefined;
+    const { reservedByOperationId: _previousReservation, ...unreservedProof } = previous;
+    proofs.set(update.proofId, {
+      ...unreservedProof,
+      state: update.state,
+      bucket: update.bucket,
+      ...(reservedByOperationId === undefined ? {} : { reservedByOperationId }),
+    });
   }
 }
 
@@ -317,9 +502,11 @@ function withResult(
 ): LifecycleOperationView {
   const phase = result.status;
   const transitioned =
-    phase === 'ambiguous'
-      ? withPhase(view, phase)
-      : withPhase(view, phase, phase === 'succeeded' ? undefined : result.evidenceCode);
+    phase === 'ambiguous' && view.phase === 'reconciling'
+      ? view
+      : phase === 'ambiguous'
+        ? withPhase(view, phase)
+        : withPhase(view, phase, phase === 'succeeded' ? undefined : result.evidenceCode);
   if (result.status === 'ambiguous') return transitioned;
   return {
     ...transitioned,
@@ -329,6 +516,86 @@ function withResult(
     ...(result.actualFee === undefined ? {} : { actualFee: result.actualFee }),
     ...(result.change === undefined ? {} : { change: result.change }),
     ...(result.quoteHash === undefined ? {} : { quoteHash: result.quoteHash }),
+  };
+}
+
+function appendQuoteObservations(
+  previous: readonly CashuTsLifecycleQuoteObservation[] = [],
+  next: readonly CashuTsLifecycleQuoteObservation[] = [],
+): readonly CashuTsLifecycleQuoteObservation[] {
+  const observations = [...previous];
+  const order = {
+    mint: { UNPAID: 0, PAID: 1, ISSUED: 2 },
+    melt: { UNPAID: 0, PENDING: 1, PAID: 2 },
+  } as const;
+  for (const observation of next) {
+    if (
+      !HASH_PATTERN.test(observation.dataHash) ||
+      !(observation.state in order[observation.kind])
+    ) {
+      throw new Error('Lifecycle quote observation is invalid');
+    }
+    const last = observations.findLast((item) => item.kind === observation.kind);
+    if (
+      last !== undefined &&
+      order[observation.kind][observation.state as keyof (typeof order)[typeof observation.kind]] <
+        order[last.kind][last.state as keyof (typeof order)[typeof last.kind]]
+    ) {
+      throw new Error('Lifecycle quote state regressed');
+    }
+    observations.push(clone(observation));
+  }
+  return observations;
+}
+
+function operationEvidence(
+  stage: 'submission' | 'recovery',
+  operation: CashuTsStoredLifecycleOperation,
+  result: CashuTsLifecycleResult,
+): CashuTsLifecycleEvidenceInput {
+  const publicResult = {
+    status: result.status,
+    ...('evidenceCode' in result ? { evidenceCode: result.evidenceCode } : {}),
+    ...(result.recoveryMechanism === undefined
+      ? {}
+      : { recoveryMechanism: result.recoveryMechanism }),
+    ...('amount' in result
+      ? {
+          amount: result.amount,
+          inputFee: result.inputFee,
+          feeReserve: result.feeReserve,
+          actualFee: result.actualFee,
+          change: result.change,
+          quoteHash: result.quoteHash,
+        }
+      : {}),
+    proofChanges:
+      result.proofChanges === undefined
+        ? undefined
+        : {
+            add: result.proofChanges.add.map(({ proofId, state, bucket }) => ({
+              proofId,
+              state,
+              bucket,
+            })),
+            update: result.proofChanges.update.map(({ proofId, state, bucket }) => ({
+              proofId,
+              state,
+              bucket,
+            })),
+          },
+  };
+  return {
+    effectId: `${stage}-${operation.view.intentHash.slice(0, 16)}-${result.status}`,
+    operationId: operation.view.operationId,
+    source: 'adapter',
+    event: `${stage}_${result.status}`,
+    dataHash: createHash('sha256')
+      .update('cashu-fault-lab/cashu-ts-lifecycle-evidence-v1\0')
+      .update(operation.view.intentHash)
+      .update('\0')
+      .update(JSON.stringify(canonical(publicResult)))
+      .digest('hex'),
   };
 }
 
@@ -353,7 +620,37 @@ export class CashuTsLifecycleOperations {
     if (this.#capabilities === undefined) {
       throw new Error('Lifecycle capabilities are not configured');
     }
-    return structuredClone(this.#capabilities);
+    const discovered =
+      this.#wallet.discoverSupportedNuts === undefined
+        ? undefined
+        : new Set(await this.#wallet.discoverSupportedNuts());
+    if (discovered === undefined) return structuredClone(this.#capabilities);
+    const nuts = this.#capabilities.nuts.filter((nut) =>
+      nut === 13 ? discovered.has(9) : discovered.has(nut),
+    );
+    if (discovered.has(9) && this.#capabilities.nuts.includes(13) && !nuts.includes(13)) {
+      nuts.push(13);
+    }
+    const operations = this.#capabilities.operations.filter((operation) => {
+      if (operation === 'mint') return discovered.has(4);
+      if (operation === 'swap' || operation === 'receive') return discovered.has(3);
+      if (operation === 'send') {
+        return discovered.has(3) && this.#wallet.supportsSendHandoff === true;
+      }
+      if (operation === 'melt') return discovered.has(5);
+      if (operation === 'restore') return discovered.has(9);
+      if (operation === 'reconcile') return discovered.has(7);
+      return false;
+    });
+    const recovery = this.#capabilities.recovery.filter((mechanism) => {
+      if (mechanism === 'quote_state') return discovered.has(4) || discovered.has(5);
+      if (mechanism === 'proof_state') return discovered.has(7);
+      if (mechanism === 'nut09_restore') return discovered.has(9);
+      if (mechanism === 'nut13_seed') return discovered.has(9);
+      if (mechanism === 'nut19_replay') return discovered.has(19);
+      return false;
+    });
+    return structuredClone({ ...this.#capabilities, nuts, operations, recovery });
   }
 
   async reset(seed: string): Promise<void> {
@@ -362,9 +659,16 @@ export class CashuTsLifecycleOperations {
   }
 
   async start(input: LifecycleOperationInput): Promise<LifecycleOperationView> {
+    if (this.#capabilities !== undefined) {
+      const capabilities = await this.capabilities();
+      if (!capabilities.operations.includes(input.kind)) {
+        throw new Error('Lifecycle operation is not advertised');
+      }
+    }
     const initial: CashuTsStoredLifecycleOperation = {
       input: clone(input),
       view: operationView(input),
+      attemptCount: 0,
     };
     await this.#store.create(initial);
     return this.#store.claim(input.operationId, async () => {
@@ -395,14 +699,43 @@ export class CashuTsLifecycleOperations {
       }
       if (stored.view.phase === 'ambiguous') {
         stored = { ...stored, view: withPhase(stored.view, 'reconciling') };
-        await this.#store.put(stored);
       }
       if (stored.view.phase !== 'reconciling') {
         throw new Error('Lifecycle operation cannot be resumed');
       }
-      const result = await this.#wallet.recover(stored.input, stored.view, stored.prepared);
-      const recovered = { ...stored, view: withResult(stored.view, result) };
-      await this.#store.put(recovered);
+      stored = { ...stored, attemptCount: (stored.attemptCount ?? 0) + 1 };
+      await this.#store.put(stored);
+      let result = await this.#wallet.recover(stored.input, stored.view, stored.prepared);
+      let quoteObservations: readonly CashuTsLifecycleQuoteObservation[];
+      try {
+        quoteObservations = appendQuoteObservations(
+          stored.quoteObservations,
+          result.quoteObservations,
+        );
+      } catch (error) {
+        result = {
+          status: 'recovery_blocked',
+          evidenceCode:
+            error instanceof Error && error.message === 'Lifecycle quote state regressed'
+              ? 'quote_state_regressed'
+              : 'quote_observation_invalid',
+          recoveryMechanism: 'quote_state',
+        };
+        quoteObservations = stored.quoteObservations ?? [];
+      }
+      const recovered = {
+        ...stored,
+        ...(result.recoveryMechanism === undefined
+          ? {}
+          : { recoveryMechanism: result.recoveryMechanism }),
+        ...(quoteObservations.length === 0 ? {} : { quoteObservations }),
+        ...(result.resultMaterial === undefined ? {} : { resultMaterial: result.resultMaterial }),
+        view: withResult(stored.view, result),
+      };
+      await this.#store.commit(recovered, result.proofChanges, [
+        ...(result.evidence ?? []),
+        operationEvidence('recovery', stored, result),
+      ]);
       return recovered.view;
     });
   }
@@ -426,23 +759,57 @@ export class CashuTsLifecycleOperations {
     stored: CashuTsStoredLifecycleOperation,
   ): Promise<LifecycleOperationView> {
     const prepared = await this.#wallet.prepare(stored.input);
+    const quoteObservations = appendQuoteObservations(undefined, prepared.quoteObservations);
     const next = {
       ...stored,
       prepared: clone(prepared),
+      ...(quoteObservations.length === 0 ? {} : { quoteObservations }),
       view: withPrepared(stored.view, prepared),
     };
-    await this.#store.put(next);
+    await this.#store.commit(next, prepared.proofChanges);
     return this.#submit(next);
   }
 
   async #submit(stored: CashuTsStoredLifecycleOperation): Promise<LifecycleOperationView> {
     const prepared = stored.prepared;
     if (prepared === undefined) throw new Error('Lifecycle prepared request is missing');
-    const submitted = { ...stored, view: withPhase(stored.view, 'submitted') };
+    const submitted = {
+      ...stored,
+      attemptCount: (stored.attemptCount ?? 0) + 1,
+      view: withPhase(stored.view, 'submitted'),
+    };
     await this.#store.put(submitted);
-    const result = await this.#wallet.submit(prepared);
-    const completed = { ...submitted, view: withResult(submitted.view, result) };
-    await this.#store.put(completed);
+    let result = await this.#wallet.submit(prepared);
+    let quoteObservations: readonly CashuTsLifecycleQuoteObservation[];
+    try {
+      quoteObservations = appendQuoteObservations(
+        submitted.quoteObservations,
+        result.quoteObservations,
+      );
+    } catch (error) {
+      result = {
+        status: 'recovery_blocked',
+        evidenceCode:
+          error instanceof Error && error.message === 'Lifecycle quote state regressed'
+            ? 'quote_state_regressed'
+            : 'quote_observation_invalid',
+        recoveryMechanism: 'quote_state',
+      };
+      quoteObservations = submitted.quoteObservations ?? [];
+    }
+    const completed = {
+      ...submitted,
+      ...(result.recoveryMechanism === undefined
+        ? {}
+        : { recoveryMechanism: result.recoveryMechanism }),
+      ...(quoteObservations.length === 0 ? {} : { quoteObservations }),
+      ...(result.resultMaterial === undefined ? {} : { resultMaterial: result.resultMaterial }),
+      view: withResult(submitted.view, result),
+    };
+    await this.#store.commit(completed, result.proofChanges, [
+      ...(result.evidence ?? []),
+      operationEvidence('submission', submitted, result),
+    ]);
     return completed.view;
   }
 
