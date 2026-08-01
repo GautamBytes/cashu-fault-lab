@@ -78,7 +78,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 wallet_database_path.into(),
                 hex::encode(state_key),
             )?);
-            if let Some(seed) = store.seed()? {
+            if store.seed_hash()?.is_some() {
+                let seed = env::var("CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED").map_err(
+                    |_| "CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED is required to reopen lifecycle state",
+                )?;
+                if !store.verify_seed(&seed)? {
+                    return Err(
+                        "CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED does not match stored state".into(),
+                    );
+                }
                 wallet.load(&seed).await.map_err(|code| code.to_owned())?;
             }
             Some(Arc::new(LifecycleEngine::new(store, wallet)))

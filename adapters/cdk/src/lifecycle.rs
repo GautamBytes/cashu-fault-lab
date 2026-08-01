@@ -8,7 +8,7 @@ use cdk::{
     nuts::{
         CurrencyUnit, MeltQuoteState, MintQuoteState, PaymentMethod, State, nut00::ProofsMethods,
     },
-    wallet::{MeltOutcome, ReceiveOptions, SendOptions},
+    wallet::{MeltOutcome, ReceiveOptions},
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -199,6 +199,32 @@ impl LifecycleExecution {
         Self::failure(LifecyclePhase::RecoveryBlocked, code)
     }
 
+    pub fn melt_recovered(fee_reserve: u64) -> Self {
+        let mut execution = Self::succeeded(None, "melt_reconciled");
+        execution.fee_reserve = Some(fee_reserve);
+        execution
+    }
+
+    pub const fn amount(&self) -> Option<u64> {
+        self.amount
+    }
+
+    pub const fn fee_reserve(&self) -> Option<u64> {
+        self.fee_reserve
+    }
+
+    pub const fn actual_fee(&self) -> Option<u64> {
+        self.actual_fee
+    }
+
+    pub const fn change(&self) -> Option<u64> {
+        self.change
+    }
+
+    pub const fn evidence_code(&self) -> Option<&'static str> {
+        self.evidence_code
+    }
+
     pub fn with_private_material(mut self, material: Vec<u8>) -> Self {
         self.private_material = Some(material);
         self
@@ -265,23 +291,59 @@ pub trait LifecycleWalletPort: Send + Sync {
 pub struct LifecycleEngine {
     store: Arc<LifecycleStore>,
     wallet: Arc<dyn LifecycleWalletPort>,
+    operation_gate: tokio::sync::RwLock<()>,
 }
 
 impl LifecycleEngine {
     pub fn new(store: Arc<LifecycleStore>, wallet: Arc<dyn LifecycleWalletPort>) -> Self {
-        Self { store, wallet }
+        Self {
+            store,
+            wallet,
+            operation_gate: tokio::sync::RwLock::new(()),
+        }
     }
 
     pub async fn reset(&self, seed: &str) -> Result<(), String> {
-        self.store.reset(seed)?;
-        self.wallet
-            .reset(seed)
-            .await
-            .map_err(|code| code.to_owned())
+        let _exclusive = self.operation_gate.write().await;
+        while !self.store.try_claim_reset()? {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        let work = self.wallet.reset(seed);
+        tokio::pin!(work);
+        let wallet_result = loop {
+            tokio::select! {
+                result = &mut work => break result.map_err(str::to_owned),
+                () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+                    self.store.renew_reset()?;
+                }
+            }
+        };
+        let result = match wallet_result {
+            Ok(()) => self.store.reset(seed),
+            Err(error) => Err(error),
+        };
+        let release = self.store.release_reset();
+        match (result, release) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(error), _) => Err(error),
+            (_, Err(error)) => Err(error),
+        }
     }
 
-    pub async fn start(&self, input: LifecycleInput) -> Result<LifecycleOperation, String> {
+    pub async fn start(&self, mut input: LifecycleInput) -> Result<LifecycleOperation, String> {
+        let _operation = self.operation_gate.read().await;
         validate_input(&input)?;
+        input.mint = url::Url::parse(&input.mint)
+            .map_err(|_| "lifecycle mint URL is invalid")?
+            .to_string();
+        let capabilities = self.capabilities().await?;
+        if !capabilities
+            .operations
+            .iter()
+            .any(|operation| *operation == input.kind.to_string())
+        {
+            return Err("lifecycle operation is not applicable".to_owned());
+        }
         let intent_hash = intent_hash(&input)?;
         let created = LifecycleOperation {
             operation_id: input.operation_id.clone(),
@@ -304,10 +366,15 @@ impl LifecycleEngine {
         if existing.intent_hash != created.intent_hash {
             return Err("lifecycle operation identity conflicts".to_owned());
         }
-        self.run(&input.operation_id, false).await
+        self.run(
+            &input.operation_id,
+            existing.phase != LifecyclePhase::Created,
+        )
+        .await
     }
 
     pub async fn resume(&self, operation_id: &str) -> Result<LifecycleOperation, String> {
+        let _operation = self.operation_gate.read().await;
         validate_operation_id(operation_id)?;
         self.run(operation_id, true).await
     }
@@ -337,7 +404,16 @@ impl LifecycleEngine {
                 return Ok(current);
             }
             if self.store.try_claim(operation_id)? {
-                let result = self.run_claimed(operation_id, recovery).await;
+                let work = self.run_claimed(operation_id, recovery);
+                tokio::pin!(work);
+                let result = loop {
+                    tokio::select! {
+                        result = &mut work => break result,
+                        () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+                            self.store.renew_claim(operation_id)?;
+                        }
+                    }
+                };
                 let release = self.store.release(operation_id);
                 return match (result, release) {
                     (Ok(value), Ok(())) => Ok(value),
@@ -613,6 +689,20 @@ pub struct NativeCdkLifecycleWallet {
 }
 
 impl NativeCdkLifecycleWallet {
+    pub const fn operation_bound(kind: LifecycleKind) -> bool {
+        matches!(
+            kind,
+            LifecycleKind::Mint
+                | LifecycleKind::Receive
+                | LifecycleKind::Melt
+                | LifecycleKind::Restore
+        )
+    }
+
+    pub const fn aggregate_recovery_phase(_kind: LifecycleKind) -> LifecyclePhase {
+        LifecyclePhase::RecoveryBlocked
+    }
+
     pub fn new(
         mint_url: &str,
         unit: &str,
@@ -824,12 +914,7 @@ impl NativeCdkLifecycleWallet {
         }
     }
 
-    async fn recover_melt(
-        &self,
-        wallet: &Wallet,
-        request: &LifecycleInput,
-        material: Option<&[u8]>,
-    ) -> LifecycleExecution {
+    async fn recover_melt(&self, wallet: &Wallet, material: Option<&[u8]>) -> LifecycleExecution {
         let Some(quote_id) = material.and_then(|bytes| std::str::from_utf8(bytes).ok()) else {
             return LifecycleExecution::recovery_blocked("melt_quote_identity_unavailable");
         };
@@ -838,11 +923,8 @@ impl NativeCdkLifecycleWallet {
             Err(_) => return LifecycleExecution::recovery_blocked("melt_quote_state_unavailable"),
         };
         match quote.state {
-            MeltQuoteState::Paid => {
-                LifecycleExecution::succeeded(request.amount, "melt_reconciled")
-                    .with_fees(0, quote.fee_reserve.to_u64(), 0, 0)
-                    .with_private_material(quote_id.as_bytes().to_vec())
-            }
+            MeltQuoteState::Paid => LifecycleExecution::melt_recovered(quote.fee_reserve.to_u64())
+                .with_private_material(quote_id.as_bytes().to_vec()),
             MeltQuoteState::Unpaid | MeltQuoteState::Failed => {
                 LifecycleExecution::failed_definitive("melt_quote_unpaid")
                     .with_private_material(quote_id.as_bytes().to_vec())
@@ -860,6 +942,9 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
     }
 
     async fn execute(&self, request: &LifecycleInput) -> LifecycleExecution {
+        if !Self::operation_bound(request.kind) {
+            return LifecycleExecution::recovery_blocked("operation_not_applicable");
+        }
         if !self.matching_request(request) {
             return LifecycleExecution::failed_definitive("mint_or_unit_not_configured");
         }
@@ -869,41 +954,8 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         };
         match request.kind {
             LifecycleKind::Mint => self.execute_mint(&wallet, request).await,
-            LifecycleKind::Swap => {
-                let proofs = match wallet.get_unspent_proofs().await {
-                    Ok(proofs) if !proofs.is_empty() => proofs,
-                    _ => return LifecycleExecution::failed_definitive("insufficient_funds"),
-                };
-                match wallet
-                    .swap(None, SplitTarget::default(), proofs, None, true, false)
-                    .await
-                {
-                    Ok(_) => LifecycleExecution::succeeded(request.amount, "swap_observed"),
-                    Err(_) => LifecycleExecution::ambiguous("swap_response_ambiguous"),
-                }
-            }
-            LifecycleKind::Send => {
-                let Some(amount) = request.amount else {
-                    return LifecycleExecution::failed_definitive("invalid_amount");
-                };
-                let prepared = match wallet
-                    .prepare_send(
-                        Amount::from(amount),
-                        SendOptions {
-                            include_fee: true,
-                            ..Default::default()
-                        },
-                    )
-                    .await
-                {
-                    Ok(prepared) => prepared,
-                    Err(_) => return LifecycleExecution::failed_definitive("insufficient_funds"),
-                };
-                match prepared.confirm(None).await {
-                    Ok(token) => LifecycleExecution::succeeded(Some(amount), "send_observed")
-                        .with_private_material(token.to_string().into_bytes()),
-                    Err(_) => LifecycleExecution::ambiguous("send_response_ambiguous"),
-                }
+            LifecycleKind::Swap | LifecycleKind::Send | LifecycleKind::Reconcile => {
+                LifecycleExecution::recovery_blocked("operation_not_applicable")
             }
             LifecycleKind::Receive => {
                 let Some(token) = request.secret.as_deref() else {
@@ -924,15 +976,6 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
                 ),
                 Err(_) => LifecycleExecution::recovery_blocked("nut09_restore_unavailable"),
             },
-            LifecycleKind::Reconcile => {
-                if wallet.recover_incomplete_sagas().await.is_err()
-                    || wallet.check_all_pending_proofs().await.is_err()
-                {
-                    LifecycleExecution::recovery_blocked("proof_state_unavailable")
-                } else {
-                    LifecycleExecution::succeeded(None, "reconcile_observed")
-                }
-            }
         }
     }
 
@@ -945,31 +988,22 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
             Ok(wallet) => wallet,
             Err(code) => return LifecycleExecution::recovery_blocked(code),
         };
-        let report = match wallet.recover_incomplete_sagas().await {
-            Ok(report) => report,
+        match wallet.recover_incomplete_sagas().await {
+            Ok(_) => {}
             Err(_) => {
                 return LifecycleExecution::recovery_blocked("wallet_saga_recovery_failed");
             }
-        };
+        }
         match request.kind {
             LifecycleKind::Mint => self.recover_mint(&wallet, request, private_material).await,
-            LifecycleKind::Melt => self.recover_melt(&wallet, request, private_material).await,
-            LifecycleKind::Restore | LifecycleKind::Reconcile => self.execute(request).await,
-            LifecycleKind::Swap | LifecycleKind::Send | LifecycleKind::Receive => {
-                if report.failed > 0 || wallet.check_all_pending_proofs().await.is_err() {
-                    LifecycleExecution::recovery_blocked("proof_state_unavailable")
-                } else if report.skipped > 0 {
-                    LifecycleExecution::recovery_blocked("proof_state_not_terminal")
-                } else if report.recovered > 0 {
-                    LifecycleExecution::succeeded(
-                        request.amount,
-                        format!("{}_reconciled", request.kind),
-                    )
-                } else if report.compensated > 0 {
-                    LifecycleExecution::failed_definitive("operation_not_committed")
-                } else {
-                    LifecycleExecution::recovery_blocked("operation_saga_unavailable")
-                }
+            LifecycleKind::Melt => self.recover_melt(&wallet, private_material).await,
+            LifecycleKind::Restore => self.execute(request).await,
+            LifecycleKind::Receive => {
+                let _ = Self::aggregate_recovery_phase(request.kind);
+                LifecycleExecution::recovery_blocked("operation_bound_recovery_unavailable")
+            }
+            LifecycleKind::Swap | LifecycleKind::Send | LifecycleKind::Reconcile => {
+                LifecycleExecution::recovery_blocked("operation_not_applicable")
             }
         }
     }
@@ -1047,7 +1081,7 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         let supports_restore = info.nuts.nut09.supported;
         let supports_replay = !info.nuts.nut19.cached_endpoints.is_empty();
         let supports_quote_locking = info.nuts.nut20.supported;
-        let mut operations = vec!["swap", "send", "receive"];
+        let mut operations = vec!["receive"];
         if supports_mint {
             operations.push("mint");
         }
@@ -1056,9 +1090,6 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         }
         if supports_restore {
             operations.push("restore");
-        }
-        if supports_proof_state {
-            operations.push("reconcile");
         }
         let mut nuts = vec![3];
         for (supported, nut) in [

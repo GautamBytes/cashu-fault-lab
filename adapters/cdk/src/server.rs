@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, Request, State},
+    extract::{DefaultBodyLimit, Path, Request, State, rejection::JsonRejection},
     http::{HeaderValue, StatusCode, header::AUTHORIZATION},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use bitcoin::hashes::{Hash, sha256};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -175,8 +176,8 @@ struct LifecycleImplementation {
     version: &'static str,
     language: &'static str,
     runtime: &'static str,
-    source_digest: &'static str,
-    build_digest: &'static str,
+    source_digest: String,
+    build_digest: String,
 }
 
 #[derive(Serialize)]
@@ -212,8 +213,8 @@ async fn lifecycle_capabilities(State(state): State<Arc<AppState>>) -> Response 
             version: env!("CARGO_PKG_VERSION"),
             language: "rust",
             runtime: "cdk-0.17.3",
-            source_digest: cashu_fault_lab_wallet_lifecycle_contract::SPEC_DIGEST,
-            build_digest: cashu_fault_lab_wallet_lifecycle_contract::SPEC_DIGEST,
+            source_digest: lifecycle_identity_digest("source"),
+            build_digest: lifecycle_identity_digest("build"),
         },
         operations: runtime.operations,
         nuts: runtime.nuts,
@@ -227,12 +228,22 @@ async fn lifecycle_capabilities(State(state): State<Arc<AppState>>) -> Response 
     .into_response()
 }
 
+fn lifecycle_identity_digest(domain: &str) -> String {
+    let identity = format!(
+        "cashu-fault-lab/cdk-lifecycle-{domain}-development-v1\0{}\0cdk-0.17.3\0rust",
+        env!("CARGO_PKG_VERSION")
+    );
+    format!("sha256:{}", sha256::Hash::hash(identity.as_bytes()))
+}
+
 fn lifecycle_engine(state: &AppState) -> Option<&Arc<LifecycleEngine>> {
     state.lifecycle.as_ref()
 }
 
 fn lifecycle_error(message: &str) -> Response {
-    if message.contains("not found") {
+    if message == "lifecycle operation is not applicable" {
+        not_applicable("The requested lifecycle operation is not safely supported")
+    } else if message.contains("not found") {
         error(
             StatusCode::NOT_FOUND,
             "LIFECYCLE_OPERATION_NOT_FOUND",
@@ -261,10 +272,20 @@ fn lifecycle_error(message: &str) -> Response {
 
 async fn lifecycle_reset(
     State(state): State<Arc<AppState>>,
-    Json(input): Json<ResetInput>,
+    input: Result<Json<ResetInput>, JsonRejection>,
 ) -> Response {
     let Some(engine) = lifecycle_engine(&state) else {
         return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    let Json(input) = match input {
+        Ok(input) => input,
+        Err(_) => {
+            return error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "LIFECYCLE_SCHEMA_INVALID",
+                "Lifecycle request is invalid",
+            );
+        }
     };
     match engine.reset(&input.seed).await {
         Ok(()) => (StatusCode::OK, Json(ResetOutput { ok: true })).into_response(),
@@ -274,10 +295,20 @@ async fn lifecycle_reset(
 
 async fn lifecycle_start(
     State(state): State<Arc<AppState>>,
-    Json(input): Json<LifecycleInput>,
+    input: Result<Json<LifecycleInput>, JsonRejection>,
 ) -> Response {
     let Some(engine) = lifecycle_engine(&state) else {
         return not_applicable("Durable CDK lifecycle operations are not configured");
+    };
+    let Json(input) = match input {
+        Ok(input) => input,
+        Err(_) => {
+            return error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "LIFECYCLE_SCHEMA_INVALID",
+                "Lifecycle request is invalid",
+            );
+        }
     };
     match engine.start(input).await {
         Ok(operation) => (StatusCode::OK, Json(operation)).into_response(),
@@ -316,7 +347,14 @@ async fn lifecycle_wallet(State(state): State<Arc<AppState>>) -> Response {
         return not_applicable("Durable CDK lifecycle operations are not configured");
     };
     match engine.wallet().await {
-        Ok(wallet) => (StatusCode::OK, Json(wallet)).into_response(),
+        Ok(wallet) if wallet.proofs.len() <= 10_000 => {
+            (StatusCode::OK, Json(wallet)).into_response()
+        }
+        Ok(_) => error(
+            StatusCode::INSUFFICIENT_STORAGE,
+            "LIFECYCLE_RESPONSE_TOO_LARGE",
+            "Lifecycle wallet response exceeds its bound",
+        ),
         Err(message) => lifecycle_error(&message),
     }
 }
@@ -370,7 +408,10 @@ pub fn router_with_lifecycle(
         .route("/v1/proofs", get(proofs))
         .route("/v1/lifecycle/capabilities", get(lifecycle_capabilities))
         .route("/v1/lifecycle/reset", post(lifecycle_reset))
-        .route("/v1/lifecycle/operations", post(lifecycle_start))
+        .route(
+            "/v1/lifecycle/operations",
+            post(lifecycle_start).layer(DefaultBodyLimit::max(300_000)),
+        )
         .route(
             "/v1/lifecycle/operations/{id}/resume",
             post(lifecycle_resume),
@@ -378,7 +419,7 @@ pub fn router_with_lifecycle(
         .route("/v1/lifecycle/operations/{id}", get(lifecycle_operation))
         .route("/v1/lifecycle/wallet", get(lifecycle_wallet))
         .route("/v1/lifecycle/evidence", get(lifecycle_evidence))
-        .layer(DefaultBodyLimit::max(300_000))
+        .layer(DefaultBodyLimit::max(16_384))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
         .with_state(state))
 }
