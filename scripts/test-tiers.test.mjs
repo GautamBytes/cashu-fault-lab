@@ -16,6 +16,8 @@ test('default tests are Docker-free and explicit tiers are available', () => {
   assert.match(root.scripts['test:integration'], /test:integration:run/);
   assert.doesNotMatch(root.scripts['test:funded'], /--skip-unavailable/);
   assert.match(root.scripts['test:funded'], /test:funded:run/);
+  assert.match(root.scripts['test:lifecycle:funded'], /lifecycle-funded/);
+  assert.match(root.scripts['test:lifecycle:funded'], /test:lifecycle:funded:run/);
   assert.equal(
     root.scripts['test:all'],
     'pnpm test:unit && pnpm test:integration && pnpm test:funded',
@@ -72,4 +74,6 @@ test('environment preflight enables every opt-in lane it owns', () => {
   assert.match(environmentHelper, /CFL_POSTGRES_E2E:\s*'1'/);
   assert.match(environmentHelper, /CFL_NOSTR_RELAY_E2E:\s*'1'/);
   assert.match(environmentHelper, /'CFL_REAL_MINT_URL'/);
+  assert.match(environmentHelper, /CFL_WALLET_LIFECYCLE_E2E:\s*'1'/);
+  assert.match(environmentHelper, /pass <= 2/);
 });

@@ -23,5 +23,8 @@
     "@cashu-fault-lab/wallet-lifecycle-core": "workspace:*",
     "@cashu-fault-lab/wallet-lifecycle-oracle": "workspace:*",
     "ajv": "8.20.0"
+  },
+  "devDependencies": {
+    "@cashu/cashu-ts": "4.7.2"
   }
 }

@@ -1,0 +1,341 @@
+name: cashu-fault-lab-wallet-lifecycle
+
+x-node-adapter: &node-adapter
+  build:
+    context: ../..
+    dockerfile: infra/docker/wallet-adapters.Dockerfile
+    target: node-wallets
+  command: ['node', 'adapters/cashu-ts/dist/bin.js']
+  init: true
+  restart: 'on-failure:10'
+
+x-cdk-adapter: &cdk-adapter
+  build:
+    context: ../..
+    dockerfile: infra/docker/wallet-adapters.Dockerfile
+    target: cdk-adapter
+  init: true
+  restart: 'on-failure:10'
+
+x-postgres: &postgres
+  image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+  environment:
+    POSTGRES_DB: cashu_fault_lab
+    POSTGRES_USER: cashu
+    POSTGRES_PASSWORD: cashu-local-development-only
+  healthcheck:
+    test: ['CMD-SHELL', 'pg_isready -U cashu -d cashu_fault_lab']
+    interval: 2s
+    timeout: 2s
+    retries: 30
+  networks: [wallet-lifecycle]
+
+services:
+  nutshell-redis:
+    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 1s
+      timeout: 1s
+      retries: 30
+    networks: [wallet-lifecycle]
+
+  nutshell:
+    image: cashubtc/nutshell:0.20.2@sha256:65e9cbe23aaa1aeb27ce7206fa854a80f39ce8db1c9121eaecfc053a22506574
+    command: ['poetry', 'run', 'mint']
+    environment:
+      MINT_BACKEND_BOLT11_SAT: FakeWallet
+      MINT_LISTEN_HOST: 0.0.0.0
+      MINT_LISTEN_PORT: 3338
+      MINT_PRIVATE_KEY: cashu-fault-lab-lifecycle-nutshell-test-only
+      MINT_RATE_LIMIT: 'FALSE'
+      MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE: '10000'
+      MINT_REDIS_CACHE_ENABLED: 'TRUE'
+      MINT_REDIS_CACHE_URL: redis://nutshell-redis:6379
+      MINT_URL: http://nutshell:3338
+    depends_on:
+      nutshell-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:3338/v1/info']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    ports:
+      - '127.0.0.1:${CFL_NUTSHELL_PORT:-3338}:3338'
+    networks: [wallet-lifecycle]
+    volumes:
+      - nutshell-state:/app/data
+
+  mintd:
+    image: cashubtc/mintd:0.17.3@sha256:39da6a421d0a53a5e7541ea1c7abca3d46265c7dc7980f7fb4c637f089e0b547
+    command: ['cdk-mintd', '--work-dir', '/var/lib/cdk-mintd']
+    environment:
+      CDK_MINTD_URL: http://mintd:8085
+      CDK_MINTD_LN_BACKEND: fakewallet
+      CDK_MINTD_LISTEN_HOST: 0.0.0.0
+      CDK_MINTD_LISTEN_PORT: 8085
+      CDK_MINTD_DATABASE: sqlite
+      CDK_MINTD_CACHE_BACKEND: memory
+      CDK_MINTD_MNEMONIC: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--quiet', '--output-document=/dev/null', 'http://127.0.0.1:8085/v1/info']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    ports:
+      - '127.0.0.1:${CFL_MINTD_PORT:-8085}:8085'
+    networks: [wallet-lifecycle]
+    volumes:
+      - mintd-state:/var/lib/cdk-mintd
+
+  nutshell-lane:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: lifecycle-netns
+    environment:
+      CFL_LIFECYCLE_MINT_HOST: nutshell
+      CFL_LIFECYCLE_MINT_PORT: 3338
+    depends_on:
+      nutshell:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '3338']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    networks: [wallet-lifecycle]
+    ports:
+      - '127.0.0.1:${CFL_LIFECYCLE_CASHU_TS_NUTSHELL_PORT:-4111}:14101'
+      - '127.0.0.1:${CFL_LIFECYCLE_CDK_NUTSHELL_PORT:-4121}:14102'
+      - '127.0.0.1:${CFL_LIFECYCLE_NUTSHELL_GATEWAY_PORT:-4311}:14300'
+
+  mintd-lane:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: lifecycle-netns
+    environment:
+      CFL_LIFECYCLE_MINT_HOST: mintd
+      CFL_LIFECYCLE_MINT_PORT: 8085
+    depends_on:
+      mintd:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '8085']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    networks: [wallet-lifecycle]
+    ports:
+      - '127.0.0.1:${CFL_LIFECYCLE_CASHU_TS_MINTD_PORT:-4112}:14101'
+      - '127.0.0.1:${CFL_LIFECYCLE_CDK_MINTD_PORT:-4122}:14102'
+      - '127.0.0.1:${CFL_LIFECYCLE_MINTD_GATEWAY_PORT:-4312}:14300'
+
+  nutshell-gateway:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/http-fault-gateway/dist/bin.js']
+    environment:
+      CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN: ${CFL_HTTP_FAULT_GATEWAY_TOKEN:?set CFL_HTTP_FAULT_GATEWAY_TOKEN}
+      CFL_HTTP_FAULT_GATEWAY_DOWNSTREAM: http://127.0.0.1:3338
+      CFL_HTTP_FAULT_GATEWAY_HOST: 127.0.0.1
+      CFL_HTTP_FAULT_GATEWAY_PORT: 4300
+    depends_on:
+      nutshell-lane:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4300/__faults/v1/evidence',{headers:{authorization:'Bearer '+process.env.CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    init: true
+    network_mode: service:nutshell-lane
+
+  mintd-gateway:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/http-fault-gateway/dist/bin.js']
+    environment:
+      CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN: ${CFL_HTTP_FAULT_GATEWAY_TOKEN:?set CFL_HTTP_FAULT_GATEWAY_TOKEN}
+      CFL_HTTP_FAULT_GATEWAY_DOWNSTREAM: http://127.0.0.1:8085
+      CFL_HTTP_FAULT_GATEWAY_HOST: 127.0.0.1
+      CFL_HTTP_FAULT_GATEWAY_PORT: 4300
+    depends_on:
+      mintd-lane:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4300/__faults/v1/evidence',{headers:{authorization:'Bearer '+process.env.CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    init: true
+    network_mode: service:mintd-lane
+
+  cashu-ts-nutshell-postgres:
+    <<: *postgres
+    volumes:
+      - cashu-ts-nutshell-postgres:/var/lib/postgresql
+
+  cashu-ts-mintd-postgres:
+    <<: *postgres
+    volumes:
+      - cashu-ts-mintd-postgres:/var/lib/postgresql
+
+  cdk-nutshell-state-init:
+    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+    command: ['sh', '-c', 'chown -R 65532:65532 /state && chmod 700 /state']
+    user: '0:0'
+    volumes:
+      - cdk-nutshell-state:/state
+
+  cdk-mintd-state-init:
+    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+    command: ['sh', '-c', 'chown -R 65532:65532 /state && chmod 700 /state']
+    user: '0:0'
+    volumes:
+      - cdk-mintd-state:/state
+
+  cashu-ts-nutshell:
+    <<: *node-adapter
+    environment:
+      CFL_CASHU_TS_CONTROL_TOKEN: ${CFL_LIFECYCLE_CASHU_TS_TOKEN:?set CFL_LIFECYCLE_CASHU_TS_TOKEN}
+      CFL_CASHU_TS_HOST: 127.0.0.1
+      CFL_CASHU_TS_MINT_URL: http://127.0.0.1:4300
+      CFL_CASHU_TS_PORT: 4101
+      CFL_CASHU_TS_LIFECYCLE_DATABASE_URL: postgresql://cashu:cashu-local-development-only@cashu-ts-nutshell-postgres:5432/cashu_fault_lab
+      CFL_CASHU_TS_LIFECYCLE_STATE_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc
+      CFL_CASHU_TS_LIFECYCLE_RUN_ID: wallet-lifecycle-funded
+      CFL_CASHU_TS_LIFECYCLE_TENANT_ID: cashu-ts-nutshell
+    depends_on:
+      nutshell-gateway:
+        condition: service_healthy
+      cashu-ts-nutshell-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4101/v1/lifecycle/capabilities',{headers:{authorization:'Bearer '+process.env.CFL_CASHU_TS_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    network_mode: service:nutshell-lane
+
+  cashu-ts-mintd:
+    <<: *node-adapter
+    environment:
+      CFL_CASHU_TS_CONTROL_TOKEN: ${CFL_LIFECYCLE_CASHU_TS_TOKEN:?set CFL_LIFECYCLE_CASHU_TS_TOKEN}
+      CFL_CASHU_TS_HOST: 127.0.0.1
+      CFL_CASHU_TS_MINT_URL: http://127.0.0.1:4300
+      CFL_CASHU_TS_PORT: 4101
+      CFL_CASHU_TS_LIFECYCLE_DATABASE_URL: postgresql://cashu:cashu-local-development-only@cashu-ts-mintd-postgres:5432/cashu_fault_lab
+      CFL_CASHU_TS_LIFECYCLE_STATE_KEY: IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI
+      CFL_CASHU_TS_LIFECYCLE_RUN_ID: wallet-lifecycle-funded
+      CFL_CASHU_TS_LIFECYCLE_TENANT_ID: cashu-ts-mintd
+    depends_on:
+      mintd-gateway:
+        condition: service_healthy
+      cashu-ts-mintd-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4101/v1/lifecycle/capabilities',{headers:{authorization:'Bearer '+process.env.CFL_CASHU_TS_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    network_mode: service:mintd-lane
+
+  cdk-nutshell:
+    <<: *cdk-adapter
+    environment:
+      CASHU_FAULT_LAB_CONTROL_TOKEN: ${CFL_LIFECYCLE_CDK_TOKEN:?set CFL_LIFECYCLE_CDK_TOKEN}
+      CASHU_FAULT_LAB_CDK_LISTEN: 127.0.0.1:4102
+      CASHU_FAULT_LAB_CDK_MINT_URL: http://127.0.0.1:4300
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_DATABASE_PATH: /var/lib/cashu-fault-lab/lifecycle.sqlite
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_WALLET_PATH: /var/lib/cashu-fault-lab/wallet.sqlite
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_STATE_KEY: ERERERERERERERERERERERERERERERERERERERERERE
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED: wallet-lifecycle-funded
+    depends_on:
+      nutshell-gateway:
+        condition: service_healthy
+      cdk-nutshell-state-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl --fail --silent --header "Authorization: Bearer $$CASHU_FAULT_LAB_CONTROL_TOKEN" http://127.0.0.1:4102/v1/capabilities >/dev/null',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    network_mode: service:nutshell-lane
+    volumes:
+      - cdk-nutshell-state:/var/lib/cashu-fault-lab
+
+  cdk-mintd:
+    <<: *cdk-adapter
+    environment:
+      CASHU_FAULT_LAB_CONTROL_TOKEN: ${CFL_LIFECYCLE_CDK_TOKEN:?set CFL_LIFECYCLE_CDK_TOKEN}
+      CASHU_FAULT_LAB_CDK_LISTEN: 127.0.0.1:4102
+      CASHU_FAULT_LAB_CDK_MINT_URL: http://127.0.0.1:4300
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_DATABASE_PATH: /var/lib/cashu-fault-lab/lifecycle.sqlite
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_WALLET_PATH: /var/lib/cashu-fault-lab/wallet.sqlite
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_STATE_KEY: IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED: wallet-lifecycle-funded
+    depends_on:
+      mintd-gateway:
+        condition: service_healthy
+      cdk-mintd-state-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl --fail --silent --header "Authorization: Bearer $$CASHU_FAULT_LAB_CONTROL_TOKEN" http://127.0.0.1:4102/v1/capabilities >/dev/null',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    network_mode: service:mintd-lane
+    volumes:
+      - cdk-mintd-state:/var/lib/cashu-fault-lab
+
+networks:
+  wallet-lifecycle:
+
+volumes:
+  nutshell-state:
+  mintd-state:
+  cashu-ts-nutshell-postgres:
+  cashu-ts-mintd-postgres:
+  cdk-nutshell-state:
+  cdk-mintd-state:

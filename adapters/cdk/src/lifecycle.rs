@@ -1994,7 +1994,10 @@ impl NativeCdkLifecycleWallet {
                 Err(_) => LifecycleExecution::recovery_blocked("mint_restore_unavailable")
                     .with_private_material(quote_id.as_bytes().to_vec()),
             },
-            MintQuoteState::Unpaid => LifecycleExecution::failed_definitive("mint_quote_unpaid")
+            // A BOLT11 quote can move from UNPAID to PAID until it expires. Treating the first
+            // unpaid poll as definitive races fake and real Lightning backends and can strand a
+            // payment that arrives after recovery begins.
+            MintQuoteState::Unpaid => LifecycleExecution::ambiguous("mint_quote_pending")
                 .with_private_material(quote_id.as_bytes().to_vec()),
         }
     }

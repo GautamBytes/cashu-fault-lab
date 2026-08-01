@@ -43,3 +43,8 @@ FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc
 
 RUN apk add --no-cache socat
 CMD ["socat", "TCP-LISTEN:3338,bind=0.0.0.0,fork,reuseaddr", "TCP:nutshell:3338"]
+
+FROM lab-netns AS lifecycle-netns
+
+COPY --chmod=755 infra/docker/lifecycle-netns.sh /usr/local/bin/lifecycle-netns
+CMD ["lifecycle-netns"]

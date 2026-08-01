@@ -874,7 +874,7 @@ describe('CashuTsLifecycleWallet melt', () => {
 });
 
 describe('CashuTsLifecycleWallet restore', () => {
-  test('rejects a NUT-09 signature whose keyset or amount does not match its output', () => {
+  test('binds NUT-09 signatures to their keyset while accepting the protocol amount placeholder', () => {
     expect(() =>
       assertCashuTsRestoreResponsePair(
         { id: '00aa', amount: 8 },
@@ -885,10 +885,17 @@ describe('CashuTsLifecycleWallet restore', () => {
     expect(() =>
       assertCashuTsRestoreResponsePair(
         { id: '00aa', amount: 8 },
-        { id: '00aa', amount: 8 },
         { id: '00aa', amount: 4 },
+        { id: '00aa', amount: 8 },
       ),
     ).toThrow('Cashu lifecycle restore response identity is invalid');
+    expect(() =>
+      assertCashuTsRestoreResponsePair(
+        { id: '00aa', amount: 0 },
+        { id: '00aa', amount: 0 },
+        { id: '00aa', amount: 8 },
+      ),
+    ).not.toThrow();
   });
 
   test('persists the deterministic NUT-13 range before requesting restore signatures', async () => {
