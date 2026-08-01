@@ -126,12 +126,12 @@ expect(() => assertLifecycleSafety(model)).not.toThrow();
 - Produces: `LifecycleAdapterClient` with `capabilities`, `reset`, `start`, `resume`, `operation`, `wallet`, and `evidence` methods.
 - Produces: a closed discriminated `LifecycleOperationInput` union and stable public error codes.
 
-- [ ] **Step 1: Write failing schema tests for unknown fields, unsafe integers, invalid URLs, missing operation discriminators, secret-bearing evidence fields, and unsupported capabilities.**
-- [ ] **Step 2: Run contract tests and confirm the intended validation failures.**
-- [ ] **Step 3: Add strict schemas, TypeScript types, Ajv validation, bounded authenticated HTTP calls, disabled redirects, and sanitized errors.**
-- [ ] **Step 4: Generate Rust and TypeScript models and verify generated files are deterministic.**
-- [ ] **Step 5: Run contract tests, OpenAPI validation, codegen check, and typecheck.**
-- [ ] **Step 6: Commit `feat(lifecycle): define versioned adapter contract`.**
+- [x] **Step 1: Write failing schema tests for unknown fields, unsafe integers, invalid URLs, missing operation discriminators, secret-bearing evidence fields, and unsupported capabilities.**
+- [x] **Step 2: Run contract tests and confirm the intended validation failures.**
+- [x] **Step 3: Add strict schemas, TypeScript types, Ajv validation, bounded authenticated HTTP calls, disabled redirects, and sanitized errors.**
+- [x] **Step 4: Generate Rust and TypeScript models and verify generated files are deterministic.**
+- [x] **Step 5: Run contract tests, OpenAPI validation, codegen check, and typecheck.**
+- [x] **Step 6: Commit `feat(lifecycle): define versioned adapter contract`.**
 
 ### Task 4: Deterministic lifecycle runner and replay
 

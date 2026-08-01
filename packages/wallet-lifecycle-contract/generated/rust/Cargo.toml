@@ -1,0 +1,8 @@
+[package]
+name = "cashu_fault_lab_wallet_lifecycle_contract"
+version = "0.1.0"
+edition = "2021"
+description = "Generated Cashu Fault Lab wallet lifecycle contract models"
+
+[lib]
+path = "src/lib.rs"

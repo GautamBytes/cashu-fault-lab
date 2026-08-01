@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schemas/lifecycle-wallet.schema.json",
+  "title": "Wallet Lifecycle Balance Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["walletId", "mint", "unit", "balances", "proofs"],
+  "properties": {
+    "walletId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$" },
+    "mint": { "type": "string", "format": "uri", "maxLength": 2048 },
+    "unit": { "type": "string", "pattern": "^[a-z0-9_-]{1,16}$" },
+    "balances": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "reserved", "recoverable"],
+      "properties": {
+        "available": { "$ref": "#/$defs/amount" },
+        "reserved": { "$ref": "#/$defs/amount" },
+        "recoverable": { "$ref": "#/$defs/amount" }
+      }
+    },
+    "proofs": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["proofId", "state"],
+        "properties": {
+          "proofId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "state": { "enum": ["UNSPENT", "PENDING", "SPENT"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "amount": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "evidenceList": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sequence", "operationId", "source", "event", "dataHash"],
+        "properties": {
+          "sequence": { "$ref": "#/$defs/amount" },
+          "operationId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$" },
+          "source": { "enum": ["adapter", "durable_state", "mint", "lightning"] },
+          "event": { "type": "string", "pattern": "^[a-z0-9_]{1,64}$" },
+          "dataHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    }
+  }
+}

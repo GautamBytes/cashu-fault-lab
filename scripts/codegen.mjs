@@ -43,6 +43,8 @@ function generatedHeader(generatorVersion, specDigest, target) {
 const openapi = await text('spec/openapi.yaml');
 const generatorVersion = (await text('spec/codegen/openapi-generator.version')).trim();
 const specDigest = digest(openapi);
+const lifecycleOpenapi = await text('spec/lifecycle-openapi.yaml');
+const lifecycleSpecDigest = digest(lifecycleOpenapi);
 
 await writeExpected(
   'packages/adapter-contract/src/generated/typescript/models.ts',
@@ -208,5 +210,114 @@ These files are deterministic projections of \`spec/openapi.yaml\`.
 
 Normal package consumers build from committed output and do not need Java or
 OpenAPI Generator installed.
+`,
+);
+
+await writeExpected(
+  'packages/wallet-lifecycle-contract/src/generated/typescript/models.ts',
+  `${generatedHeader(generatorVersion, lifecycleSpecDigest, 'typescript-fetch')}import type {
+  LifecycleCapabilities as MaintainedLifecycleCapabilities,
+  LifecycleEvidenceView as MaintainedLifecycleEvidenceView,
+  LifecycleOperationInput as MaintainedLifecycleOperationInput,
+  LifecycleOperationView as MaintainedLifecycleOperationView,
+  LifecycleWalletView as MaintainedLifecycleWalletView,
+} from '../../types.js';
+
+export type LifecycleCapabilities = MaintainedLifecycleCapabilities;
+export type LifecycleOperationInput = MaintainedLifecycleOperationInput;
+export type LifecycleOperationView = MaintainedLifecycleOperationView;
+export type LifecycleWalletView = MaintainedLifecycleWalletView;
+export type LifecycleEvidenceView = MaintainedLifecycleEvidenceView;
+
+export const generatedLifecycleContract = {
+  generator: 'openapi-generator-cli',
+  generatorVersion: '${generatorVersion}',
+  specDigest: '${lifecycleSpecDigest}',
+  targets: ['typescript-fetch', 'rust'],
+} as const;
+`,
+);
+
+await writeExpected(
+  'packages/wallet-lifecycle-contract/src/generated/typescript/client.ts',
+  `${generatedHeader(generatorVersion, lifecycleSpecDigest, 'typescript-fetch')}import type {
+  LifecycleCapabilities,
+  LifecycleEvidenceView,
+  LifecycleOperationInput,
+  LifecycleOperationView,
+  LifecycleWalletView,
+} from './models.js';
+
+export interface LifecycleContractApi {
+  getLifecycleCapabilities(): Promise<LifecycleCapabilities>;
+  resetLifecycleWallet(seed: string): Promise<{ readonly ok: true }>;
+  startLifecycleOperation(input: LifecycleOperationInput): Promise<LifecycleOperationView>;
+  resumeLifecycleOperation(operationId: string): Promise<LifecycleOperationView>;
+  getLifecycleOperation(operationId: string): Promise<LifecycleOperationView>;
+  getLifecycleWallet(): Promise<LifecycleWalletView>;
+  getLifecycleEvidence(): Promise<readonly LifecycleEvidenceView[]>;
+}
+`,
+);
+
+await writeExpected(
+  'packages/wallet-lifecycle-contract/src/generated/typescript/index.ts',
+  `${generatedHeader(generatorVersion, lifecycleSpecDigest, 'typescript-fetch')}export type {
+  LifecycleCapabilities,
+  LifecycleEvidenceView,
+  LifecycleOperationInput,
+  LifecycleOperationView,
+  LifecycleWalletView,
+} from './models.js';
+export { generatedLifecycleContract } from './models.js';
+export type { LifecycleContractApi } from './client.js';
+`,
+);
+
+await writeExpected(
+  'packages/wallet-lifecycle-contract/generated/rust/Cargo.toml',
+  `[package]
+name = "cashu_fault_lab_wallet_lifecycle_contract"
+version = "0.1.0"
+edition = "2021"
+description = "Generated Cashu Fault Lab wallet lifecycle contract models"
+
+[lib]
+path = "src/lib.rs"
+`,
+);
+
+await writeExpected(
+  'packages/wallet-lifecycle-contract/generated/rust/src/lib.rs',
+  `//! Generated Cashu Fault Lab wallet lifecycle contract models.
+//! Intended OpenAPI Generator target: rust
+//! openapi-generator-cli: ${generatorVersion}
+//! specDigest: ${lifecycleSpecDigest}
+
+pub const SPEC_DIGEST: &str = "${lifecycleSpecDigest}";
+pub const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LifecycleOperationKind {
+    Mint,
+    Swap,
+    Send,
+    Receive,
+    Melt,
+    Restore,
+    Reconcile,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LifecyclePhase {
+    Created,
+    Prepared,
+    Submitted,
+    Ambiguous,
+    Reconciling,
+    Succeeded,
+    FailedDefinitive,
+    RecoveryBlocked,
+}
 `,
 );

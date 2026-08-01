@@ -13,10 +13,43 @@ function fail(message) {
 }
 
 const openapi = await text('spec/openapi.yaml');
+const lifecycleOpenapi = await text('spec/lifecycle-openapi.yaml');
 const capabilitiesSchema = JSON.parse(await text('spec/schemas/adapter-capabilities.schema.json'));
+const lifecycleCapabilitiesSchema = JSON.parse(
+  await text('spec/schemas/lifecycle-capabilities.schema.json'),
+);
 
 if (!/^openapi:\s*['"]?3\.1\.0['"]?/m.test(openapi)) {
   fail('spec/openapi.yaml must declare OpenAPI 3.1.0');
+}
+
+if (!/^openapi:\s*['"]?3\.1\.0['"]?/m.test(lifecycleOpenapi)) {
+  fail('spec/lifecycle-openapi.yaml must declare OpenAPI 3.1.0');
+}
+
+for (const operationId of [
+  'getLifecycleCapabilities',
+  'resetLifecycleWallet',
+  'startLifecycleOperation',
+  'resumeLifecycleOperation',
+  'getLifecycleOperation',
+  'getLifecycleWallet',
+  'getLifecycleEvidence',
+]) {
+  if (!new RegExp(`operationId:\\s*${operationId}\\b`).test(lifecycleOpenapi)) {
+    fail(`spec/lifecycle-openapi.yaml is missing operationId ${operationId}`);
+  }
+}
+
+const lifecycleOperationIds = [...lifecycleOpenapi.matchAll(/operationId:\s*([A-Za-z0-9_]+)/g)].map(
+  (match) => match[1],
+);
+if (new Set(lifecycleOperationIds).size !== lifecycleOperationIds.length) {
+  fail('spec/lifecycle-openapi.yaml contains duplicate operationId values');
+}
+
+if (lifecycleCapabilitiesSchema.properties?.schemaVersion?.const !== 1) {
+  fail('lifecycle-capabilities schema must use schemaVersion const 1');
 }
 
 const requiredOperations = [

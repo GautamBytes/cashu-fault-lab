@@ -344,6 +344,15 @@ importers:
         specifier: 4.9.0
         version: 4.9.0
 
+  packages/wallet-lifecycle-contract:
+    dependencies:
+      '@cashu-fault-lab/wallet-lifecycle-core':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-core
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
+
   packages/wallet-lifecycle-core: {}
 
   packages/wallet-lifecycle-oracle:
