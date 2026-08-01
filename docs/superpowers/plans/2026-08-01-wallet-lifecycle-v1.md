@@ -80,7 +80,7 @@ expect(() => transitionOperation(created, 'succeeded')).toThrow('invalid lifecyc
 - Produces: `emptyLifecycleModel()`, `applyLifecycleObservation()`, `assertLifecycleSafety()`, and `assertLifecycleQuiescence()`.
 - Produces: immutable posting, quote, proof-state, request-dispatch, and Lightning-settlement observations.
 
-- [ ] **Step 1: Write failing examples for idempotent effects, conflicting effect IDs, negative accounts, duplicate invoice settlement, stale quote observations, and request-digest mutation.**
+- [x] **Step 1: Write failing examples for idempotent effects, conflicting effect IDs, negative accounts, duplicate invoice settlement, stale quote observations, and request-digest mutation.**
 
 ```ts
 const model = applyLifecycleObservation(emptyLifecycleModel(), {
@@ -95,11 +95,11 @@ const model = applyLifecycleObservation(emptyLifecycleModel(), {
 expect(() => assertLifecycleSafety(model)).not.toThrow();
 ```
 
-- [ ] **Step 2: Run the focused oracle tests; expect missing-export failures.**
-- [ ] **Step 3: Implement observation application and reconstruct safety state from the immutable observation log.**
-- [ ] **Step 4: Add fast-check command sequences proving duplicate observations are idempotent and invalid debits are rejected.**
-- [ ] **Step 5: Run tests and typecheck for both lifecycle packages; expect clean output.**
-- [ ] **Step 6: Commit `feat(lifecycle): add independent value conservation oracle`.**
+- [x] **Step 2: Run the focused oracle tests; expect missing-export failures.**
+- [x] **Step 3: Implement observation application and reconstruct safety state from the immutable observation log.**
+- [x] **Step 4: Add fast-check command sequences proving duplicate observations are idempotent and invalid debits are rejected.**
+- [x] **Step 5: Run tests and typecheck for both lifecycle packages; expect clean output.**
+- [x] **Step 6: Commit `feat(lifecycle): add independent value conservation oracle`.**
 
 ### Task 3: Versioned language-neutral adapter contract
 
