@@ -1,9 +1,9 @@
 //! Generated Cashu Fault Lab wallet lifecycle contract models.
 //! Intended OpenAPI Generator target: rust
 //! openapi-generator-cli: 7.15.0
-//! specDigest: sha256:2761a9c03bd5f82121c775fd597d96cb355740bc5e2e9e3aa2d2ecd05bb75349
+//! specDigest: sha256:d30e9792e80ee1576528f23e633e4cd85ebe938bdf532f75671e7f7f26c92f27
 
-pub const SPEC_DIGEST: &str = "sha256:2761a9c03bd5f82121c775fd597d96cb355740bc5e2e9e3aa2d2ecd05bb75349";
+pub const SPEC_DIGEST: &str = "sha256:d30e9792e80ee1576528f23e633e4cd85ebe938bdf532f75671e7f7f26c92f27";
 pub const SCHEMA_VERSION: u32 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

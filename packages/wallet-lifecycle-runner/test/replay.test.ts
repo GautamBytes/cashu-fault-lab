@@ -57,10 +57,18 @@ test('replay compares the complete normalized failure and observation history', 
   expect(first.ok).toBe(false);
   if (first.ok) throw new Error('scenario unexpectedly passed');
 
-  await expect(replayLifecycleFailure(first.artifact, new FailingDriver())).resolves.toEqual({
+  expect(JSON.stringify(first.artifact)).not.toContain(spec.seed);
+  expect(first.artifact.scenario.seedHash).toMatch(/^[a-f0-9]{64}$/u);
+
+  await expect(
+    replayLifecycleFailure(first.artifact, new FailingDriver(), spec.seed),
+  ).resolves.toEqual({
     matched: true,
     actual: first.artifact,
   });
+  await expect(
+    replayLifecycleFailure(first.artifact, new FailingDriver(), 'wrong-seed'),
+  ).rejects.toThrow('seed does not match');
 });
 
 test('shrinks commands that are irrelevant to the same failure identity', async () => {
@@ -76,7 +84,11 @@ test('shrinks commands that are irrelevant to the same failure identity', async 
   expect(first.ok).toBe(false);
   if (first.ok) throw new Error('scenario unexpectedly passed');
 
-  const minimized = await minimizeLifecycleFailure(first.artifact, () => new FailingDriver());
+  const minimized = await minimizeLifecycleFailure(
+    first.artifact,
+    () => new FailingDriver(),
+    noisy.seed,
+  );
 
   expect(minimized.scenario.commands).toEqual(spec.commands);
   expect(minimized.failure.code).toBe(first.artifact.failure.code);

@@ -19,12 +19,13 @@ describe('canonical content', () => {
     await expect(validateContentRegistry()).resolves.toEqual([]);
   });
 
-  it('orders Architecture immediately after Adapters in documentation destinations', () => {
+  it('orders wallet lifecycle between Adapters and Architecture', () => {
     expect(DOCUMENTATION_DESTINATIONS.map((item) => item.slug)).toEqual([
       'getting-started',
       'contributing',
       'cli',
       'adapters',
+      'wallet-lifecycle',
       'architecture',
       'delivery-profile',
       'invariants',

@@ -94,7 +94,10 @@ describe('lifecycle operation transitions', () => {
   test.each([
     ['created', 'submitted'],
     ['created', 'succeeded'],
+    ['created', 'failed_definitive'],
     ['prepared', 'succeeded'],
+    ['prepared', 'failed_definitive'],
+    ['submitted', 'failed_definitive'],
     ['submitted', 'created'],
     ['ambiguous', 'succeeded'],
     ['reconciling', 'submitted'],
@@ -105,7 +108,13 @@ describe('lifecycle operation transitions', () => {
     'rejects the transition %s -> %s',
     (from, to) => {
       const record = Object.freeze({ ...identity, phase: from });
-      expect(() => transitionOperation(record, to)).toThrow('invalid lifecycle transition');
+      expect(() =>
+        transitionOperation(
+          record,
+          to,
+          to === 'failed_definitive' ? 'definitive_failure' : undefined,
+        ),
+      ).toThrow('invalid lifecycle transition');
     },
   );
 

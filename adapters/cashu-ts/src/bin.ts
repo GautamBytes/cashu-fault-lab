@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import type { LifecycleCapabilities } from '@cashu-fault-lab/wallet-lifecycle-contract';
-import { createHash } from 'node:crypto';
+import { developmentIdentity } from '@cashu-fault-lab/adapter-contract';
 import { Pool } from 'pg';
 import { buildFundedCashuTsAdapterServer } from './funded-server.js';
 import { CashuTsLifecycleOperations } from './lifecycle/operations.js';
+import { HttpCashuTsLifecycleLightningProbe } from './lifecycle/lightning-probe.js';
 import {
   PostgresCashuTsLifecycleStore,
   migratePostgresCashuTsLifecycleStore,
@@ -137,6 +138,22 @@ if (crashControlsEnabled && durableSender !== undefined) {
 }
 const lifecycleDatabaseUrl = process.env.CFL_CASHU_TS_LIFECYCLE_DATABASE_URL;
 const lifecycleStateKey = optionalBase64UrlKey('CFL_CASHU_TS_LIFECYCLE_STATE_KEY');
+const lightningProbeUrl = process.env.CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_URL;
+const lightningProbeToken = process.env.CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_TOKEN;
+if ((lightningProbeUrl === undefined) !== (lightningProbeToken === undefined)) {
+  throw new Error(
+    'CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_URL and CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_TOKEN must be configured together',
+  );
+}
+const lightningProbe =
+  lightningProbeUrl === undefined || lightningProbeToken === undefined
+    ? undefined
+    : new HttpCashuTsLifecycleLightningProbe({
+        url: lightningProbeUrl,
+        token: lightningProbeToken,
+        allowUnsafeExternal:
+          process.env.CFL_CASHU_TS_LIFECYCLE_ALLOW_UNSAFE_LIGHTNING_PROBE === 'true',
+      });
 if ((lifecycleDatabaseUrl === undefined) !== (lifecycleStateKey === undefined)) {
   throw new Error(
     'CFL_CASHU_TS_LIFECYCLE_DATABASE_URL and CFL_CASHU_TS_LIFECYCLE_STATE_KEY must be configured together',
@@ -155,23 +172,27 @@ if (lifecyclePool !== undefined && lifecycleStateKey !== undefined) {
     runId: required('CFL_CASHU_TS_LIFECYCLE_RUN_ID'),
     tenantId: process.env.CFL_CASHU_TS_LIFECYCLE_TENANT_ID ?? 'cashu-ts-lifecycle',
   });
-  const digest = (domain: string): string =>
-    `sha256:${createHash('sha256').update(`cashu-fault-lab/${domain}/v1`).digest('hex')}`;
   const lifecycleCapabilities: LifecycleCapabilities = {
     schemaVersion: 1,
-    implementation: {
+    implementation: developmentIdentity({
       id: 'cashu-ts',
       version: '4.7.2',
       language: 'typescript',
       runtime: 'node-24',
-      sourceDigest: digest('cashu-ts-lifecycle-source'),
-      buildDigest: digest('cashu-ts-lifecycle-build'),
-    },
-    operations: ['mint', 'swap', 'send', 'receive', 'restore', 'reconcile'],
-    nuts: [3, 4, 7, 9, 13, 19],
+    }),
+    operations: [
+      'mint',
+      'swap',
+      'send',
+      'receive',
+      ...(lightningProbe === undefined ? [] : (['melt'] as const)),
+      'restore',
+      'reconcile',
+    ],
+    nuts: [3, 4, ...(lightningProbe === undefined ? [] : [5, 8]), 7, 9, 13, 19],
     durability: 'restart_safe',
     recovery: ['quote_state', 'proof_state', 'nut09_restore', 'nut13_seed', 'nut19_replay'],
-    mints: [{ id: 'configured-mint', implementation: 'configured' }],
+    mints: [{ id: 'configured-mint', implementation: 'unknown' }],
   };
   lifecycle = new CashuTsLifecycleOperations({
     store: lifecycleStore,
@@ -180,6 +201,7 @@ if (lifecyclePool !== undefined && lifecycleStateKey !== undefined) {
       unit: 'sat',
       store: lifecycleStore,
       allowUnsafeMint: process.env.CFL_CASHU_TS_LIFECYCLE_ALLOW_UNSAFE_MINT === 'true',
+      ...(lightningProbe === undefined ? {} : { lightning: lightningProbe }),
     }),
     mint: mintUrl,
     unit: 'sat',

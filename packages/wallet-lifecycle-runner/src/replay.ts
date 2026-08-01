@@ -1,6 +1,6 @@
 import type { LifecycleDriver } from './runner.js';
 import { LifecycleScenarioRunner } from './runner.js';
-import type { LifecycleFailureArtifact } from './history.js';
+import { lifecycleSeedHash, type LifecycleFailureArtifact } from './history.js';
 
 export interface LifecycleReplayResult {
   readonly matched: boolean;
@@ -14,11 +14,19 @@ function comparable(artifact: LifecycleFailureArtifact): string {
 export async function replayLifecycleFailure(
   artifact: LifecycleFailureArtifact,
   driver: LifecycleDriver,
+  seed?: string,
 ): Promise<LifecycleReplayResult> {
   if (artifact.redacted) {
     throw new Error('Lifecycle replay requires secret input supplied out of band');
   }
-  const result = await new LifecycleScenarioRunner(driver).run(artifact.scenario);
+  if (seed === undefined) throw new Error('Lifecycle replay seed must be supplied out of band');
+  if (lifecycleSeedHash(seed) !== artifact.scenario.seedHash) {
+    throw new Error('Lifecycle replay seed does not match the failure artifact');
+  }
+  const result = await new LifecycleScenarioRunner(driver).run({
+    ...artifact.scenario,
+    seed,
+  });
   if (result.ok) return { matched: false };
   return {
     matched: comparable(result.artifact) === comparable(artifact),
@@ -36,9 +44,15 @@ function sameFailureIdentity(
 export async function minimizeLifecycleFailure(
   artifact: LifecycleFailureArtifact,
   driverFactory: () => LifecycleDriver,
+  seed?: string,
 ): Promise<LifecycleFailureArtifact> {
   if (artifact.redacted) {
     throw new Error('Lifecycle minimization requires secret input supplied out of band');
+  }
+  if (seed === undefined)
+    throw new Error('Lifecycle minimization seed must be supplied out of band');
+  if (lifecycleSeedHash(seed) !== artifact.scenario.seedHash) {
+    throw new Error('Lifecycle minimization seed does not match the failure artifact');
   }
   let minimized = artifact;
   let index = 0;
@@ -48,6 +62,7 @@ export async function minimizeLifecycleFailure(
     );
     const result = await new LifecycleScenarioRunner(driverFactory()).run({
       ...minimized.scenario,
+      seed,
       commands,
     });
     if (!result.ok && sameFailureIdentity(artifact, result.artifact)) {

@@ -152,7 +152,7 @@ describe('cashu-ts lifecycle routes', () => {
     for (const [method, url, payload] of [
       ['GET', '/v1/lifecycle/capabilities'],
       ['POST', '/v1/lifecycle/reset', { seed: 'route-seed' }],
-      ['POST', `/v1/lifecycle/operations/${operationId}/resume`, { operationId }],
+      ['POST', `/v1/lifecycle/operations/${operationId}/resume`],
       ['GET', `/v1/lifecycle/operations/${operationId}`],
       ['GET', '/v1/lifecycle/wallet'],
       ['GET', '/v1/lifecycle/evidence'],
@@ -165,6 +165,32 @@ describe('cashu-ts lifecycle routes', () => {
       });
       expect(response.statusCode, `${method} ${url}: ${response.body}`).toBe(200);
     }
+    await app.close();
+  });
+
+  test('keeps the legacy resume body echo and rejects conflicting identities', async () => {
+    const app = await buildCashuTsAdapterServer({
+      now: () => 0,
+      controlToken: 'lifecycle-control-token',
+      lifecycle: new LifecycleOperations(),
+    });
+    const auth = { authorization: 'Bearer lifecycle-control-token' };
+
+    const compatible = await app.inject({
+      method: 'POST',
+      url: `/v1/lifecycle/operations/${operationId}/resume`,
+      headers: auth,
+      payload: { operationId },
+    });
+    expect(compatible.statusCode).toBe(200);
+
+    const conflicting = await app.inject({
+      method: 'POST',
+      url: `/v1/lifecycle/operations/${operationId}/resume`,
+      headers: auth,
+      payload: { operationId: 'BBBBBBBBBBBBBBBBBBBBBA' },
+    });
+    expect(conflicting.statusCode).toBe(409);
     await app.close();
   });
 

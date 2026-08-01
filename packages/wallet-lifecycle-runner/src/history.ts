@@ -1,4 +1,5 @@
 import type { LifecycleObservation } from '@cashu-fault-lab/wallet-lifecycle-oracle';
+import { createHash } from 'node:crypto';
 import type { LifecycleScenarioCommand } from './runner.js';
 
 export interface LifecycleHistoryEntry {
@@ -15,10 +16,11 @@ export interface LifecycleFailureIdentity {
 }
 
 export interface LifecycleFailureArtifact {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly scenario: {
     readonly id: string;
-    readonly seed: string;
+    /** Domain-separated digest. The replay seed must be supplied out of band. */
+    readonly seedHash: string;
     readonly requireQuiescence: boolean;
     readonly commands: readonly LifecycleScenarioCommand[];
   };
@@ -26,6 +28,13 @@ export interface LifecycleFailureArtifact {
   readonly history: readonly LifecycleHistoryEntry[];
   readonly observations: readonly LifecycleObservation[];
   readonly failure: LifecycleFailureIdentity;
+}
+
+export function lifecycleSeedHash(seed: string): string {
+  return createHash('sha256')
+    .update('cashu-fault-lab/wallet-lifecycle-replay-seed/v1\0')
+    .update(seed)
+    .digest('hex');
 }
 
 function sanitizeCommand(command: LifecycleScenarioCommand): {
@@ -59,10 +68,10 @@ export function createFailureArtifact(input: {
 }): LifecycleFailureArtifact {
   const sanitized = input.commands.map(sanitizeCommand);
   return Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     scenario: Object.freeze({
       id: input.id,
-      seed: input.seed,
+      seedHash: lifecycleSeedHash(input.seed),
       requireQuiescence: input.requireQuiescence,
       commands: Object.freeze(sanitized.map((entry) => entry.command)),
     }),

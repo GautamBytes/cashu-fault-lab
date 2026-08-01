@@ -422,6 +422,54 @@ describe('CashuTsLifecycleWallet origin guard', () => {
     fetchMock.mockRestore();
   });
 
+  test('enforces the requested timeout and a bounded mint response', async () => {
+    const timeoutFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('aborted', 'AbortError')),
+            { once: true },
+          );
+        }),
+    );
+    const request = createCashuTsNoRedirectRequest('https://mint.example.com');
+    await expect(
+      request({ endpoint: 'https://mint.example.com/v1/info', requestTimeout: 5 }),
+    ).rejects.toThrow('Cashu lifecycle mint request failed');
+    expect(timeoutFetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    timeoutFetch.mockRestore();
+
+    const oversizedFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ value: 'x'.repeat(1_048_576) }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await expect(request({ endpoint: 'https://mint.example.com/v1/info' })).rejects.toThrow(
+      'Cashu lifecycle mint response exceeds byte limit',
+    );
+    oversizedFetch.mockRestore();
+  });
+
+  test('rejects credential, query, and fragment components in configured mint URLs', () => {
+    for (const mintUrl of [
+      'https://user:pass@mint.example.com',
+      'https://mint.example.com?token=secret',
+      'https://mint.example.com#secret',
+    ]) {
+      expect(
+        () =>
+          new CashuTsLifecycleWallet({
+            mintUrl,
+            unit: 'sat',
+            store: new MemoryCashuTsLifecycleStore(),
+            allowUnsafeMint: true,
+          }),
+      ).toThrow('forbidden components');
+    }
+  });
+
   test('derives mint support and does not advertise send without a durable handoff', async () => {
     const client = new MintClient();
     const store = new MemoryCashuTsLifecycleStore();

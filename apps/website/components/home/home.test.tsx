@@ -98,6 +98,11 @@ describe('home components', () => {
       'href',
       '/docs/contributing',
     );
+    expect(screen.getByRole('link', { name: /Review wallet lifecycle scope/ })).toHaveAttribute(
+      'href',
+      '/docs/wallet-lifecycle',
+    );
+    expect(screen.getByText('Mint ambiguity')).toBeVisible();
 
     const explorer = screen.getByRole('region', { name: 'Explore fault scenarios' });
     expect(within(explorer).getAllByRole('listitem')).toHaveLength(4);

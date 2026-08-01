@@ -100,4 +100,13 @@ export {
   type CashuTsLifecycleClient,
   type CashuTsLifecycleWalletOptions,
 } from './lifecycle/wallet.js';
+export {
+  CASHU_TS_LIFECYCLE_MAX_MINT_RESPONSE_BYTES,
+  createCashuTsNoRedirectRequest,
+  type CashuTsLifecycleRequestPolicy,
+} from './lifecycle/network.js';
+export {
+  HttpCashuTsLifecycleLightningProbe,
+  type HttpCashuTsLifecycleLightningProbeOptions,
+} from './lifecycle/lightning-probe.js';
 export { registerCashuTsLifecycleRoutes } from './lifecycle/routes.js';

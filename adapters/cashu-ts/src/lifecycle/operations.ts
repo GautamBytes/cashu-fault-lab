@@ -501,12 +501,16 @@ function withResult(
   result: CashuTsLifecycleResult,
 ): LifecycleOperationView {
   const phase = result.status;
+  const reconciled =
+    (phase === 'failed_definitive' || phase === 'recovery_blocked') && view.phase === 'submitted'
+      ? withPhase(withPhase(view, 'ambiguous'), 'reconciling')
+      : view;
   const transitioned =
-    phase === 'ambiguous' && view.phase === 'reconciling'
-      ? view
+    phase === 'ambiguous' && reconciled.phase === 'reconciling'
+      ? reconciled
       : phase === 'ambiguous'
-        ? withPhase(view, phase)
-        : withPhase(view, phase, phase === 'succeeded' ? undefined : result.evidenceCode);
+        ? withPhase(reconciled, phase)
+        : withPhase(reconciled, phase, phase === 'succeeded' ? undefined : result.evidenceCode);
   if (result.status === 'ambiguous') return transitioned;
   return {
     ...transitioned,

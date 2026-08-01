@@ -3,16 +3,12 @@ import {
   getEncodedToken,
   getP2PKSigFlag,
   hashToCurve,
-  HttpResponseError,
   JSONInt,
   Mint,
-  MintOperationError,
-  NetworkError,
   normalizeProofAmounts,
   OutputData,
   parseP2PKSecret,
   Wallet,
-  type RequestFn,
 } from '@cashu/cashu-ts';
 import type {
   LifecycleOperationInput,
@@ -26,6 +22,9 @@ import type {
   CashuTsLifecycleWalletPort,
   CashuTsLifecycleStoredProof,
 } from './types.js';
+import { createCashuTsNoRedirectRequest, validatedMintOrigin } from './network.js';
+
+export { createCashuTsNoRedirectRequest } from './network.js';
 
 export interface CashuTsLifecycleClient {
   readonly keysetId: string;
@@ -404,118 +403,6 @@ function seedBytes(seed: string): Uint8Array {
       .update(seed)
       .digest(),
   );
-}
-
-function isLoopbackMint(mintUrl: string): boolean {
-  let hostname: string;
-  try {
-    hostname = new URL(mintUrl).hostname.toLowerCase();
-  } catch {
-    return false;
-  }
-  return (
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost') ||
-    hostname === '127.0.0.1' ||
-    hostname === '[::1]' ||
-    hostname === '::1'
-  );
-}
-
-function validatedMintOrigin(mintUrl: string, allowUnsafeMint: boolean): URL {
-  let url: URL;
-  try {
-    url = new URL(mintUrl);
-  } catch {
-    throw new Error('Cashu lifecycle mint URL is invalid');
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error('Cashu lifecycle mint URL protocol is invalid');
-  }
-  if (!isLoopbackMint(mintUrl) && (!allowUnsafeMint || url.protocol !== 'https:')) {
-    throw new Error('Cashu lifecycle external mint requires explicit HTTPS unsafe opt-in');
-  }
-  return url;
-}
-
-export function createCashuTsNoRedirectRequest(mintUrl: string): RequestFn {
-  const allowedOrigin = new URL(mintUrl).origin;
-  return async <T>(args: Parameters<RequestFn>[0]): Promise<T> => {
-    let endpoint: URL;
-    try {
-      endpoint = new URL(args.endpoint);
-    } catch (cause) {
-      throw new NetworkError('Cashu lifecycle mint request URL is invalid', { cause });
-    }
-    if (endpoint.origin !== allowedOrigin) {
-      throw new NetworkError('Cashu lifecycle mint request changed origin');
-    }
-    const requestBody =
-      args.requestBody === undefined ? undefined : JSONInt.stringify(args.requestBody);
-    if (args.requestBody !== undefined && requestBody === undefined) {
-      throw new NetworkError('Cashu lifecycle mint request body is invalid');
-    }
-    let response: Response;
-    try {
-      response = await fetch(endpoint, {
-        method: args.method ?? (args.requestBody === undefined ? 'GET' : 'POST'),
-        headers: {
-          ...(args.requestBody === undefined ? {} : { 'content-type': 'application/json' }),
-          ...args.headers,
-        },
-        ...(requestBody === undefined ? {} : { body: requestBody }),
-        ...(args.signal === undefined ? {} : { signal: args.signal }),
-        cache: 'no-store',
-        credentials: 'omit',
-        referrer: '',
-        referrerPolicy: 'no-referrer',
-        redirect: 'manual',
-      });
-    } catch (cause) {
-      if (cause instanceof NetworkError) throw cause;
-      throw new NetworkError('Cashu lifecycle mint request failed', { cause });
-    }
-    try {
-      args.onResponseMeta?.({
-        endpoint: args.endpoint,
-        status: response.status,
-        headers: response.headers,
-      });
-    } catch {
-      // Response metadata is diagnostic and must not change protocol request semantics.
-    }
-    if (response.status >= 300 && response.status < 400) {
-      throw new HttpResponseError('Cashu lifecycle mint redirect is forbidden', response.status);
-    }
-    const text = await response.text();
-    let value: unknown;
-    try {
-      value = text.length === 0 ? undefined : JSONInt.parse(text);
-    } catch (cause) {
-      throw new HttpResponseError(
-        'Cashu lifecycle mint response is not valid JSON',
-        response.status,
-        {
-          cause,
-        },
-      );
-    }
-    if (!response.ok) {
-      if (
-        typeof value === 'object' &&
-        value !== null &&
-        Number.isSafeInteger(Reflect.get(value, 'code')) &&
-        typeof Reflect.get(value, 'detail') === 'string'
-      ) {
-        throw new MintOperationError(
-          Reflect.get(value, 'code') as number,
-          Reflect.get(value, 'detail') as string,
-        );
-      }
-      throw new HttpResponseError('Cashu lifecycle mint HTTP request failed', response.status);
-    }
-    return value as T;
-  };
 }
 
 function canonical(value: unknown): unknown {
@@ -1513,10 +1400,7 @@ export class CashuTsLifecycleWallet implements CashuTsLifecycleWalletPort {
     }
     const quoteObservations = [quoteObservation('melt', quoteRecord.state, quote)];
     if (quoteRecord.state !== 'PAID') return { status: 'ambiguous', quoteObservations };
-    if (
-      this.#lightning === undefined ||
-      !(await this.#lightning.settled(material.invoice, prepared.quoteHash ?? ''))
-    ) {
+    if (!(await this.#lightningSettled(material.invoice, prepared.quoteHash ?? ''))) {
       return {
         status: 'recovery_blocked',
         evidenceCode: 'lightning_settlement_unverified',
@@ -2061,10 +1945,7 @@ export class CashuTsLifecycleWallet implements CashuTsLifecycleWalletPort {
         evidenceCode: 'melt_quote_proof_state_conflict',
       });
     }
-    if (
-      this.#lightning === undefined ||
-      !(await this.#lightning.settled(material.invoice, prepared.quoteHash ?? ''))
-    ) {
+    if (!(await this.#lightningSettled(material.invoice, prepared.quoteHash ?? ''))) {
       return finish({
         status: 'recovery_blocked',
         evidenceCode: 'lightning_settlement_unverified',
@@ -2252,5 +2133,14 @@ export class CashuTsLifecycleWallet implements CashuTsLifecycleWalletPort {
     await client.loadMint();
     this.#clientValue = client;
     return client;
+  }
+
+  async #lightningSettled(invoice: string, quoteHash: string): Promise<boolean> {
+    if (this.#lightning === undefined) return false;
+    try {
+      return await this.#lightning.settled(invoice, quoteHash);
+    } catch {
+      return false;
+    }
   }
 }

@@ -68,9 +68,15 @@ export function registerCashuTsLifecycleRoutes(
   app.post<{ Params: { id: string }; Body: unknown }>(
     '/v1/lifecycle/operations/:id/resume',
     async (request, reply) => {
-      if (!validateRequest('resume', request.body, reply)) return reply;
       const selected = operationId(request.params.id);
-      if ((request.body as { readonly operationId: string }).operationId !== selected) {
+      // The OpenAPI contract identifies the operation in the path. Continue accepting the
+      // pre-contract body echo so existing lifecycle clients remain compatible.
+      if (request.body !== undefined && !validateRequest('resume', request.body, reply))
+        return reply;
+      if (
+        request.body !== undefined &&
+        (request.body as { readonly operationId: string }).operationId !== selected
+      ) {
         return reply.code(409).send({
           code: 'LIFECYCLE_OPERATION_ID_CONFLICT',
           message: 'Lifecycle operation identity conflicts',

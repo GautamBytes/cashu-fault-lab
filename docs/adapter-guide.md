@@ -20,6 +20,20 @@ Version 0.1.2 accepts these routes only on loopback origins
 
 Use `spec/schemas/adapter-capabilities.schema.json` and the request and response types from `@cashu-fault-lab/adapter-contract`. Require a bearer control token outside explicit test mode. Do not place that token in reports.
 
+### Optional wallet lifecycle extension
+
+Wallet lifecycle testing uses a separate `/v1/lifecycle/*` contract so adding it cannot change
+existing delivery behavior. Implementations that do not support it keep serving the delivery routes
+above without modification. Implementations that opt in should use
+`spec/lifecycle-openapi.yaml`, `@cashu-fault-lab/wallet-lifecycle-contract`, and the rules in the
+[wallet lifecycle guide](wallet-lifecycle.md).
+
+Advertise only operations that are executable with the current mint and configured evidence
+authorities. In particular, a wallet must not advertise `melt` merely because the mint supports
+NUT-05: successful melt evidence also needs an independent Lightning settlement probe. Accept the
+operation identity from the resume route path; accepting the older matching body echo is a
+compatibility extension, not a second source of identity.
+
 ## Evidence tiers
 
 | Tier | Required evidence                                   |
@@ -59,7 +73,10 @@ Treat the pinned NUT-26 NIP-04/raw-key mapping as a separate expected-failure pr
 
 ## Reports and secrets
 
-Expose hashes, status, amount, unit, and stable error codes. Keep proof secrets, signatures, witnesses, blinded messages, blinding factors, complete payloads, private keys, and bearer values out of adapter logs and responses.
+Expose hashes, status, amount, unit, and stable error codes. Keep proof secrets, signatures,
+witnesses, blinded messages, blinding factors, complete payloads, wallet seeds, invoices, private
+keys, and bearer values out of adapter logs, reports, and responses. Lifecycle replay artifacts
+store only a domain-separated seed hash; callers provide the raw seed out of band.
 
 ## Maintainer preview
 

@@ -44,6 +44,11 @@ const testedFaults = [
     text: 'Restart senders and receivers at persistence boundaries, then inspect durable recovery.',
     icon: '‖',
   },
+  {
+    title: 'Mint ambiguity',
+    text: 'Reconcile wallet operations after lost mint replies without inventing or losing value.',
+    icon: '?',
+  },
 ] as const;
 
 const profileSteps = [
@@ -230,6 +235,9 @@ export default async function HomePage() {
           </p>
           <a className={styles.textLink} href="/docs/adapters">
             Integrate an adapter <span aria-hidden="true">→</span>
+          </a>
+          <a className={styles.textLink} href="/docs/wallet-lifecycle">
+            Review wallet lifecycle scope <span aria-hidden="true">→</span>
           </a>
         </div>
       </section>

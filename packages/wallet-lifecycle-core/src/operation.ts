@@ -16,9 +16,9 @@ const kinds = new Set<string>(LIFECYCLE_OPERATION_KINDS);
 const phases = new Set<string>(LIFECYCLE_PHASES);
 
 const transitions: Readonly<Record<LifecyclePhase, ReadonlySet<LifecyclePhase>>> = {
-  created: new Set(['prepared', 'failed_definitive']),
-  prepared: new Set(['submitted', 'failed_definitive']),
-  submitted: new Set(['succeeded', 'ambiguous', 'failed_definitive']),
+  created: new Set(['prepared']),
+  prepared: new Set(['submitted']),
+  submitted: new Set(['succeeded', 'ambiguous']),
   ambiguous: new Set(['reconciling']),
   reconciling: new Set(['succeeded', 'failed_definitive', 'recovery_blocked']),
   succeeded: new Set(),
