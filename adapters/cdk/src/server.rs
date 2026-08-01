@@ -229,11 +229,9 @@ async fn lifecycle_capabilities(State(state): State<Arc<AppState>>) -> Response 
 }
 
 fn lifecycle_identity_digest(domain: &str) -> String {
-    let identity = format!(
-        "cashu-fault-lab/cdk-lifecycle-{domain}-development-v1\0{}\0cdk-0.17.3\0rust",
-        env!("CARGO_PKG_VERSION")
-    );
-    format!("sha256:{}", sha256::Hash::hash(identity.as_bytes()))
+    let identity = format!("cdk\0{}\0rust\0cdk-0.17.3", env!("CARGO_PKG_VERSION"));
+    let material = format!("cashu-fault-lab/{domain}/v1\0{identity}");
+    format!("sha256:{}", sha256::Hash::hash(material.as_bytes()))
 }
 
 fn lifecycle_engine(state: &AppState) -> Option<&Arc<LifecycleEngine>> {

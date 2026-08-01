@@ -87,7 +87,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         "CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED does not match stored state".into(),
                     );
                 }
-                wallet.load(&seed).await.map_err(|code| code.to_owned())?;
+                wallet
+                    .load_generation(&seed, store.active_generation()?)
+                    .await
+                    .map_err(|code| code.to_owned())?;
             }
             Some(Arc::new(LifecycleEngine::new(store, wallet)))
         }
