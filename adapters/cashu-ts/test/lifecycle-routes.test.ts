@@ -121,6 +121,29 @@ describe('cashu-ts lifecycle routes', () => {
     await app.close();
   });
 
+  test('requires auth for lifecycle routes even in explicit test mode', async () => {
+    const app = await buildCashuTsAdapterServer({
+      now: () => 0,
+      testMode: true,
+      controlToken: 'lifecycle-control-token',
+      lifecycle: new LifecycleOperations(),
+    });
+
+    const unauthorized = await app.inject({
+      method: 'GET',
+      url: '/v1/lifecycle/capabilities',
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const authorized = await app.inject({
+      method: 'GET',
+      url: '/v1/lifecycle/capabilities',
+      headers: { authorization: 'Bearer lifecycle-control-token' },
+    });
+    expect(authorized.statusCode).toBe(200);
+    await app.close();
+  });
+
   test('accepts receive tokens up to the lifecycle contract limit despite the global limit', async () => {
     const lifecycle = new LifecycleOperations();
     const app = await buildCashuTsAdapterServer({

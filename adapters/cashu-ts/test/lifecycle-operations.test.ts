@@ -189,6 +189,40 @@ describe('CashuTsLifecycleOperations', () => {
     expect(wallet.calls).toEqual([]);
   });
 
+  test('does not advertise melt unless the mint supports NUT-05 and NUT-08', async () => {
+    const capabilities: LifecycleCapabilities = {
+      schemaVersion: 1,
+      implementation: {
+        id: 'cashu-ts',
+        version: '4.7.2',
+        language: 'typescript',
+        runtime: 'node-24',
+        sourceDigest: `sha256:${'a'.repeat(64)}`,
+        buildDigest: `sha256:${'b'.repeat(64)}`,
+      },
+      operations: ['mint', 'melt'],
+      nuts: [4, 5, 8],
+      durability: 'restart_safe',
+      recovery: ['quote_state'],
+      mints: [{ id: 'configured-mint', implementation: 'configured' }],
+    };
+    const wallet = new RecordingWalletPort();
+    wallet.discoverSupportedNuts = async () => [4, 5];
+    const operations = new CashuTsLifecycleOperations({
+      store: new MemoryCashuTsLifecycleStore(),
+      wallet,
+      capabilities,
+    });
+
+    await expect(operations.capabilities()).resolves.toMatchObject({
+      operations: ['mint'],
+      nuts: [4, 5],
+    });
+    await expect(operations.start(inputs[4]!)).rejects.toThrow(
+      'Lifecycle operation is not advertised',
+    );
+  });
+
   test('projects encrypted-store proof state into wallet and evidence views', async () => {
     const store = new MemoryCashuTsLifecycleStore();
     const operations = new CashuTsLifecycleOperations({
@@ -510,13 +544,20 @@ describe('CashuTsLifecycleOperations', () => {
     });
   });
 
-  test('maps definitive and blocked outcomes to evidence-bearing terminal phases', async () => {
+  test('keeps submitted terminal failures ambiguous until recovery evidence is collected', async () => {
     const store = new MemoryCashuTsLifecycleStore();
     const wallet = new RecordingWalletPort();
     const operations = new CashuTsLifecycleOperations({ store, wallet });
 
     wallet.nextResult = { status: 'failed_definitive', evidenceCode: 'quote_expired' };
     await expect(operations.start(inputs[1]!)).resolves.toMatchObject({
+      phase: 'ambiguous',
+    });
+    await expect(store.get(inputs[1]!.operationId)).resolves.toMatchObject({
+      view: { phase: 'ambiguous' },
+    });
+    wallet.nextResult = { status: 'failed_definitive', evidenceCode: 'quote_expired' };
+    await expect(operations.resume(inputs[1]!.operationId)).resolves.toMatchObject({
       phase: 'failed_definitive',
       evidenceCode: 'quote_expired',
     });

@@ -2,6 +2,7 @@
 import type { LifecycleCapabilities } from '@cashu-fault-lab/wallet-lifecycle-contract';
 import { developmentIdentity } from '@cashu-fault-lab/adapter-contract';
 import { Pool } from 'pg';
+import { lifecycleListenHost } from './bin-config.js';
 import { buildFundedCashuTsAdapterServer } from './funded-server.js';
 import { CashuTsLifecycleOperations } from './lifecycle/operations.js';
 import { HttpCashuTsLifecycleLightningProbe } from './lifecycle/lightning-probe.js';
@@ -30,14 +31,6 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
     throw new Error(`${name} must be a positive safe integer`);
   }
   return parsed;
-}
-
-function listenHost(value: string | undefined): string {
-  const host = value ?? '127.0.0.1';
-  if (host !== '127.0.0.1' && host !== '0.0.0.0') {
-    throw new Error('CFL_CASHU_TS_HOST must be 127.0.0.1 or 0.0.0.0');
-  }
-  return host;
 }
 
 function optionalBase64UrlKey(name: string): Uint8Array | undefined {
@@ -71,7 +64,7 @@ function optionalCsv(name: string): readonly string[] | undefined {
 }
 
 const port = positiveInteger(process.env.CFL_CASHU_TS_PORT, 4101, 'CFL_CASHU_TS_PORT');
-const host = listenHost(process.env.CFL_CASHU_TS_HOST);
+const requestedHost = process.env.CFL_CASHU_TS_HOST;
 const proofClaimKey = optionalBase64UrlKey('CFL_CASHU_TS_CLAIM_KEY');
 const senderNostrPrivateKey = optionalBase64UrlKey('CFL_CASHU_TS_NOSTR_SENDER_KEY');
 const receiverNostrPrivateKey = optionalBase64UrlKey('CFL_CASHU_TS_NOSTR_RECEIVER_KEY');
@@ -208,6 +201,7 @@ if (lifecyclePool !== undefined && lifecycleStateKey !== undefined) {
     capabilities: lifecycleCapabilities,
   });
 }
+const host = lifecycleListenHost(requestedHost, lifecycle !== undefined);
 const app = await buildFundedCashuTsAdapterServer({
   mintUrl,
   controlToken: required('CFL_CASHU_TS_CONTROL_TOKEN'),

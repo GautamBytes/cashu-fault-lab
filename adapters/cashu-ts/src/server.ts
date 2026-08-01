@@ -206,6 +206,9 @@ export async function buildCashuTsAdapterServer(
   if (!options.testMode && !options.controlToken) {
     throw new Error('A control token is required outside explicit test mode');
   }
+  if (options.lifecycle !== undefined && !options.controlToken) {
+    throw new Error('Lifecycle routes require an adapter control token');
+  }
   if (options.crashControl !== undefined && !options.controlToken) {
     throw new Error('Crash controls require an adapter control token');
   }
@@ -228,7 +231,9 @@ export async function buildCashuTsAdapterServer(
   let requestOrdinal = 0;
 
   app.addHook('preHandler', async (request, reply) => {
-    if (options.testMode && !request.url.startsWith('/v1/test/crashes')) return;
+    const lifecycleRoute =
+      request.url === '/v1/lifecycle' || request.url.startsWith('/v1/lifecycle/');
+    if (options.testMode && !lifecycleRoute && !request.url.startsWith('/v1/test/crashes')) return;
     if (request.url !== '/v1' && !request.url.startsWith('/v1/')) return;
     if (!secureEqual(request.headers.authorization ?? '', `Bearer ${options.controlToken!}`)) {
       await reply.code(401).header('WWW-Authenticate', 'Bearer').send({

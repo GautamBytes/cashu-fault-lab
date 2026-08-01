@@ -105,6 +105,8 @@ struct ResetFailWallet;
 
 struct SubmittedFailureWallet;
 
+struct SubmittedBlockedWallet;
+
 struct DeferredGcFailWallet;
 
 struct UnsafeNumericWallet;
@@ -246,6 +248,25 @@ impl LifecycleWalletPort for SubmittedFailureWallet {
         _private_material: Option<&[u8]>,
     ) -> LifecycleExecution {
         LifecycleExecution::failed_definitive("dependency_reconciled_terminal_failure")
+    }
+}
+
+#[async_trait]
+impl LifecycleWalletPort for SubmittedBlockedWallet {
+    async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    async fn execute(&self, _request: &LifecycleInput) -> LifecycleExecution {
+        LifecycleExecution::recovery_blocked("dependency_claimed_blocked")
+    }
+
+    async fn recover(
+        &self,
+        _request: &LifecycleInput,
+        _private_material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        LifecycleExecution::recovery_blocked("dependency_reconciled_blocked")
     }
 }
 
@@ -1316,6 +1337,29 @@ async fn submitted_definitive_failures_become_ambiguous_until_reconciled() {
 }
 
 #[tokio::test]
+async fn submitted_blocked_failures_become_ambiguous_until_reconciled() {
+    let path = database_path("submitted-blocked-ambiguous");
+    let store = Arc::new(LifecycleStore::open(path, [40_u8; 32]).expect("open lifecycle store"));
+    let engine = LifecycleEngine::new(store.clone(), Arc::new(SubmittedBlockedWallet));
+    let operation_id = "FFFFFFFFFFFFFFFFFFFFFQ";
+
+    let result = engine
+        .start(input(operation_id, LifecycleKind::Mint))
+        .await
+        .expect("submitted blocked result is persisted for recovery");
+
+    assert_eq!(result.phase, LifecyclePhase::Ambiguous);
+    assert_eq!(
+        store
+            .get(operation_id)
+            .expect("load persisted operation")
+            .expect("operation exists")
+            .phase,
+        LifecyclePhase::Ambiguous
+    );
+}
+
+#[tokio::test]
 async fn native_cdk_requires_initialized_durable_state_before_native_side_effects() {
     let wallet = NativeCdkLifecycleWallet::new(
         "http://127.0.0.1:3338",
@@ -2165,6 +2209,104 @@ async fn lifecycle_routes_are_authenticated_and_contract_shaped() {
         .await
         .expect("response");
     assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn lifecycle_routes_are_absent_without_durable_lifecycle_state() {
+    let app = router_with_lifecycle("control-token", None, None).expect("build router");
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/lifecycle/capabilities")
+                .header("authorization", "Bearer control-token")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn lifecycle_resume_accepts_bodyless_and_matching_legacy_echo_only() {
+    let path = database_path("http-resume-identity");
+    let store = Arc::new(LifecycleStore::open(path, [30_u8; 32]).expect("open lifecycle store"));
+    let engine = Arc::new(LifecycleEngine::new(
+        store,
+        Arc::new(RecordingWallet::default()),
+    ));
+    let app = router_with_lifecycle("control-token", None, Some(engine)).expect("build router");
+    let operation_id = "IIIIIIIIIIIIIIIIIIIIIA";
+    let body = serde_json::json!({
+        "operationId": operation_id,
+        "kind": "mint",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat",
+        "amount": 8,
+        "method": "bolt11"
+    });
+    let start = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/lifecycle/operations")
+                .header("authorization", "Bearer control-token")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(start.status(), StatusCode::OK);
+
+    let bodyless = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/lifecycle/operations/{operation_id}/resume"))
+                .header("authorization", "Bearer control-token")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(bodyless.status(), StatusCode::OK);
+
+    let matching = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/lifecycle/operations/{operation_id}/resume"))
+                .header("authorization", "Bearer control-token")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "operationId": operation_id }).to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(matching.status(), StatusCode::OK);
+
+    let conflicting = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1/lifecycle/operations/{operation_id}/resume"))
+                .header("authorization", "Bearer control-token")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "operationId": "JJJJJJJJJJJJJJJJJJJJJA" }).to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(conflicting.status(), StatusCode::CONFLICT);
 }
 
 #[tokio::test]

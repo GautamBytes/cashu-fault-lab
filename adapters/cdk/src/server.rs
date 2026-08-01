@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
+    body::Bytes,
     extract::{DefaultBodyLimit, Path, Request, State, rejection::JsonRejection},
     http::{HeaderValue, StatusCode, header::AUTHORIZATION},
     middleware::{self, Next},
@@ -42,6 +43,13 @@ struct ResetInput {
 #[derive(Serialize)]
 struct ResetOutput {
     ok: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LifecycleResumeInput {
+    #[serde(rename = "operationId")]
+    operation_id: String,
 }
 
 #[derive(Deserialize)]
@@ -570,10 +578,30 @@ async fn lifecycle_start(
 async fn lifecycle_resume(
     State(state): State<Arc<AppState>>,
     Path(operation_id): Path<String>,
+    body: Bytes,
 ) -> Response {
     let Some(engine) = lifecycle_engine(&state) else {
         return not_applicable("Durable CDK lifecycle operations are not configured");
     };
+    if !body.is_empty() && !body.iter().all(u8::is_ascii_whitespace) {
+        let input = match serde_json::from_slice::<LifecycleResumeInput>(&body) {
+            Ok(input) => input,
+            Err(_) => {
+                return error(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "LIFECYCLE_SCHEMA_INVALID",
+                    "Lifecycle request is invalid",
+                );
+            }
+        };
+        if input.operation_id != operation_id {
+            return error(
+                StatusCode::CONFLICT,
+                "LIFECYCLE_OPERATION_ID_CONFLICT",
+                "Lifecycle operation identity conflicts",
+            );
+        }
+    }
     match engine.resume(&operation_id).await {
         Ok(operation) if operation_numbers_are_safe(&operation) => {
             (StatusCode::OK, Json(operation)).into_response()
@@ -655,27 +683,31 @@ pub fn router_with_lifecycle(
         operations,
         lifecycle,
     });
-    Ok(Router::<Arc<AppState>>::new()
+    let mut router = Router::<Arc<AppState>>::new()
         .route("/v1/capabilities", get(get_capabilities))
         .route("/v1/reset", post(reset))
         .route("/v1/requests", post(requests))
         .route("/v1/send", post(send))
         .route("/v1/deliveries/{id}", get(delivery))
         .route("/v1/ledger", get(ledger))
-        .route("/v1/proofs", get(proofs))
-        .route("/v1/lifecycle/capabilities", get(lifecycle_capabilities))
-        .route("/v1/lifecycle/reset", post(lifecycle_reset))
-        .route(
-            "/v1/lifecycle/operations",
-            post(lifecycle_start).layer(DefaultBodyLimit::max(LIFECYCLE_OPERATION_BODY_LIMIT)),
-        )
-        .route(
-            "/v1/lifecycle/operations/{id}/resume",
-            post(lifecycle_resume),
-        )
-        .route("/v1/lifecycle/operations/{id}", get(lifecycle_operation))
-        .route("/v1/lifecycle/wallet", get(lifecycle_wallet))
-        .route("/v1/lifecycle/evidence", get(lifecycle_evidence))
+        .route("/v1/proofs", get(proofs));
+    if state.lifecycle.is_some() {
+        router = router
+            .route("/v1/lifecycle/capabilities", get(lifecycle_capabilities))
+            .route("/v1/lifecycle/reset", post(lifecycle_reset))
+            .route(
+                "/v1/lifecycle/operations",
+                post(lifecycle_start).layer(DefaultBodyLimit::max(LIFECYCLE_OPERATION_BODY_LIMIT)),
+            )
+            .route(
+                "/v1/lifecycle/operations/{id}/resume",
+                post(lifecycle_resume),
+            )
+            .route("/v1/lifecycle/operations/{id}", get(lifecycle_operation))
+            .route("/v1/lifecycle/wallet", get(lifecycle_wallet))
+            .route("/v1/lifecycle/evidence", get(lifecycle_evidence));
+    }
+    Ok(router
         .layer(DefaultBodyLimit::max(16_384))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
         .with_state(state))

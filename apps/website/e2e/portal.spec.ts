@@ -264,8 +264,16 @@ test('Architecture participates in docs navigation, search, and pagination', asy
   await page.goto('/docs/adapters');
   await page
     .getByRole('navigation', { name: 'Document pagination' })
-    .getByRole('link', { name: /Next\s*Architecture/ })
+    .getByRole('link', { name: /Next\s*Wallet lifecycle/ })
     .click();
+
+  await expect(page).toHaveURL(/\/docs\/wallet-lifecycle$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Wallet lifecycle' })).toBeVisible();
+  const lifecyclePagination = page.getByRole('navigation', { name: 'Document pagination' });
+  await expect(
+    lifecyclePagination.getByRole('link', { name: /Previous\s*Adapter guide/ }),
+  ).toHaveAttribute('href', '/docs/adapters');
+  await lifecyclePagination.getByRole('link', { name: /Next\s*Architecture/ }).click();
 
   await expect(page).toHaveURL(/\/architecture$/);
   await expect(
@@ -282,10 +290,9 @@ test('Architecture participates in docs navigation, search, and pagination', asy
   );
 
   const pagination = page.getByRole('navigation', { name: 'Document pagination' });
-  await expect(pagination.getByRole('link', { name: /Previous\s*Adapter guide/ })).toHaveAttribute(
-    'href',
-    '/docs/adapters',
-  );
+  await expect(
+    pagination.getByRole('link', { name: /Previous\s*Wallet lifecycle/ }),
+  ).toHaveAttribute('href', '/docs/wallet-lifecycle');
   await expect(pagination.getByRole('link', { name: /Next\s*Delivery profile/ })).toHaveAttribute(
     'href',
     '/docs/delivery-profile',

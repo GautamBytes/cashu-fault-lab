@@ -268,7 +268,10 @@ impl LifecycleExecution {
     }
 
     fn submitted_failure_requires_reconcile(mut self) -> Self {
-        if self.phase == LifecyclePhase::FailedDefinitive {
+        if matches!(
+            self.phase,
+            LifecyclePhase::FailedDefinitive | LifecyclePhase::RecoveryBlocked
+        ) {
             self.phase = LifecyclePhase::Ambiguous;
             self.evidence_code = Some("submitted_failure_requires_reconcile");
             self.event = "submitted_failure_requires_reconcile".to_owned();

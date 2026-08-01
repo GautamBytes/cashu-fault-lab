@@ -2,6 +2,7 @@ use std::{env, sync::Arc, time::Duration};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use cashu_fault_lab_cdk_adapter::{
+    config::validate_lifecycle_listen_address,
     funded::FundedCdkOperations,
     funded_wallet::FundedCdkWallet,
     http_transport::CdkHttpTransport,
@@ -99,6 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let address =
         env::var("CASHU_FAULT_LAB_CDK_LISTEN").unwrap_or_else(|_| "127.0.0.1:8088".to_owned());
+    validate_lifecycle_listen_address(&address, lifecycle.is_some())?;
     let listener = tokio::net::TcpListener::bind(&address).await?;
     axum::serve(
         listener,

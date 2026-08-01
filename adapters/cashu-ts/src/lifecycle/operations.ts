@@ -523,6 +523,10 @@ function withResult(
   };
 }
 
+function submittedFailureRequiresReconcile(result: CashuTsLifecycleResult): boolean {
+  return result.status === 'failed_definitive' || result.status === 'recovery_blocked';
+}
+
 function appendQuoteObservations(
   previous: readonly CashuTsLifecycleQuoteObservation[] = [],
   next: readonly CashuTsLifecycleQuoteObservation[] = [],
@@ -641,7 +645,7 @@ export class CashuTsLifecycleOperations {
       if (operation === 'send') {
         return discovered.has(3) && this.#wallet.supportsSendHandoff === true;
       }
-      if (operation === 'melt') return discovered.has(5);
+      if (operation === 'melt') return discovered.has(5) && discovered.has(8);
       if (operation === 'restore') return discovered.has(9);
       if (operation === 'reconcile') return discovered.has(7);
       return false;
@@ -800,6 +804,18 @@ export class CashuTsLifecycleOperations {
         recoveryMechanism: 'quote_state',
       };
       quoteObservations = submitted.quoteObservations ?? [];
+    }
+    if (submittedFailureRequiresReconcile(result)) {
+      const ambiguous = {
+        ...submitted,
+        ...(result.recoveryMechanism === undefined
+          ? {}
+          : { recoveryMechanism: result.recoveryMechanism }),
+        ...(quoteObservations.length === 0 ? {} : { quoteObservations }),
+        view: withPhase(submitted.view, 'ambiguous'),
+      };
+      await this.#store.put(ambiguous);
+      return ambiguous.view;
     }
     const completed = {
       ...submitted,
