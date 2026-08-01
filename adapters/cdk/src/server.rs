@@ -15,7 +15,7 @@ use crate::{
     AdapterCapabilities, capabilities,
     funded::{FundedCdkOperations, SendInput},
     funded_capabilities,
-    lifecycle::{LifecycleEngine, LifecycleInput},
+    lifecycle::{LifecycleEngine, LifecycleInput, LifecycleKind},
 };
 
 #[derive(Clone)]
@@ -34,6 +34,215 @@ struct ResetInput {
 #[derive(Serialize)]
 struct ResetOutput {
     ok: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum LifecycleStartInput {
+    Mint {
+        #[serde(rename = "operationId")]
+        operation_id: String,
+        mint: String,
+        unit: String,
+        amount: u64,
+        method: String,
+    },
+    Swap {
+        #[serde(rename = "operationId")]
+        operation_id: String,
+        mint: String,
+        unit: String,
+        amount: u64,
+    },
+    Send {
+        #[serde(rename = "operationId")]
+        operation_id: String,
+        mint: String,
+        unit: String,
+        amount: u64,
+        recipient: String,
+    },
+    Receive {
+        #[serde(rename = "operationId")]
+        operation_id: String,
+        mint: String,
+        unit: String,
+        token: String,
+    },
+    Melt {
+        #[serde(rename = "operationId")]
+        operation_id: String,
+        mint: String,
+        unit: String,
+        invoice: String,
+        #[serde(rename = "preferAsync")]
+        prefer_async: Option<bool>,
+    },
+    Restore {
+        #[serde(rename = "operationId")]
+        operation_id: String,
+        mint: String,
+        unit: String,
+    },
+    Reconcile {
+        #[serde(rename = "operationId")]
+        operation_id: String,
+        mint: String,
+        unit: String,
+        #[serde(rename = "targetOperationId")]
+        target_operation_id: String,
+    },
+}
+
+impl From<LifecycleStartInput> for LifecycleInput {
+    fn from(input: LifecycleStartInput) -> Self {
+        let (
+            operation_id,
+            kind,
+            mint,
+            unit,
+            amount,
+            method,
+            recipient,
+            secret,
+            prefer_async,
+            target_operation_id,
+        ) = match input {
+            LifecycleStartInput::Mint {
+                operation_id,
+                mint,
+                unit,
+                amount,
+                method,
+            } => (
+                operation_id,
+                LifecycleKind::Mint,
+                mint,
+                unit,
+                Some(amount),
+                Some(method),
+                None,
+                None,
+                None,
+                None,
+            ),
+            LifecycleStartInput::Swap {
+                operation_id,
+                mint,
+                unit,
+                amount,
+            } => (
+                operation_id,
+                LifecycleKind::Swap,
+                mint,
+                unit,
+                Some(amount),
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+            LifecycleStartInput::Send {
+                operation_id,
+                mint,
+                unit,
+                amount,
+                recipient,
+            } => (
+                operation_id,
+                LifecycleKind::Send,
+                mint,
+                unit,
+                Some(amount),
+                None,
+                Some(recipient),
+                None,
+                None,
+                None,
+            ),
+            LifecycleStartInput::Receive {
+                operation_id,
+                mint,
+                unit,
+                token,
+            } => (
+                operation_id,
+                LifecycleKind::Receive,
+                mint,
+                unit,
+                None,
+                None,
+                None,
+                Some(token),
+                None,
+                None,
+            ),
+            LifecycleStartInput::Melt {
+                operation_id,
+                mint,
+                unit,
+                invoice,
+                prefer_async,
+            } => (
+                operation_id,
+                LifecycleKind::Melt,
+                mint,
+                unit,
+                None,
+                None,
+                None,
+                Some(invoice),
+                prefer_async,
+                None,
+            ),
+            LifecycleStartInput::Restore {
+                operation_id,
+                mint,
+                unit,
+            } => (
+                operation_id,
+                LifecycleKind::Restore,
+                mint,
+                unit,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+            LifecycleStartInput::Reconcile {
+                operation_id,
+                mint,
+                unit,
+                target_operation_id,
+            } => (
+                operation_id,
+                LifecycleKind::Reconcile,
+                mint,
+                unit,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(target_operation_id),
+            ),
+        };
+        Self {
+            operation_id,
+            kind,
+            mint,
+            unit,
+            amount,
+            method,
+            recipient,
+            secret,
+            prefer_async,
+            target_operation_id,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -293,7 +502,7 @@ async fn lifecycle_reset(
 
 async fn lifecycle_start(
     State(state): State<Arc<AppState>>,
-    input: Result<Json<LifecycleInput>, JsonRejection>,
+    input: Result<Json<LifecycleStartInput>, JsonRejection>,
 ) -> Response {
     let Some(engine) = lifecycle_engine(&state) else {
         return not_applicable("Durable CDK lifecycle operations are not configured");
@@ -308,7 +517,7 @@ async fn lifecycle_start(
             );
         }
     };
-    match engine.start(input).await {
+    match engine.start(input.into()).await {
         Ok(operation) => (StatusCode::OK, Json(operation)).into_response(),
         Err(message) => lifecycle_error(&message),
     }

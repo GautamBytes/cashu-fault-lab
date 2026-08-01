@@ -15,14 +15,19 @@ use axum::{
 use bitcoin::hashes::{Hash, sha256};
 use cashu_fault_lab_cdk_adapter::{
     lifecycle::{
-        LifecycleBalances, LifecycleEngine, LifecycleEvidence, LifecycleExecution, LifecycleInput,
-        LifecycleKind, LifecyclePhase, LifecycleProofView, LifecycleRuntimeCapabilities,
-        LifecycleWalletPort, LifecycleWalletView, NativeCdkFacade, NativeCdkLifecycleWallet,
-        deterministic_exact_amount_plan, operation_bound_recovery_mechanisms,
+        FeeAwareProof, LifecycleBalances, LifecycleEngine, LifecycleEvidence, LifecycleExecution,
+        LifecycleInput, LifecycleKind, LifecyclePhase, LifecycleProofView,
+        LifecycleRuntimeCapabilities, LifecycleWalletPort, LifecycleWalletView, NativeCdkFacade,
+        NativeCdkLifecycleWallet, deterministic_exact_amount_plan,
+        deterministic_fee_aware_exact_amount_plan, exact_nut07_input_state,
+        garbage_collect_inactive_wallet_generations, operation_bound_recovery_mechanisms,
+        supports_nut19_swap_replay, swap_recovery_report_is_complete,
     },
     lifecycle_store::{LifecycleClock, LifecycleStore},
     server::router_with_lifecycle,
 };
+use cdk::nuts::State;
+use cdk::nuts::nut19::{CachedEndpoint, Method as Nut19Method, Path as Nut19Path};
 use tower::ServiceExt;
 
 static NEXT_DATABASE: AtomicUsize = AtomicUsize::new(0);
@@ -559,6 +564,51 @@ async fn reconcile_recovers_only_its_named_target_across_a_restart_boundary() {
 }
 
 #[tokio::test]
+async fn reconcile_dependency_cycle_is_rejected_without_waiting_on_claims() {
+    let path = database_path("reconcile-cycle");
+    let store = Arc::new(LifecycleStore::open(path, [44_u8; 32]).expect("open store"));
+    let engine = LifecycleEngine::new(store.clone(), Arc::new(RecordingWallet::default()));
+    let left_id = "WWWWWWWWWWWWWWWWWWWWWA";
+    let right_id = "XXXXXXXXXXXXXXXXXXXXXQ";
+    for (operation_id, target_operation_id) in [(left_id, right_id), (right_id, left_id)] {
+        let mut request = input(operation_id, LifecycleKind::Reconcile);
+        request.target_operation_id = Some(target_operation_id.to_owned());
+        let operation = cashu_fault_lab_cdk_adapter::lifecycle::LifecycleOperation {
+            operation_id: operation_id.to_owned(),
+            kind: LifecycleKind::Reconcile,
+            mint: request.mint.clone(),
+            unit: request.unit.clone(),
+            intent_hash: "a".repeat(64),
+            phase: LifecyclePhase::Submitted,
+            evidence_code: None,
+            amount: None,
+            input_fee: None,
+            fee_reserve: None,
+            actual_fee: None,
+            change: None,
+            request_hash: None,
+            quote_hash: None,
+            output_plan_hash: None,
+        };
+        let (_, token) = store
+            .create_and_claim(&request, &operation)
+            .expect("persist reconcile")
+            .expect("claim reconcile");
+        store.release(operation_id, token).expect("release claim");
+    }
+
+    let operation = tokio::time::timeout(Duration::from_secs(1), engine.resume(left_id))
+        .await
+        .expect("cycle detection must not deadlock")
+        .expect("resume cyclic reconcile");
+    assert_eq!(operation.phase, LifecyclePhase::FailedDefinitive);
+    assert_eq!(
+        operation.evidence_code.as_deref(),
+        Some("reconcile_dependency_cycle")
+    );
+}
+
+#[tokio::test]
 async fn repeated_start_recovers_every_existing_in_flight_phase() {
     let path = database_path("repeated-start");
     let wallet = Arc::new(RecordingWallet {
@@ -758,6 +808,7 @@ async fn successful_send_commits_a_recipient_bound_encrypted_outbox() {
             &handoff.operation_id,
             &handoff.token_hash,
             "delivery-worker",
+            handoff.claim_token,
         )
         .expect("ack handoff");
     assert!(
@@ -786,6 +837,52 @@ async fn successful_send_commits_a_recipient_bound_encrypted_outbox() {
             .windows(b"cashuA-encrypted-token-canary".len())
             .any(|value| value == b"cashuA-encrypted-token-canary")
     );
+}
+
+#[tokio::test]
+async fn expired_send_handoff_claim_is_reclaimed_with_a_new_fence() {
+    let path = database_path("send-outbox-lease");
+    let clock = Arc::new(ManualClock::new(10));
+    let store = Arc::new(
+        LifecycleStore::open_with_clock(&path, [43_u8; 32], clock.clone()).expect("open store"),
+    );
+    let engine = LifecycleEngine::new(store.clone(), Arc::new(OutboxWallet));
+    engine
+        .start(input("VVVVVVVVVVVVVVVVVVVVVA", LifecycleKind::Send))
+        .await
+        .expect("execute send");
+    let stale = store
+        .claim_send_handoff("crashed-worker")
+        .expect("claim handoff")
+        .expect("ready handoff");
+
+    clock.set(131);
+    let reclaimed = store
+        .claim_send_handoff("replacement-worker")
+        .expect("reclaim expired handoff")
+        .expect("expired handoff");
+    assert!(reclaimed.claim_token > stale.claim_token);
+    assert_eq!(
+        store.acknowledge_send_handoff(
+            &stale.operation_id,
+            &stale.token_hash,
+            "crashed-worker",
+            stale.claim_token,
+        ),
+        Err("lifecycle send handoff claim was lost".to_owned())
+    );
+    assert_eq!(
+        store.release_send_handoff(&stale.operation_id, "crashed-worker", stale.claim_token,),
+        Err("lifecycle send handoff claim was lost".to_owned())
+    );
+    store
+        .acknowledge_send_handoff(
+            &reclaimed.operation_id,
+            &reclaimed.token_hash,
+            "replacement-worker",
+            reclaimed.claim_token,
+        )
+        .expect("fenced replacement acknowledgement");
 }
 
 #[test]
@@ -944,6 +1041,17 @@ async fn injected_native_facade_binds_arguments_sanitizes_errors_and_recovers_qu
         NativeCdkLifecycleWallet::with_facade("http://127.0.0.1:3338", "sat", facade.clone())
             .expect("construct injected native wallet");
     let swap = input("MMMMMMMMMMMMMMMMMMMMMA", LifecycleKind::Swap);
+    let mut wrong_mint = swap.clone();
+    wrong_mint.mint = "http://127.0.0.1:4444".to_owned();
+    assert_eq!(
+        wallet
+            .prepare(&wrong_mint)
+            .await
+            .expect_err("policy must run before injected dependency")
+            .evidence_code(),
+        Some("mint_or_unit_not_configured")
+    );
+    assert!(facade.observed.lock().expect("observations").is_empty());
     let plan = wallet
         .prepare(&swap)
         .await
@@ -1036,6 +1144,36 @@ fn native_cdk_never_attributes_aggregate_saga_counts_to_receive() {
 }
 
 #[test]
+fn inactive_wallet_generation_and_sidecars_are_garbage_collected_after_crash() {
+    let base = database_path("generation-gc");
+    let active = PathBuf::from(format!("{}.generation-2", base.display()));
+    let stale_generation = PathBuf::from(format!("{}.generation-1", base.display()));
+    for path in [
+        base.clone(),
+        PathBuf::from(format!("{}-wal", base.display())),
+        PathBuf::from(format!("{}-shm", base.display())),
+        stale_generation.clone(),
+        PathBuf::from(format!("{}-wal", stale_generation.display())),
+        PathBuf::from(format!("{}-shm", stale_generation.display())),
+        active.clone(),
+        PathBuf::from(format!("{}-wal", active.display())),
+        PathBuf::from(format!("{}-shm", active.display())),
+    ] {
+        std::fs::write(path, b"generation").expect("create simulated crash artifact");
+    }
+
+    garbage_collect_inactive_wallet_generations(&base, 2).expect("collect inactive generations");
+
+    assert!(!base.exists());
+    assert!(!stale_generation.exists());
+    assert!(!PathBuf::from(format!("{}-wal", stale_generation.display())).exists());
+    assert!(!PathBuf::from(format!("{}-shm", stale_generation.display())).exists());
+    assert!(active.exists());
+    assert!(PathBuf::from(format!("{}-wal", active.display())).exists());
+    assert!(PathBuf::from(format!("{}-shm", active.display())).exists());
+}
+
+#[test]
 fn native_swap_plan_is_deterministic_and_exact_amount_bound() {
     let left = deterministic_exact_amount_plan(
         vec![
@@ -1063,6 +1201,86 @@ fn native_swap_plan_is_deterministic_and_exact_amount_bound() {
         deterministic_exact_amount_plan(vec![("proof".to_owned(), 8)], 7),
         None
     );
+
+    assert_eq!(
+        deterministic_exact_amount_plan(
+            vec![
+                ("proof-4".to_owned(), 4),
+                ("proof-3a".to_owned(), 3),
+                ("proof-3b".to_owned(), 3),
+            ],
+            6,
+        ),
+        Some(vec!["proof-3a".to_owned(), "proof-3b".to_owned()])
+    );
+}
+
+#[test]
+fn native_swap_plan_accounts_for_nonzero_nut02_input_fees() {
+    let plan = deterministic_fee_aware_exact_amount_plan(
+        vec![
+            FeeAwareProof {
+                id: "proof-4".to_owned(),
+                amount: 4,
+                input_fee_ppk: 500,
+            },
+            FeeAwareProof {
+                id: "proof-3".to_owned(),
+                amount: 3,
+                input_fee_ppk: 500,
+            },
+        ],
+        6,
+    )
+    .expect("bounded search")
+    .expect("fee-aware plan");
+
+    assert_eq!(plan.proof_ids, vec!["proof-4", "proof-3"]);
+    assert_eq!(plan.gross_input, 7);
+    assert_eq!(plan.input_fee, 1);
+    assert_eq!(plan.net_output, 6);
+    assert_eq!(plan.net_output + plan.input_fee, plan.gross_input);
+}
+
+#[test]
+fn native_swap_recovery_rejects_vacuous_truncated_and_mismatched_nut07() {
+    let expected = vec!["y-a".to_owned(), "y-b".to_owned()];
+
+    assert_eq!(
+        exact_nut07_input_state(&expected, &[]),
+        Err("swap_input_state_unbound")
+    );
+    assert_eq!(
+        exact_nut07_input_state(&expected, &[("y-a".to_owned(), State::Spent)]),
+        Err("swap_input_state_unbound")
+    );
+    assert_eq!(
+        exact_nut07_input_state(
+            &expected,
+            &[
+                ("y-a".to_owned(), State::Spent),
+                ("y-c".to_owned(), State::Spent),
+            ],
+        ),
+        Err("swap_input_state_unbound")
+    );
+    assert_eq!(
+        exact_nut07_input_state(
+            &expected,
+            &[
+                ("y-b".to_owned(), State::Spent),
+                ("y-a".to_owned(), State::Spent),
+            ],
+        ),
+        Ok(State::Spent)
+    );
+}
+
+#[test]
+fn native_swap_recovery_blocks_skipped_or_failed_saga_reports() {
+    assert!(swap_recovery_report_is_complete(0, 0));
+    assert!(!swap_recovery_report_is_complete(1, 0));
+    assert!(!swap_recovery_report_is_complete(0, 1));
 }
 
 #[test]
@@ -1081,6 +1299,18 @@ fn proof_state_is_advertised_only_for_an_operation_bound_recovery() {
         operation_bound_recovery_mechanisms(&["swap", "reconcile"], false, true, false, false,)
             .contains(&"proof_state")
     );
+}
+
+#[test]
+fn nut19_replay_is_advertised_only_for_the_swap_endpoint() {
+    assert!(!supports_nut19_swap_replay(&[CachedEndpoint::new(
+        Nut19Method::Post,
+        Nut19Path::Custom("/v1/melt/bolt11".to_owned()),
+    )]));
+    assert!(supports_nut19_swap_replay(&[CachedEndpoint::new(
+        Nut19Method::Post,
+        Nut19Path::Swap,
+    )]));
 }
 
 #[tokio::test]
@@ -1449,4 +1679,73 @@ async fn lifecycle_routes_are_authenticated_and_contract_shaped() {
         .await
         .expect("response");
     assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn lifecycle_http_matches_the_discriminated_shared_contract() {
+    let path = database_path("http-discriminated-contract");
+    let store = Arc::new(LifecycleStore::open(path, [28_u8; 32]).expect("open lifecycle store"));
+    let engine = Arc::new(LifecycleEngine::new(
+        store,
+        Arc::new(RecordingWallet::default()),
+    ));
+    let app = router_with_lifecycle("control-token", None, Some(engine)).expect("build router");
+
+    for body in [
+        r#"{"operationId":"RRRRRRRRRRRRRRRRRRRRRA","kind":"receive","mint":"http://127.0.0.1:3338","unit":"sat","invoice":"lnbc-wrong-field"}"#.to_owned(),
+        r#"{"operationId":"MMMMMMMMMMMMMMMMMMMMMA","kind":"melt","mint":"http://127.0.0.1:3338","unit":"sat","token":"cashu-wrong-field"}"#.to_owned(),
+        r#"{"operationId":"SSSSSSSSSSSSSSSSSSSSSA","kind":"swap","mint":"http://127.0.0.1:3338/","unit":"sat","amount":8}"#.to_owned(),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/lifecycle/operations")
+                    .header("authorization", "Bearer control-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    let reset = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/lifecycle/reset")
+                .header("authorization", "Bearer control-token")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"seed":"seed","unknown":true}"#))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(reset.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let unicode_invoice = "💳".repeat(10_000);
+    let body = serde_json::json!({
+        "operationId": "UUUUUUUUUUUUUUUUUUUUUA",
+        "kind": "melt",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat",
+        "invoice": unicode_invoice,
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/lifecycle/operations")
+                .header("authorization", "Bearer control-token")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
 }

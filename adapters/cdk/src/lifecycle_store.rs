@@ -17,6 +17,7 @@ pub struct ClaimedSendHandoff {
     pub recipient: String,
     pub token: String,
     pub token_hash: String,
+    pub claim_token: u64,
 }
 
 /// SQLCipher-backed lifecycle journal. Secret request material, quote IDs, and tokens are only
@@ -88,6 +89,8 @@ impl LifecycleStore {
                    token BLOB NOT NULL,
                    token_hash TEXT NOT NULL,
                    claimed_by TEXT,
+                   claimed_until INTEGER NOT NULL DEFAULT 0,
+                   claim_token INTEGER NOT NULL DEFAULT 0,
                    acknowledged INTEGER NOT NULL DEFAULT 0,
                    FOREIGN KEY(operation_id) REFERENCES lifecycle_operations(operation_id)
                      ON DELETE CASCADE
@@ -135,6 +138,22 @@ impl LifecycleStore {
                 )
                 .map_err(|_| "lifecycle claim migration failed")?;
         }
+        if !table_has_column(&connection, "lifecycle_send_outbox", "claimed_until")? {
+            connection
+                .execute(
+                    "ALTER TABLE lifecycle_send_outbox ADD COLUMN claimed_until INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )
+                .map_err(|_| "lifecycle send handoff migration failed")?;
+        }
+        if !table_has_column(&connection, "lifecycle_send_outbox", "claim_token")? {
+            connection
+                .execute(
+                    "ALTER TABLE lifecycle_send_outbox ADD COLUMN claim_token INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )
+                .map_err(|_| "lifecycle send handoff migration failed")?;
+        }
         connection
             .execute("DELETE FROM lifecycle_metadata WHERE name = 'seed'", [])
             .map_err(|_| "legacy lifecycle seed removal failed")?;
@@ -148,7 +167,7 @@ impl LifecycleStore {
     }
 
     pub fn reset(&self, seed: &str, generation: u64, token: u64) -> Result<(), String> {
-        if seed.is_empty() || seed.len() > 256 {
+        if seed.is_empty() || seed.chars().count() > 256 {
             return Err("lifecycle seed is invalid".to_owned());
         }
         let seed_hash = lifecycle_seed_hash(seed);
@@ -593,6 +612,8 @@ impl LifecycleStore {
         if consumer_id.is_empty() || consumer_id.len() > 128 {
             return Err("lifecycle send handoff consumer is invalid".to_owned());
         }
+        let now = self.clock.now()?;
+        let claimed_until = now.saturating_add(CLAIM_LEASE_SECONDS);
         let connection = self.lock()?;
         let transaction = connection
             .unchecked_transaction()
@@ -601,9 +622,10 @@ impl LifecycleStore {
             .query_row(
                 "SELECT operation_id, recipient, token, token_hash
                  FROM lifecycle_send_outbox
-                 WHERE acknowledged = 0 AND (claimed_by IS NULL OR claimed_by = ?1)
+                 WHERE acknowledged = 0
+                   AND (claimed_by IS NULL OR claimed_until <= ?2 OR claimed_by = ?1)
                  ORDER BY operation_id LIMIT 1",
-                [consumer_id],
+                params![consumer_id, now],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
@@ -611,12 +633,14 @@ impl LifecycleStore {
         let Some((operation_id, recipient, token, token_hash)) = row else {
             return Ok(None);
         };
+        let claim_token = next_fencing_token(&transaction)?;
         let changed = transaction
             .execute(
-                "UPDATE lifecycle_send_outbox SET claimed_by = ?2
+                "UPDATE lifecycle_send_outbox
+                 SET claimed_by = ?2, claimed_until = ?3, claim_token = ?5
                  WHERE operation_id = ?1 AND acknowledged = 0
-                   AND (claimed_by IS NULL OR claimed_by = ?2)",
-                params![operation_id, consumer_id],
+                   AND (claimed_by IS NULL OR claimed_until <= ?4 OR claimed_by = ?2)",
+                params![operation_id, consumer_id, claimed_until, now, claim_token],
             )
             .map_err(|_| "lifecycle send handoff claim failed")?;
         if changed != 1 {
@@ -635,6 +659,7 @@ impl LifecycleStore {
             recipient,
             token,
             token_hash,
+            claim_token,
         }))
     }
 
@@ -643,18 +668,43 @@ impl LifecycleStore {
         operation_id: &str,
         token_hash: &str,
         consumer_id: &str,
+        claim_token: u64,
     ) -> Result<(), String> {
+        let now = self.clock.now()?;
         let connection = self.lock()?;
         let changed = connection
             .execute(
                 "UPDATE lifecycle_send_outbox SET acknowledged = 1
                  WHERE operation_id = ?1 AND token_hash = ?2 AND claimed_by = ?3
-                   AND acknowledged = 0",
-                params![operation_id, token_hash, consumer_id],
+                   AND claim_token = ?4 AND claimed_until > ?5 AND acknowledged = 0",
+                params![operation_id, token_hash, consumer_id, claim_token, now],
             )
             .map_err(|_| "lifecycle send handoff acknowledgement failed")?;
         if changed != 1 {
-            return Err("lifecycle send handoff claim conflicts".to_owned());
+            return Err("lifecycle send handoff claim was lost".to_owned());
+        }
+        Ok(())
+    }
+
+    pub fn release_send_handoff(
+        &self,
+        operation_id: &str,
+        consumer_id: &str,
+        claim_token: u64,
+    ) -> Result<(), String> {
+        let now = self.clock.now()?;
+        let connection = self.lock()?;
+        let changed = connection
+            .execute(
+                "UPDATE lifecycle_send_outbox
+                 SET claimed_by = NULL, claimed_until = 0
+                 WHERE operation_id = ?1 AND claimed_by = ?2 AND claim_token = ?3
+                   AND claimed_until > ?4 AND acknowledged = 0",
+                params![operation_id, consumer_id, claim_token, now],
+            )
+            .map_err(|_| "lifecycle send handoff release failed")?;
+        if changed != 1 {
+            return Err("lifecycle send handoff claim was lost".to_owned());
         }
         Ok(())
     }
@@ -709,6 +759,18 @@ fn reset_claim_active(connection: &Connection, now: u64) -> Result<bool, String>
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .and_then(|value| value.parse::<u64>().ok())
         .is_some_and(|claimed_until| claimed_until > now))
+}
+
+fn table_has_column(connection: &Connection, table: &str, column: &str) -> Result<bool, String> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|_| "lifecycle database migration failed")?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|_| "lifecycle database migration failed")?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "lifecycle database migration failed")?;
+    Ok(columns.iter().any(|candidate| candidate == column))
 }
 
 fn next_fencing_token(connection: &Connection) -> Result<u64, String> {

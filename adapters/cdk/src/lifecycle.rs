@@ -262,6 +262,11 @@ impl LifecycleExecution {
         self
     }
 
+    pub fn with_input_fee(mut self, input_fee: u64) -> Self {
+        self.input_fee = Some(input_fee);
+        self
+    }
+
     fn failure(phase: LifecyclePhase, code: &'static str) -> Self {
         Self {
             phase,
@@ -345,6 +350,9 @@ impl LifecycleEngine {
     }
 
     pub async fn reset(&self, seed: &str) -> Result<(), String> {
+        if seed.is_empty() || seed.chars().count() > 256 {
+            return Err("lifecycle seed is invalid".to_owned());
+        }
         let _exclusive = self.operation_gate.write().await;
         let token = loop {
             if let Some(token) = self.store.try_claim_reset()? {
@@ -559,6 +567,13 @@ impl LifecycleEngine {
         let Some(target) = input.target_operation_id.as_deref() else {
             return LifecycleExecution::failed_definitive("reconcile_target_missing");
         };
+        match self.reconcile_dependency_cycle(input) {
+            Ok(true) => {
+                return LifecycleExecution::failed_definitive("reconcile_dependency_cycle");
+            }
+            Ok(false) => {}
+            Err(code) => return LifecycleExecution::recovery_blocked(code),
+        }
         match Box::pin(self.run(target, true)).await {
             Ok(operation) => match operation.phase {
                 LifecyclePhase::Succeeded => {
@@ -574,6 +589,29 @@ impl LifecycleEngine {
             },
             Err(_) => LifecycleExecution::recovery_blocked("target_recovery_unavailable"),
         }
+    }
+
+    fn reconcile_dependency_cycle(&self, input: &LifecycleInput) -> Result<bool, &'static str> {
+        let Some(mut cursor) = input.target_operation_id.clone() else {
+            return Ok(false);
+        };
+        let mut visited = std::collections::HashSet::from([input.operation_id.clone()]);
+        for _ in 0..10_000 {
+            if !visited.insert(cursor.clone()) {
+                return Ok(true);
+            }
+            let Ok(target) = self.store.input(&cursor) else {
+                return Ok(false);
+            };
+            if target.kind != LifecycleKind::Reconcile {
+                return Ok(false);
+            }
+            let Some(next) = target.target_operation_id else {
+                return Ok(false);
+            };
+            cursor = next;
+        }
+        Err("reconcile_dependency_bound_exceeded")
     }
 
     fn finish_execution(
@@ -610,9 +648,6 @@ impl LifecycleEngine {
 
 fn validate_input(input: &LifecycleInput) -> Result<(), String> {
     validate_operation_id(&input.operation_id)?;
-    if input.mint.len() > 2048 {
-        return Err("lifecycle mint URL is invalid".to_owned());
-    }
     if canonical_mint_url(&input.mint)? != input.mint {
         return Err("lifecycle mint URL is invalid".to_owned());
     }
@@ -681,7 +716,7 @@ fn validate_input(input: &LifecycleInput) -> Result<(), String> {
             if input
                 .secret
                 .as_ref()
-                .is_none_or(|secret| secret.is_empty() || secret.len() > 262_144)
+                .is_none_or(|secret| secret.is_empty() || secret.chars().count() > 262_144)
                 || input.amount.is_some()
                 || input.method.is_some()
                 || input.recipient.is_some()
@@ -695,7 +730,7 @@ fn validate_input(input: &LifecycleInput) -> Result<(), String> {
             if input
                 .secret
                 .as_ref()
-                .is_none_or(|secret| secret.is_empty() || secret.len() > 16_384)
+                .is_none_or(|secret| secret.is_empty() || secret.chars().count() > 16_384)
                 || input.amount.is_some()
                 || input.method.is_some()
                 || input.recipient.is_some()
@@ -833,22 +868,139 @@ fn evidence_hash(operation: &LifecycleOperation) -> String {
 }
 
 pub fn deterministic_exact_amount_plan(
-    mut proofs: Vec<(String, u64)>,
+    proofs: Vec<(String, u64)>,
     amount: u64,
 ) -> Option<Vec<String>> {
-    proofs.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
-    let mut remaining = amount;
-    let mut selected = Vec::new();
-    for (proof_id, proof_amount) in proofs {
-        if proof_amount <= remaining {
-            remaining -= proof_amount;
-            selected.push(proof_id);
-        }
-        if remaining == 0 {
-            return Some(selected);
+    deterministic_fee_aware_exact_amount_plan(
+        proofs
+            .into_iter()
+            .map(|(id, amount)| FeeAwareProof {
+                id,
+                amount,
+                input_fee_ppk: 0,
+            })
+            .collect(),
+        amount,
+    )
+    .ok()
+    .flatten()
+    .map(|plan| plan.proof_ids)
+}
+
+const MAX_SWAP_PLAN_PROOFS: usize = 10_000;
+const MAX_SWAP_PLAN_STATES: usize = 250_000;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeAwareProof {
+    pub id: String,
+    pub amount: u64,
+    pub input_fee_ppk: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeAwareExactAmountPlan {
+    pub proof_ids: Vec<String>,
+    pub gross_input: u64,
+    pub input_fee: u64,
+    pub net_output: u64,
+}
+
+/// Finds an exact NUT-02 plan within the lifecycle proof and search-state bounds.
+///
+/// The requested amount is the net value returned by the swap. A valid plan therefore satisfies
+/// `gross_input == net_output + ceil(sum(input_fee_ppk) / 1000)`.
+pub fn deterministic_fee_aware_exact_amount_plan(
+    mut proofs: Vec<FeeAwareProof>,
+    net_output: u64,
+) -> Result<Option<FeeAwareExactAmountPlan>, &'static str> {
+    if proofs.len() > MAX_SWAP_PLAN_PROOFS {
+        return Err("wallet_proof_limit_exceeded");
+    }
+    proofs.sort_by(|left, right| {
+        right
+            .amount
+            .cmp(&left.amount)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    let maximum_fee_ppk = proofs
+        .iter()
+        .try_fold(0_u64, |sum, proof| sum.checked_add(proof.input_fee_ppk));
+    let Some(maximum_fee_ppk) = maximum_fee_ppk else {
+        return Err("swap_plan_value_overflow");
+    };
+    let maximum_fee = maximum_fee_ppk.saturating_add(999) / 1_000;
+    let maximum_gross = net_output
+        .checked_add(maximum_fee)
+        .ok_or("swap_plan_value_overflow")?;
+    let mut plans = std::collections::BTreeMap::from([((0_u64, 0_u64), Vec::new())]);
+
+    for proof in proofs {
+        let prior = plans
+            .iter()
+            .map(|(state, selected)| (*state, selected.clone()))
+            .collect::<Vec<_>>();
+        for ((gross_input, fee_ppk), mut selected) in prior {
+            let Some(next_gross) = gross_input.checked_add(proof.amount) else {
+                continue;
+            };
+            let Some(next_fee_ppk) = fee_ppk.checked_add(proof.input_fee_ppk) else {
+                continue;
+            };
+            if next_gross > maximum_gross || plans.contains_key(&(next_gross, next_fee_ppk)) {
+                continue;
+            }
+            selected.push(proof.id.clone());
+            let input_fee = next_fee_ppk.saturating_add(999) / 1_000;
+            if next_gross == net_output.saturating_add(input_fee) {
+                return Ok(Some(FeeAwareExactAmountPlan {
+                    proof_ids: selected,
+                    gross_input: next_gross,
+                    input_fee,
+                    net_output,
+                }));
+            }
+            plans.insert((next_gross, next_fee_ppk), selected);
+            if plans.len() > MAX_SWAP_PLAN_STATES {
+                return Err("swap_plan_search_bound_exceeded");
+            }
         }
     }
-    None
+
+    Ok(None)
+}
+
+pub fn exact_nut07_input_state(
+    expected_ys: &[String],
+    observed: &[(String, State)],
+) -> Result<State, &'static str> {
+    if expected_ys.is_empty() || observed.len() != expected_ys.len() {
+        return Err("swap_input_state_unbound");
+    }
+    let expected = expected_ys
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::HashSet<_>>();
+    let observed_ys = observed
+        .iter()
+        .map(|(y, _)| y.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    if expected.len() != expected_ys.len()
+        || observed_ys.len() != observed.len()
+        || expected != observed_ys
+    {
+        return Err("swap_input_state_unbound");
+    }
+    let state = observed[0].1;
+    if !matches!(state, State::Spent | State::Unspent)
+        || observed.iter().any(|(_, observed)| *observed != state)
+    {
+        return Err("swap_input_state_conflict");
+    }
+    Ok(state)
+}
+
+pub const fn swap_recovery_report_is_complete(skipped: usize, failed: usize) -> bool {
+    skipped == 0 && failed == 0
 }
 
 pub fn operation_bound_recovery_mechanisms(
@@ -878,19 +1030,90 @@ pub fn operation_bound_recovery_mechanisms(
     recovery
 }
 
-fn select_exact_proofs(proofs: Proofs, amount: u64) -> Option<Proofs> {
+pub fn supports_nut19_swap_replay(endpoints: &[cdk::nuts::nut19::CachedEndpoint]) -> bool {
+    endpoints.iter().any(|endpoint| {
+        endpoint.method == cdk::nuts::nut19::Method::Post
+            && endpoint.path == cdk::nuts::nut19::Path::Swap
+    })
+}
+
+async fn select_exact_proofs(
+    wallet: &Wallet,
+    proofs: Proofs,
+    net_output: u64,
+) -> Result<Option<(Proofs, FeeAwareExactAmountPlan)>, &'static str> {
     let mut by_id = HashMap::new();
     let mut summaries = Vec::with_capacity(proofs.len());
     for proof in proofs {
-        let id = proof.y().ok()?.to_string();
-        summaries.push((id.clone(), proof.amount.to_u64()));
+        let id = proof
+            .y()
+            .map_err(|_| "wallet_proof_identifier_invalid")?
+            .to_string();
+        let input_fee_ppk = wallet
+            .get_keyset_fees_by_id(proof.keyset_id)
+            .await
+            .map_err(|_| "wallet_keyset_fee_unavailable")?;
+        summaries.push(FeeAwareProof {
+            id: id.clone(),
+            amount: proof.amount.to_u64(),
+            input_fee_ppk,
+        });
         by_id.insert(id, proof);
     }
-    deterministic_exact_amount_plan(summaries, amount).map(|plan| {
-        plan.into_iter()
-            .filter_map(|id| by_id.remove(&id))
-            .collect()
-    })
+    let Some(plan) = deterministic_fee_aware_exact_amount_plan(summaries, net_output)? else {
+        return Ok(None);
+    };
+    let selected = plan
+        .proof_ids
+        .iter()
+        .filter_map(|id| by_id.remove(id))
+        .collect::<Proofs>();
+    if selected.len() != plan.proof_ids.len() {
+        return Err("wallet_proof_identifier_conflict");
+    }
+    Ok(Some((selected, plan)))
+}
+
+async fn correlated_swap_outputs(
+    wallet: &Wallet,
+    prior_unspent_ys: &[String],
+    net_output: u64,
+) -> Result<Vec<String>, &'static str> {
+    let prior = prior_unspent_ys
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::HashSet<_>>();
+    if prior.len() != prior_unspent_ys.len() {
+        return Err("swap_output_correlation_invalid");
+    }
+    let current = wallet
+        .get_unspent_proofs()
+        .await
+        .map_err(|_| "swap_output_state_unavailable")?;
+    let mut outputs = Vec::new();
+    let mut output_ids = std::collections::HashSet::new();
+    let mut observed_output = 0_u64;
+    for proof in current {
+        let y = proof
+            .y()
+            .map_err(|_| "swap_output_correlation_invalid")?
+            .to_string();
+        if prior.contains(y.as_str()) {
+            continue;
+        }
+        if !output_ids.insert(y.clone()) {
+            return Err("swap_output_correlation_invalid");
+        }
+        observed_output = observed_output
+            .checked_add(proof.amount.to_u64())
+            .ok_or("swap_output_value_overflow")?;
+        outputs.push(y);
+    }
+    if outputs.is_empty() || observed_output != net_output {
+        return Err("swap_output_value_conflict");
+    }
+    outputs.sort();
+    Ok(outputs)
 }
 
 fn remove_wallet_files(path: &std::path::Path) -> Result<(), &'static str> {
@@ -908,6 +1131,48 @@ fn remove_wallet_files(path: &std::path::Path) -> Result<(), &'static str> {
     Ok(())
 }
 
+pub fn garbage_collect_inactive_wallet_generations(
+    database_path: &std::path::Path,
+    active_generation: u64,
+) -> Result<(), &'static str> {
+    let parent = database_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let Some(base_name) = database_path.file_name().and_then(|name| name.to_str()) else {
+        return Err("wallet_database_gc_failed");
+    };
+    let active_name = if active_generation == 0 {
+        base_name.to_owned()
+    } else {
+        format!("{base_name}.generation-{active_generation}")
+    };
+    let entries = std::fs::read_dir(parent).map_err(|_| "wallet_database_gc_failed")?;
+    for entry in entries {
+        let entry = entry.map_err(|_| "wallet_database_gc_failed")?;
+        let file_type = entry.file_type().map_err(|_| "wallet_database_gc_failed")?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        let stem = name
+            .strip_suffix("-wal")
+            .or_else(|| name.strip_suffix("-shm"))
+            .unwrap_or(&name);
+        let is_generation = stem == base_name
+            || stem
+                .strip_prefix(&format!("{base_name}.generation-"))
+                .is_some_and(|generation| {
+                    !generation.is_empty() && generation.bytes().all(|byte| byte.is_ascii_digit())
+                });
+        if is_generation && stem != active_name {
+            std::fs::remove_file(entry.path()).map_err(|_| "wallet_database_gc_failed")?;
+        }
+    }
+    Ok(())
+}
+
 /// Native CDK 0.17 wallet implementation. CDK's default mint connector disables redirects and
 /// its saga recovery APIs are used on resume; no TypeScript wallet code is involved.
 pub struct NativeCdkLifecycleWallet {
@@ -918,6 +1183,7 @@ pub struct NativeCdkLifecycleWallet {
     wallet: Mutex<Option<Arc<Wallet>>>,
     reset_previous: Mutex<Option<Arc<Wallet>>>,
     reset_new_path: Mutex<Option<PathBuf>>,
+    reset_generation: Mutex<Option<u64>>,
     facade: Option<Arc<dyn NativeCdkFacade>>,
 }
 
@@ -949,8 +1215,13 @@ pub trait NativeCdkFacade: Send + Sync {
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum NativePreparedPlan {
     Swap {
-        amount: u64,
+        net_output: u64,
+        gross_input: u64,
+        input_fee: u64,
         proofs: Proofs,
+        prior_unspent_ys: Vec<String>,
+        #[serde(default)]
+        output_ys: Vec<String>,
     },
     Send {
         amount: u64,
@@ -1017,6 +1288,7 @@ impl NativeCdkLifecycleWallet {
             wallet: Mutex::new(None),
             reset_previous: Mutex::new(None),
             reset_new_path: Mutex::new(None),
+            reset_generation: Mutex::new(None),
             facade: None,
         })
     }
@@ -1052,6 +1324,7 @@ impl NativeCdkLifecycleWallet {
         let path = self.path_for_generation(generation);
         let wallet = self.initialize_at(seed, path).await?;
         *self.wallet.lock().await = Some(wallet);
+        garbage_collect_inactive_wallet_generations(&self.database_path, generation)?;
         Ok(())
     }
 
@@ -1115,11 +1388,22 @@ impl NativeCdkLifecycleWallet {
             .get_unspent_proofs()
             .await
             .map_err(|_| LifecycleExecution::recovery_blocked("wallet_proof_query_failed"))?;
-        let selected = select_exact_proofs(proofs, amount)
+        let prior_unspent_ys = proofs
+            .iter()
+            .map(|proof| proof.y().map(|y| y.to_string()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| LifecycleExecution::recovery_blocked("wallet_proof_identifier_invalid"))?;
+        let (selected, value_plan) = select_exact_proofs(wallet, proofs, amount)
+            .await
+            .map_err(LifecycleExecution::recovery_blocked)?
             .ok_or_else(|| LifecycleExecution::failed_definitive("exact_swap_plan_unavailable"))?;
         serde_json::to_vec(&NativePreparedPlan::Swap {
-            amount,
+            net_output: value_plan.net_output,
+            gross_input: value_plan.gross_input,
+            input_fee: value_plan.input_fee,
             proofs: selected,
+            prior_unspent_ys,
+            output_ys: Vec::new(),
         })
         .map_err(|_| LifecycleExecution::recovery_blocked("swap_plan_encoding_failed"))
     }
@@ -1186,15 +1470,69 @@ impl NativeCdkLifecycleWallet {
             Err(_) => return LifecycleExecution::recovery_blocked("operation_plan_invalid"),
         };
         match (request.kind, plan) {
-            (LifecycleKind::Swap, NativePreparedPlan::Swap { amount, proofs })
-                if request.amount == Some(amount) =>
+            (
+                LifecycleKind::Swap,
+                NativePreparedPlan::Swap {
+                    net_output,
+                    gross_input,
+                    input_fee,
+                    proofs,
+                    prior_unspent_ys,
+                    output_ys: _,
+                },
+            ) if request.amount == Some(net_output)
+                && net_output.checked_add(input_fee) == Some(gross_input)
+                && proofs
+                    .iter()
+                    .try_fold(0_u64, |sum, proof| sum.checked_add(proof.amount.to_u64()))
+                    == Some(gross_input) =>
             {
+                match wallet.get_proofs_fee(&proofs).await {
+                    Ok(fee) if fee.total.to_u64() == input_fee => {}
+                    Ok(_) => {
+                        return LifecycleExecution::recovery_blocked("swap_input_fee_conflict")
+                            .with_private_material(material.to_vec());
+                    }
+                    Err(_) => {
+                        return LifecycleExecution::recovery_blocked("swap_input_fee_unavailable")
+                            .with_private_material(material.to_vec());
+                    }
+                }
                 match wallet
-                    .swap(None, SplitTarget::default(), proofs, None, false, false)
+                    .swap(
+                        None,
+                        SplitTarget::default(),
+                        proofs.clone(),
+                        None,
+                        false,
+                        false,
+                    )
                     .await
                 {
-                    Ok(None) => LifecycleExecution::succeeded(Some(amount), "swap_observed")
-                        .with_private_material(material.to_vec()),
+                    Ok(None) => {
+                        let output_ys =
+                            match correlated_swap_outputs(wallet, &prior_unspent_ys, net_output)
+                                .await
+                            {
+                                Ok(output_ys) => output_ys,
+                                Err(code) => {
+                                    return LifecycleExecution::recovery_blocked(code)
+                                        .with_private_material(material.to_vec());
+                                }
+                            };
+                        let material = serde_json::to_vec(&NativePreparedPlan::Swap {
+                            net_output,
+                            gross_input,
+                            input_fee,
+                            proofs,
+                            prior_unspent_ys,
+                            output_ys,
+                        })
+                        .unwrap_or_else(|_| material.to_vec());
+                        LifecycleExecution::succeeded(Some(net_output), "swap_observed")
+                            .with_input_fee(input_fee)
+                            .with_private_material(material)
+                    }
                     Ok(Some(_)) => LifecycleExecution::recovery_blocked("swap_plan_conflict")
                         .with_private_material(material.to_vec()),
                     Err(_) => LifecycleExecution::ambiguous("swap_response_ambiguous")
@@ -1269,25 +1607,98 @@ impl NativeCdkLifecycleWallet {
             Err(_) => return LifecycleExecution::recovery_blocked("operation_plan_invalid"),
         };
         match plan {
-            NativePreparedPlan::Swap { amount, proofs }
-                if request.kind == LifecycleKind::Swap && request.amount == Some(amount) =>
+            NativePreparedPlan::Swap {
+                net_output,
+                gross_input,
+                input_fee,
+                proofs,
+                prior_unspent_ys,
+                output_ys,
+                ..
+            } if request.kind == LifecycleKind::Swap
+                && request.amount == Some(net_output)
+                && net_output.checked_add(input_fee) == Some(gross_input)
+                && proofs
+                    .iter()
+                    .try_fold(0_u64, |sum, proof| sum.checked_add(proof.amount.to_u64()))
+                    == Some(gross_input) =>
             {
-                if wallet.recover_incomplete_sagas().await.is_err() {
-                    return LifecycleExecution::recovery_blocked("wallet_saga_recovery_failed")
+                match wallet.get_proofs_fee(&proofs).await {
+                    Ok(fee) if fee.total.to_u64() == input_fee => {}
+                    Ok(_) => {
+                        return LifecycleExecution::recovery_blocked("swap_input_fee_conflict")
+                            .with_private_material(material.to_vec());
+                    }
+                    Err(_) => {
+                        return LifecycleExecution::recovery_blocked("swap_input_fee_unavailable")
+                            .with_private_material(material.to_vec());
+                    }
+                }
+                let report = match wallet.recover_incomplete_sagas().await {
+                    Ok(report) => report,
+                    Err(_) => {
+                        return LifecycleExecution::recovery_blocked("wallet_saga_recovery_failed")
+                            .with_private_material(material.to_vec());
+                    }
+                };
+                if !swap_recovery_report_is_complete(report.skipped, report.failed) {
+                    return LifecycleExecution::recovery_blocked("wallet_saga_recovery_incomplete")
                         .with_private_material(material.to_vec());
                 }
-                match wallet.check_proofs_spent(proofs).await {
-                    Ok(states) if states.iter().all(|proof| proof.state == State::Spent) => {
-                        LifecycleExecution::succeeded(Some(amount), "swap_reconciled")
+                let expected_ys = match proofs
+                    .iter()
+                    .map(|proof| proof.y().map(|y| y.to_string()))
+                    .collect::<Result<Vec<_>, _>>()
+                {
+                    Ok(expected_ys) => expected_ys,
+                    Err(_) => {
+                        return LifecycleExecution::recovery_blocked(
+                            "swap_input_identifier_invalid",
+                        )
+                        .with_private_material(material.to_vec());
+                    }
+                };
+                let states = match wallet.check_proofs_spent(proofs).await {
+                    Ok(states) => states
+                        .into_iter()
+                        .map(|proof| (proof.y.to_string(), proof.state))
+                        .collect::<Vec<_>>(),
+                    Err(_) => {
+                        return LifecycleExecution::recovery_blocked(
+                            "swap_input_state_unavailable",
+                        )
+                        .with_private_material(material.to_vec());
+                    }
+                };
+                match exact_nut07_input_state(&expected_ys, &states) {
+                    Ok(State::Spent) => {
+                        let correlated =
+                            match correlated_swap_outputs(wallet, &prior_unspent_ys, net_output)
+                                .await
+                            {
+                                Ok(correlated) => correlated,
+                                Err(code) => {
+                                    return LifecycleExecution::recovery_blocked(code)
+                                        .with_private_material(material.to_vec());
+                                }
+                            };
+                        if !output_ys.is_empty() && output_ys != correlated {
+                            return LifecycleExecution::recovery_blocked(
+                                "swap_output_correlation_conflict",
+                            )
+                            .with_private_material(material.to_vec());
+                        }
+                        LifecycleExecution::succeeded(Some(net_output), "swap_reconciled")
+                            .with_input_fee(input_fee)
                             .with_private_material(material.to_vec())
                     }
-                    Ok(states) if states.iter().all(|proof| proof.state == State::Unspent) => {
+                    Ok(State::Unspent) => {
                         LifecycleExecution::failed_definitive("swap_inputs_unspent")
                             .with_private_material(material.to_vec())
                     }
                     Ok(_) => LifecycleExecution::recovery_blocked("swap_input_state_conflict")
                         .with_private_material(material.to_vec()),
-                    Err(_) => LifecycleExecution::recovery_blocked("swap_input_state_unavailable")
+                    Err(code) => LifecycleExecution::recovery_blocked(code)
                         .with_private_material(material.to_vec()),
                 }
             }
@@ -1488,6 +1899,7 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         let previous = self.wallet.lock().await.replace(next);
         *self.reset_previous.lock().await = previous;
         *self.reset_new_path.lock().await = Some(path);
+        *self.reset_generation.lock().await = Some(generation);
         Ok(())
     }
 
@@ -1500,6 +1912,7 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         }
         let previous = self.reset_previous.lock().await.take();
         let new_path = self.reset_new_path.lock().await.take();
+        self.reset_generation.lock().await.take();
         *self.wallet.lock().await = previous;
         if let Some(path) = new_path {
             remove_wallet_files(&path)?;
@@ -1516,23 +1929,34 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         }
         self.reset_previous.lock().await.take();
         self.reset_new_path.lock().await.take();
-        Ok(())
+        let generation = self
+            .reset_generation
+            .lock()
+            .await
+            .take()
+            .ok_or("wallet_database_gc_failed")?;
+        garbage_collect_inactive_wallet_generations(&self.database_path, generation)
     }
 
     async fn prepare(
         &self,
         request: &LifecycleInput,
     ) -> Result<Option<Vec<u8>>, LifecycleExecution> {
-        if let Some(facade) = self.facade.as_ref() {
-            return facade
-                .prepare(request)
-                .await
-                .map_err(|_| LifecycleExecution::recovery_blocked("native_prepare_failed"));
+        if !Self::operation_bound(request.kind) {
+            return Err(LifecycleExecution::recovery_blocked(
+                "operation_not_applicable",
+            ));
         }
         if !self.matching_request(request) {
             return Err(LifecycleExecution::failed_definitive(
                 "mint_or_unit_not_configured",
             ));
+        }
+        if let Some(facade) = self.facade.as_ref() {
+            return facade
+                .prepare(request)
+                .await
+                .map_err(|_| LifecycleExecution::recovery_blocked("native_prepare_failed"));
         }
         let wallet = self
             .required_wallet()
@@ -1604,6 +2028,12 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         request: &LifecycleInput,
         private_material: Option<&[u8]>,
     ) -> LifecycleExecution {
+        if !Self::operation_bound(request.kind) {
+            return LifecycleExecution::recovery_blocked("operation_not_applicable");
+        }
+        if !self.matching_request(request) {
+            return LifecycleExecution::failed_definitive("mint_or_unit_not_configured");
+        }
         if let Some(facade) = self.facade.as_ref() {
             return facade
                 .execute(request, private_material)
@@ -1627,6 +2057,12 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         request: &LifecycleInput,
         private_material: Option<&[u8]>,
     ) -> LifecycleExecution {
+        if !Self::operation_bound(request.kind) {
+            return LifecycleExecution::recovery_blocked("operation_not_applicable");
+        }
+        if !self.matching_request(request) {
+            return LifecycleExecution::failed_definitive("mint_or_unit_not_configured");
+        }
         if let Some(facade) = self.facade.as_ref() {
             return facade
                 .recover(request, private_material)
@@ -1745,7 +2181,7 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         let supports_proof_state = info.nuts.nut07.supported;
         let supports_fee_return = info.nuts.nut08.supported;
         let supports_restore = info.nuts.nut09.supported;
-        let supports_replay = !info.nuts.nut19.cached_endpoints.is_empty();
+        let supports_replay = supports_nut19_swap_replay(&info.nuts.nut19.cached_endpoints);
         let supports_quote_locking = info.nuts.nut20.supported;
         let mut operations = vec!["send", "receive", "reconcile"];
         if supports_proof_state {
