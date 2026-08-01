@@ -26,6 +26,7 @@ FROM rust:1.97-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc5
 
 WORKDIR /app
 COPY adapters/cdk ./adapters/cdk
+COPY packages/wallet-lifecycle-contract/generated/rust ./packages/wallet-lifecycle-contract/generated/rust
 COPY spec/openapi.yaml ./spec/openapi.yaml
 RUN cargo build --locked --release --manifest-path adapters/cdk/Cargo.toml
 
