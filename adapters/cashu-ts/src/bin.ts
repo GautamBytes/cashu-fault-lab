@@ -1,5 +1,14 @@
 #!/usr/bin/env node
+import type { LifecycleCapabilities } from '@cashu-fault-lab/wallet-lifecycle-contract';
+import { createHash } from 'node:crypto';
+import { Pool } from 'pg';
 import { buildFundedCashuTsAdapterServer } from './funded-server.js';
+import { CashuTsLifecycleOperations } from './lifecycle/operations.js';
+import {
+  PostgresCashuTsLifecycleStore,
+  migratePostgresCashuTsLifecycleStore,
+} from './lifecycle/postgres-store.js';
+import { CashuTsLifecycleWallet } from './lifecycle/wallet.js';
 import { createPostgresCashuTsReceiverStore } from './postgres-receiver-store.js';
 import { PostgresCrashCheckpoint, SigkillProcessTerminator } from './postgres-crash-checkpoint.js';
 import { PostgresCrashArmStore, migratePostgresCrashArmStore } from './postgres-crash-arm-store.js';
@@ -72,6 +81,7 @@ const paymentTarget =
     : (process.env.CFL_CASHU_TS_PAYMENT_TARGET ?? `http://127.0.0.1:${port}/pay`);
 const receiverDatabaseUrl = process.env.CFL_CASHU_TS_RECEIVER_DATABASE_URL;
 const senderDatabaseUrl = process.env.CFL_CASHU_TS_SENDER_DATABASE_URL;
+const mintUrl = required('CFL_CASHU_TS_MINT_URL');
 const durableSender =
   senderDatabaseUrl === undefined || senderDatabaseUrl.length === 0
     ? undefined
@@ -125,8 +135,54 @@ if (crashControlsEnabled && durableSender !== undefined) {
   await migratePostgresCrashArmStore(durableSender.pool);
   await crashControl?.initialize();
 }
+const lifecycleDatabaseUrl = process.env.CFL_CASHU_TS_LIFECYCLE_DATABASE_URL;
+const lifecycleStateKey = optionalBase64UrlKey('CFL_CASHU_TS_LIFECYCLE_STATE_KEY');
+if ((lifecycleDatabaseUrl === undefined) !== (lifecycleStateKey === undefined)) {
+  throw new Error(
+    'CFL_CASHU_TS_LIFECYCLE_DATABASE_URL and CFL_CASHU_TS_LIFECYCLE_STATE_KEY must be configured together',
+  );
+}
+const lifecyclePool =
+  lifecycleDatabaseUrl === undefined
+    ? undefined
+    : new Pool({ connectionString: lifecycleDatabaseUrl, max: 10 });
+let lifecycle: CashuTsLifecycleOperations | undefined;
+if (lifecyclePool !== undefined && lifecycleStateKey !== undefined) {
+  await migratePostgresCashuTsLifecycleStore(lifecyclePool);
+  const lifecycleStore = new PostgresCashuTsLifecycleStore({
+    pool: lifecyclePool,
+    key: lifecycleStateKey,
+    runId: required('CFL_CASHU_TS_LIFECYCLE_RUN_ID'),
+    tenantId: process.env.CFL_CASHU_TS_LIFECYCLE_TENANT_ID ?? 'cashu-ts-lifecycle',
+  });
+  const digest = (domain: string): string =>
+    `sha256:${createHash('sha256').update(`cashu-fault-lab/${domain}/v1`).digest('hex')}`;
+  const lifecycleCapabilities: LifecycleCapabilities = {
+    schemaVersion: 1,
+    implementation: {
+      id: 'cashu-ts',
+      version: '4.7.2',
+      language: 'typescript',
+      runtime: 'node-24',
+      sourceDigest: digest('cashu-ts-lifecycle-source'),
+      buildDigest: digest('cashu-ts-lifecycle-build'),
+    },
+    operations: ['mint'],
+    nuts: [4, 13, 19],
+    durability: 'restart_safe',
+    recovery: ['nut13_seed', 'nut19_replay'],
+    mints: [{ id: 'configured-mint', implementation: 'configured' }],
+  };
+  lifecycle = new CashuTsLifecycleOperations({
+    store: lifecycleStore,
+    wallet: new CashuTsLifecycleWallet({ mintUrl, unit: 'sat', store: lifecycleStore }),
+    mint: mintUrl,
+    unit: 'sat',
+    capabilities: lifecycleCapabilities,
+  });
+}
 const app = await buildFundedCashuTsAdapterServer({
-  mintUrl: required('CFL_CASHU_TS_MINT_URL'),
+  mintUrl,
   controlToken: required('CFL_CASHU_TS_CONTROL_TOKEN'),
   fundingAmount: positiveInteger(
     process.env.CFL_CASHU_TS_FUNDING_AMOUNT,
@@ -144,12 +200,14 @@ const app = await buildFundedCashuTsAdapterServer({
   ...(crashControl?.activeRunId() === undefined
     ? {}
     : { resumeRunId: crashControl.activeRunId()! }),
+  ...(lifecycle === undefined ? {} : { lifecycle }),
 });
 
 const close = async (): Promise<void> => {
   await app.close();
   await durableSender?.pool.end();
   await durableReceiver?.pool.end();
+  await lifecyclePool?.end();
   process.exitCode = 0;
 };
 process.once('SIGINT', () => void close());

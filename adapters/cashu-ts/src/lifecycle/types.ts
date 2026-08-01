@@ -1,6 +1,8 @@
 import type {
+  LifecycleEvidenceView,
   LifecycleOperationInput,
   LifecycleOperationView,
+  LifecycleWalletView,
 } from '@cashu-fault-lab/wallet-lifecycle-contract';
 
 export interface CashuTsLifecyclePreparedRequest {
@@ -57,10 +59,45 @@ export interface CashuTsLifecycleCreateResult {
   readonly operation: CashuTsStoredLifecycleOperation;
 }
 
+export type CashuTsLifecycleProofBucket = 'available' | 'reserved' | 'recoverable';
+
+export interface CashuTsLifecycleStoredProof {
+  readonly proofId: string;
+  readonly mint: string;
+  readonly unit: string;
+  readonly amount: number;
+  readonly state: 'UNSPENT' | 'PENDING' | 'SPENT';
+  readonly bucket: CashuTsLifecycleProofBucket;
+  /** Exact, secret-bearing proof material. Stores MUST encrypt this field at rest. */
+  readonly material: unknown;
+}
+
+export interface CashuTsLifecycleProofUpdate {
+  readonly proofId: string;
+  readonly state: CashuTsLifecycleStoredProof['state'];
+  readonly bucket: CashuTsLifecycleProofBucket;
+}
+
+export interface CashuTsLifecycleProofChanges {
+  readonly operationId: string;
+  readonly add: readonly CashuTsLifecycleStoredProof[];
+  readonly update: readonly CashuTsLifecycleProofUpdate[];
+}
+
+export interface CashuTsLifecycleEvidenceInput extends Omit<LifecycleEvidenceView, 'sequence'> {
+  readonly effectId: string;
+}
+
 export interface CashuTsLifecycleStore {
   reset(seed: string): Promise<void>;
+  loadSeed(): Promise<string | undefined>;
   create(operation: CashuTsStoredLifecycleOperation): Promise<CashuTsLifecycleCreateResult>;
   get(operationId: string): Promise<CashuTsStoredLifecycleOperation | undefined>;
   put(operation: CashuTsStoredLifecycleOperation): Promise<void>;
   claim<T>(operationId: string, work: () => Promise<T>): Promise<T>;
+  listProofs(mint: string, unit: string): Promise<readonly CashuTsLifecycleStoredProof[]>;
+  applyProofChanges(changes: CashuTsLifecycleProofChanges): Promise<void>;
+  walletView(walletId: string, mint: string, unit: string): Promise<LifecycleWalletView>;
+  appendEvidence(evidence: CashuTsLifecycleEvidenceInput): Promise<void>;
+  evidence(): Promise<readonly LifecycleEvidenceView[]>;
 }

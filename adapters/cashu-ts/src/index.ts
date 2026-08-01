@@ -95,3 +95,9 @@ export type {
   CashuTsLifecycleWalletPort,
   CashuTsStoredLifecycleOperation,
 } from './lifecycle/types.js';
+export {
+  CashuTsLifecycleWallet,
+  type CashuTsLifecycleClient,
+  type CashuTsLifecycleWalletOptions,
+} from './lifecycle/wallet.js';
+export { registerCashuTsLifecycleRoutes } from './lifecycle/routes.js';

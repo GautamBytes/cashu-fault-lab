@@ -33,10 +33,13 @@ CREATE TABLE IF NOT EXISTS cashu_lifecycle_operations (
 );
 
 CREATE TABLE IF NOT EXISTS cashu_lifecycle_effects (
+  sequence bigserial NOT NULL UNIQUE,
   tenant_id text NOT NULL,
   run_id text NOT NULL,
   effect_id text NOT NULL,
   operation_id char(22) NOT NULL,
+  source text NOT NULL CHECK (source IN ('adapter', 'durable_state', 'mint', 'lightning')),
+  event text NOT NULL CHECK (event ~ '^[a-z0-9_]{1,64}$'),
   data_hash char(64) NOT NULL CHECK (data_hash ~ '^[0-9a-f]{64}$'),
   PRIMARY KEY (tenant_id, run_id, effect_id),
   FOREIGN KEY (tenant_id, run_id, operation_id)
@@ -49,7 +52,16 @@ CREATE TABLE IF NOT EXISTS cashu_lifecycle_proofs (
   run_id text NOT NULL,
   proof_id char(64) NOT NULL CHECK (proof_id ~ '^[0-9a-f]{64}$'),
   operation_id char(22) NOT NULL,
+  mint text NOT NULL,
+  unit text NOT NULL,
+  amount bigint NOT NULL CHECK (amount > 0),
   state text NOT NULL CHECK (state IN ('UNSPENT', 'PENDING', 'SPENT')),
+  bucket text NOT NULL CHECK (bucket IN ('available', 'reserved', 'recoverable')),
+  material_hash char(64) NOT NULL CHECK (material_hash ~ '^[0-9a-f]{64}$'),
+  proof_ciphertext bytea NOT NULL CHECK (octet_length(proof_ciphertext) > 0),
+  proof_nonce bytea NOT NULL CHECK (octet_length(proof_nonce) = 12),
+  proof_tag bytea NOT NULL CHECK (octet_length(proof_tag) = 16),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, run_id, proof_id),
   FOREIGN KEY (tenant_id, run_id, operation_id)
     REFERENCES cashu_lifecycle_operations (tenant_id, run_id, operation_id)

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { LifecycleAdapterClient } from '@cashu-fault-lab/wallet-lifecycle-contract';
 import { FundedCashuTsOperations, type CashuTsDeliveryStore } from './funded-operations.js';
 import {
   FundedCashuTsDualRoleOperations,
@@ -32,6 +33,7 @@ export interface FundedCashuTsAdapterServerOptions {
   readonly senderNostrPollDelayMs?: number;
   readonly crashControl?: CrashControl;
   readonly resumeRunId?: string;
+  readonly lifecycle?: LifecycleAdapterClient;
 }
 
 export async function buildFundedCashuTsAdapterServer(
@@ -118,6 +120,7 @@ export async function buildFundedCashuTsAdapterServer(
     ...(options.controlToken === undefined ? {} : { controlToken: options.controlToken }),
     ...(options.testMode === undefined ? {} : { testMode: options.testMode }),
     ...(options.crashControl === undefined ? {} : { crashControl: options.crashControl }),
+    ...(options.lifecycle === undefined ? {} : { lifecycle: options.lifecycle }),
   };
   const app = await buildCashuTsAdapterServer(serverOptions);
   receiver?.startNostr();

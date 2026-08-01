@@ -1,6 +1,9 @@
 import type {
+  LifecycleCapabilities,
+  LifecycleEvidenceView,
   LifecycleOperationInput,
   LifecycleOperationView,
+  LifecycleWalletView,
 } from '@cashu-fault-lab/wallet-lifecycle-contract';
 import {
   createOperation,
@@ -10,9 +13,12 @@ import {
 import { createHash } from 'node:crypto';
 import type {
   CashuTsLifecycleCreateResult,
+  CashuTsLifecycleEvidenceInput,
   CashuTsLifecyclePreparedRequest,
+  CashuTsLifecycleProofChanges,
   CashuTsLifecycleResult,
   CashuTsLifecycleStore,
+  CashuTsLifecycleStoredProof,
   CashuTsLifecycleWalletPort,
   CashuTsStoredLifecycleOperation,
 } from './types.js';
@@ -65,16 +71,28 @@ export interface MemoryCashuTsLifecycleStoreOptions {
 
 export class MemoryCashuTsLifecycleStore implements CashuTsLifecycleStore {
   readonly #records = new Map<string, CashuTsStoredLifecycleOperation>();
+  readonly #proofs = new Map<string, CashuTsLifecycleStoredProof>();
+  readonly #evidenceByEffect = new Map<string, CashuTsLifecycleEvidenceInput>();
+  readonly #evidenceLog: LifecycleEvidenceView[] = [];
   readonly #claims = new Map<string, Promise<void>>();
   readonly #onWrite: ((phase: LifecyclePhase) => void) | undefined;
+  #seed: string | undefined;
 
   constructor(options: MemoryCashuTsLifecycleStoreOptions = {}) {
     this.#onWrite = options.onWrite;
   }
 
-  async reset(_seed: string): Promise<void> {
+  async reset(seed: string): Promise<void> {
+    this.#seed = seed;
     this.#records.clear();
+    this.#proofs.clear();
+    this.#evidenceByEffect.clear();
+    this.#evidenceLog.length = 0;
     this.#claims.clear();
+  }
+
+  async loadSeed(): Promise<string | undefined> {
+    return this.#seed;
   }
 
   async create(operation: CashuTsStoredLifecycleOperation): Promise<CashuTsLifecycleCreateResult> {
@@ -122,11 +140,135 @@ export class MemoryCashuTsLifecycleStore implements CashuTsLifecycleStore {
       if (this.#claims.get(operationId) === queued) this.#claims.delete(operationId);
     }
   }
+
+  async listProofs(mint: string, unit: string): Promise<readonly CashuTsLifecycleStoredProof[]> {
+    return [...this.#proofs.values()]
+      .filter((proof) => proof.mint === mint && proof.unit === unit)
+      .sort((left, right) => left.proofId.localeCompare(right.proofId))
+      .map(clone);
+  }
+
+  async applyProofChanges(changes: CashuTsLifecycleProofChanges): Promise<void> {
+    if (!this.#records.has(changes.operationId)) {
+      throw new Error('Lifecycle proof operation was not found');
+    }
+    const next = new Map(this.#proofs);
+    for (const proof of changes.add) {
+      assertStoredProof(proof);
+      const previous = next.get(proof.proofId);
+      if (
+        previous !== undefined &&
+        JSON.stringify(canonical(previous)) !== JSON.stringify(canonical(proof))
+      ) {
+        throw new Error('Lifecycle proof identity conflicts');
+      }
+      next.set(proof.proofId, clone(previous ?? proof));
+    }
+    for (const update of changes.update) {
+      assertProofId(update.proofId);
+      const previous = next.get(update.proofId);
+      if (previous === undefined) throw new Error('Lifecycle proof was not found');
+      if (!validProofTransition(previous.state, update.state)) {
+        throw new Error('Lifecycle proof state transition is invalid');
+      }
+      next.set(update.proofId, { ...previous, state: update.state, bucket: update.bucket });
+    }
+    this.#proofs.clear();
+    for (const [proofId, proof] of next) this.#proofs.set(proofId, proof);
+  }
+
+  async walletView(walletId: string, mint: string, unit: string): Promise<LifecycleWalletView> {
+    const proofs = await this.listProofs(mint, unit);
+    const balance = (bucket: CashuTsLifecycleStoredProof['bucket']): number =>
+      proofs
+        .filter((proof) => proof.bucket === bucket && proof.state !== 'SPENT')
+        .reduce((total, proof) => total + proof.amount, 0);
+    return {
+      walletId,
+      mint,
+      unit,
+      balances: {
+        available: balance('available'),
+        reserved: balance('reserved'),
+        recoverable: balance('recoverable'),
+      },
+      proofs: proofs.map(({ proofId, state }) => ({ proofId, state })),
+    };
+  }
+
+  async appendEvidence(evidence: CashuTsLifecycleEvidenceInput): Promise<void> {
+    assertEvidence(evidence);
+    const previous = this.#evidenceByEffect.get(evidence.effectId);
+    if (previous !== undefined) {
+      if (JSON.stringify(previous) !== JSON.stringify(evidence)) {
+        throw new Error('Lifecycle evidence effect identity conflicts');
+      }
+      return;
+    }
+    this.#evidenceByEffect.set(evidence.effectId, clone(evidence));
+    const { effectId: _effectId, ...view } = evidence;
+    this.#evidenceLog.push({ sequence: this.#evidenceLog.length + 1, ...clone(view) });
+  }
+
+  async evidence(): Promise<readonly LifecycleEvidenceView[]> {
+    return this.#evidenceLog.map(clone);
+  }
 }
 
 export interface CashuTsLifecycleOperationsOptions {
   readonly store: CashuTsLifecycleStore;
   readonly wallet: CashuTsLifecycleWalletPort;
+  readonly walletId?: string;
+  readonly mint?: string;
+  readonly unit?: string;
+  readonly capabilities?: LifecycleCapabilities;
+}
+
+const HASH_PATTERN = /^[a-f0-9]{64}$/u;
+const EVENT_PATTERN = /^[a-z0-9_]{1,64}$/u;
+const EFFECT_PATTERN = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
+
+function assertProofId(value: string): void {
+  if (!HASH_PATTERN.test(value)) throw new Error('Lifecycle proof identity is invalid');
+}
+
+function assertStoredProof(proof: CashuTsLifecycleStoredProof): void {
+  assertProofId(proof.proofId);
+  if (!Number.isSafeInteger(proof.amount) || proof.amount < 1) {
+    throw new Error('Lifecycle proof amount is invalid');
+  }
+  createOperation({
+    operationId: 'AAAAAAAAAAAAAAAAAAAAAA',
+    kind: 'receive',
+    mint: proof.mint,
+    unit: proof.unit,
+    intentHash: 'a'.repeat(64),
+  });
+}
+
+function validProofTransition(
+  from: CashuTsLifecycleStoredProof['state'],
+  to: CashuTsLifecycleStoredProof['state'],
+): boolean {
+  return (
+    from === to ||
+    (from === 'UNSPENT' && (to === 'PENDING' || to === 'SPENT')) ||
+    (from === 'PENDING' && (to === 'UNSPENT' || to === 'SPENT'))
+  );
+}
+
+function assertEvidence(evidence: CashuTsLifecycleEvidenceInput): void {
+  if (!EFFECT_PATTERN.test(evidence.effectId) || !EVENT_PATTERN.test(evidence.event)) {
+    throw new Error('Lifecycle evidence identity is invalid');
+  }
+  if (!HASH_PATTERN.test(evidence.dataHash)) throw new Error('Lifecycle evidence hash is invalid');
+  createOperation({
+    operationId: evidence.operationId,
+    kind: 'reconcile',
+    mint: 'http://127.0.0.1',
+    unit: 'sat',
+    intentHash: 'a'.repeat(64),
+  });
 }
 
 function operationView(input: LifecycleOperationInput): LifecycleOperationView {
@@ -193,10 +335,25 @@ function withResult(
 export class CashuTsLifecycleOperations {
   readonly #store: CashuTsLifecycleStore;
   readonly #wallet: CashuTsLifecycleWalletPort;
+  readonly #walletId: string;
+  readonly #mint: string | undefined;
+  readonly #unit: string | undefined;
+  readonly #capabilities: LifecycleCapabilities | undefined;
 
   constructor(options: CashuTsLifecycleOperationsOptions) {
     this.#store = options.store;
     this.#wallet = options.wallet;
+    this.#walletId = options.walletId ?? 'cashu-ts';
+    this.#mint = options.mint;
+    this.#unit = options.unit;
+    this.#capabilities = options.capabilities;
+  }
+
+  async capabilities(): Promise<LifecycleCapabilities> {
+    if (this.#capabilities === undefined) {
+      throw new Error('Lifecycle capabilities are not configured');
+    }
+    return structuredClone(this.#capabilities);
   }
 
   async reset(seed: string): Promise<void> {
@@ -252,6 +409,17 @@ export class CashuTsLifecycleOperations {
 
   async operation(operationId: string): Promise<LifecycleOperationView> {
     return (await this.#required(operationId)).view;
+  }
+
+  async wallet(): Promise<LifecycleWalletView> {
+    if (this.#mint === undefined || this.#unit === undefined) {
+      throw new Error('Lifecycle wallet identity is not configured');
+    }
+    return this.#store.walletView(this.#walletId, this.#mint, this.#unit);
+  }
+
+  evidence(): Promise<readonly LifecycleEvidenceView[]> {
+    return this.#store.evidence();
   }
 
   async #prepareAndSubmit(

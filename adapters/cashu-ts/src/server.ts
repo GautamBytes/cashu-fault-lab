@@ -19,6 +19,7 @@ import {
   type ProofEvidenceView,
   type SendPaymentInput,
 } from '@cashu-fault-lab/adapter-contract';
+import type { LifecycleAdapterClient } from '@cashu-fault-lab/wallet-lifecycle-contract';
 import {
   DeliveryValidationError,
   parseProtocolId,
@@ -27,6 +28,7 @@ import {
 import { ReceiverDomainError } from '@cashu-fault-lab/reference-receiver';
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply } from 'fastify';
 import { createHash } from 'node:crypto';
+import { registerCashuTsLifecycleRoutes } from './lifecycle/routes.js';
 
 const PAYMENT_BODY_LIMIT = 65_536;
 
@@ -79,6 +81,7 @@ export interface CashuTsAdapterServerOptions {
   readonly controlToken?: string;
   readonly testMode?: boolean;
   readonly crashControl?: import('./postgres-crash-checkpoint.js').CrashControl;
+  readonly lifecycle?: LifecycleAdapterClient;
 }
 
 function validateRequest(
@@ -234,6 +237,10 @@ export async function buildCashuTsAdapterServer(
       });
     }
   });
+
+  if (options.lifecycle !== undefined) {
+    registerCashuTsLifecycleRoutes(app, options.lifecycle);
+  }
 
   app.get('/v1/capabilities', async () => {
     const discovered = (await options.operations?.capabilities?.()) ?? capabilities;

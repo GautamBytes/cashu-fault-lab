@@ -91,6 +91,58 @@ class RecordingWalletPort implements CashuTsLifecycleWalletPort {
 }
 
 describe('CashuTsLifecycleOperations', () => {
+  test('projects encrypted-store proof state into wallet and evidence views', async () => {
+    const store = new MemoryCashuTsLifecycleStore();
+    const operations = new CashuTsLifecycleOperations({
+      store,
+      wallet: new RecordingWalletPort(),
+      mint,
+      unit: 'sat',
+    });
+    await operations.reset('wallet-view-seed');
+    await operations.start(inputs[0]!);
+    await store.applyProofChanges({
+      operationId: inputs[0]!.operationId,
+      add: [
+        {
+          proofId: 'c'.repeat(64),
+          mint,
+          unit: 'sat',
+          amount: 8,
+          state: 'UNSPENT',
+          bucket: 'available',
+          material: { secret: 'never-return-this-proof-secret' },
+        },
+      ],
+      update: [],
+    });
+    await store.appendEvidence({
+      effectId: 'proofs-created',
+      operationId: inputs[0]!.operationId,
+      source: 'durable_state',
+      event: 'proofs_persisted',
+      dataHash: 'd'.repeat(64),
+    });
+
+    await expect(operations.wallet()).resolves.toEqual({
+      walletId: 'cashu-ts',
+      mint,
+      unit: 'sat',
+      balances: { available: 8, reserved: 0, recoverable: 0 },
+      proofs: [{ proofId: 'c'.repeat(64), state: 'UNSPENT' }],
+    });
+    await expect(operations.evidence()).resolves.toEqual([
+      {
+        sequence: 1,
+        operationId: inputs[0]!.operationId,
+        source: 'durable_state',
+        event: 'proofs_persisted',
+        dataHash: 'd'.repeat(64),
+      },
+    ]);
+    expect(JSON.stringify(await operations.wallet())).not.toContain('never-return-this');
+  });
+
   test('persists the run before initializing wallet state', async () => {
     const calls: string[] = [];
     class OrderedStore extends MemoryCashuTsLifecycleStore {

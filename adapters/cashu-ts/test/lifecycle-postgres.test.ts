@@ -28,6 +28,7 @@ const input: LifecycleOperationInput = {
 class RecoveringWallet implements CashuTsLifecycleWalletPort {
   recoverCalls = 0;
   result: CashuTsLifecycleResult = { status: 'ambiguous' };
+  submitError: Error | undefined;
 
   constructor(readonly fixedOutputPlanHash?: string) {}
 
@@ -44,6 +45,7 @@ class RecoveringWallet implements CashuTsLifecycleWalletPort {
   }
 
   async submit(): Promise<CashuTsLifecycleResult> {
+    if (this.submitError !== undefined) throw this.submitError;
     return this.result;
   }
 
@@ -170,5 +172,95 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')('PostgresCashuTsLifecycleS
     await expect(
       operations.start({ ...input, operationId: 'AAAAAAAAAAAAAAAAAAAAAQ' }),
     ).rejects.toThrow('Lifecycle output plan identity conflicts');
+  });
+
+  test('keeps the exact submitted request durable when the dependency response is lost', async () => {
+    if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+    const options = {
+      pool,
+      key: Buffer.alloc(32, 45),
+      tenantId: 'cashu-ts-lifecycle-test',
+      runId: 'lost-response-durability',
+    } as const;
+    const store = new PostgresCashuTsLifecycleStore(options);
+    const wallet = new RecoveringWallet();
+    wallet.submitError = new Error('mint committed and response was lost');
+    const operations = new CashuTsLifecycleOperations({ store, wallet });
+    await operations.reset('lost-response-seed');
+
+    await expect(operations.start(input)).rejects.toThrow('mint committed and response was lost');
+
+    const replacement = new PostgresCashuTsLifecycleStore(options);
+    await expect(replacement.get(input.operationId)).resolves.toMatchObject({
+      input,
+      view: {
+        phase: 'submitted',
+        requestHash: 'a'.repeat(64),
+      },
+      prepared: {
+        requestMaterial: { token: input.token },
+      },
+    });
+  });
+
+  test('reloads the seed and encrypted proof material after process replacement', async () => {
+    if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+    const options = {
+      pool,
+      key: Buffer.alloc(32, 46),
+      tenantId: 'cashu-ts-lifecycle-test',
+      runId: 'wallet-proof-durability',
+    } as const;
+    const store = new PostgresCashuTsLifecycleStore(options);
+    const operations = new CashuTsLifecycleOperations({ store, wallet: new RecoveringWallet() });
+    await operations.reset('restart-wallet-seed');
+    await operations.start(input);
+    const proofSecret = 'postgres-encrypted-proof-secret';
+    await store.applyProofChanges({
+      operationId: input.operationId,
+      add: [
+        {
+          proofId: 'e'.repeat(64),
+          mint: input.mint,
+          unit: input.unit,
+          amount: 8,
+          state: 'UNSPENT',
+          bucket: 'available',
+          material: { id: '00aa', secret: proofSecret, C: `02${'11'.repeat(32)}` },
+        },
+      ],
+      update: [],
+    });
+
+    const raw = await pool.query<{ proof_ciphertext: Buffer }>(
+      `SELECT proof_ciphertext FROM cashu_lifecycle_proofs
+       WHERE tenant_id = $1 AND run_id = $2 AND proof_id = $3`,
+      [options.tenantId, options.runId, 'e'.repeat(64)],
+    );
+    expect(raw.rows[0]!.proof_ciphertext.includes(Buffer.from(proofSecret))).toBe(false);
+
+    const replacement = new PostgresCashuTsLifecycleStore(options);
+    await expect(replacement.loadSeed()).resolves.toBe('restart-wallet-seed');
+    await expect(replacement.listProofs(input.mint, input.unit)).resolves.toEqual([
+      expect.objectContaining({
+        proofId: 'e'.repeat(64),
+        amount: 8,
+        state: 'UNSPENT',
+        bucket: 'available',
+        material: expect.objectContaining({ secret: proofSecret }),
+      }),
+    ]);
+
+    await replacement.applyProofChanges({
+      operationId: input.operationId,
+      add: [],
+      update: [{ proofId: 'e'.repeat(64), state: 'PENDING', bucket: 'reserved' }],
+    });
+    await expect(replacement.walletView('cashu-ts', input.mint, input.unit)).resolves.toMatchObject(
+      {
+        balances: { available: 0, reserved: 8, recoverable: 0 },
+        proofs: [{ proofId: 'e'.repeat(64), state: 'PENDING' }],
+      },
+    );
   });
 });
