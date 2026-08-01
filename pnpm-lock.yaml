@@ -49,6 +49,12 @@ importers:
       '@cashu-fault-lab/reference-receiver':
         specifier: workspace:*
         version: link:../../apps/reference-receiver
+      '@cashu-fault-lab/wallet-lifecycle-contract':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-contract
+      '@cashu-fault-lab/wallet-lifecycle-core':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-core
       '@cashu/cashu-ts':
         specifier: 4.7.2
         version: 4.7.2

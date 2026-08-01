@@ -171,7 +171,7 @@ expect(() => assertLifecycleSafety(model)).not.toThrow();
 - Create: `adapters/cashu-ts/src/lifecycle/routes.ts`
 - Create: `adapters/cashu-ts/test/lifecycle-operations.test.ts`
 - Create: `adapters/cashu-ts/test/lifecycle-postgres.test.ts`
-- Create: `infra/migrations/005_wallet_lifecycle.sql`
+- Create: `infra/migrations/006_wallet_lifecycle.sql`
 - Modify: `adapters/cashu-ts/src/server.ts`
 - Modify: `adapters/cashu-ts/src/bin.ts`
 - Modify: `adapters/cashu-ts/package.json`
@@ -181,9 +181,9 @@ expect(() => assertLifecycleSafety(model)).not.toThrow();
 - Implements the lifecycle contract using cashu-ts APIs.
 - Persists operation identity, exact request material encrypted at rest, proof reservations, output plans, and monotonic evidence.
 
-- [ ] **Step 1: Write failing port-level tests for mint, swap, melt, send, receive, restore, and reconcile state transitions.**
-- [ ] **Step 2: Add crash-focused store tests showing identity is durable before submission and concurrent resume obtains one row lock.**
-- [ ] **Step 3: Implement the PostgreSQL journal with unique constraints on operation ID, effect ID, proof identity, and output-plan identity.**
+- [x] **Step 1: Write failing port-level tests for mint, swap, melt, send, receive, restore, and reconcile state transitions.**
+- [x] **Step 2: Add crash-focused store tests showing identity is durable before submission and concurrent resume obtains one row lock.**
+- [x] **Step 3: Implement the PostgreSQL journal with unique constraints on operation ID, effect ID, proof identity, and output-plan identity.**
 - [ ] **Step 4: Implement cashu-ts operations one at a time, keeping external requests behind injected ports so each operation follows red-green TDD.**
 - [ ] **Step 5: Add recovery tests for NUT-19 replay, quote polling, NUT-07 input state, NUT-09 restore, NUT-08 change, and `recovery_blocked`.**
 - [ ] **Step 6: Add authenticated lifecycle routes and verify no secret-bearing value crosses the evidence API.**
