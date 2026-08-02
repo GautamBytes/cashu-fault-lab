@@ -34,6 +34,11 @@ import { runtimeAssetPath } from './runtime-assets.js';
 
 const execFileAsync = promisify(execFile);
 
+export interface LifecycleComposeCommand {
+  readonly executable: string;
+  readonly args: readonly string[];
+}
+
 export interface LifecycleFaultController {
   configure(rule: LifecycleFaultRule | undefined): Promise<void>;
 }
@@ -861,8 +866,71 @@ function lifecycleMatrixFailureReason(
   lane: EnvironmentLifecycleMatrixLane,
   error: unknown,
 ): string {
+  if (error instanceof LifecycleMatrixLanePreparationError) {
+    return `Lifecycle matrix lane ${lane.id} adapter rehydration failed`;
+  }
   const detail = error instanceof LifecycleAdapterClientError ? ` (${error.code})` : '';
   return `Lifecycle matrix lane ${lane.id} capability discovery failed${detail}`;
+}
+
+class LifecycleMatrixLanePreparationError extends Error {
+  constructor(readonly cause: unknown) {
+    super('Lifecycle matrix lane adapter rehydration failed');
+  }
+}
+
+export function lifecycleMatrixNeedsCdkHostRehydration(
+  env: Readonly<Record<string, string | undefined>>,
+  adapterId: string,
+): boolean {
+  return adapterId === 'cdk' && env.CFL_WALLET_LIFECYCLE_E2E === '1';
+}
+
+export function lifecycleComposeServiceRestartPlan(
+  docker: string,
+  composeFile: string,
+  service: string,
+): readonly LifecycleComposeCommand[] {
+  return [
+    { executable: docker, args: ['compose', '-f', composeFile, 'restart', service] },
+    { executable: docker, args: ['compose', '-f', composeFile, 'up', '-d', '--wait', service] },
+  ];
+}
+
+async function execLifecycleComposeCommands(
+  commands: readonly LifecycleComposeCommand[],
+  environment: NodeJS.ProcessEnv,
+): Promise<void> {
+  for (const command of commands) {
+    await execFileAsync(command.executable, [...command.args], {
+      env: environment,
+      timeout: 120_000,
+    });
+  }
+}
+
+async function rehydrateCdkLifecycleMatrixLane(
+  env: Readonly<Record<string, string | undefined>>,
+  lane: EnvironmentLifecycleMatrixLane,
+  seed: string,
+): Promise<void> {
+  if (!lifecycleMatrixNeedsCdkHostRehydration(env, lane.adapterId)) return;
+  const docker = env.CFL_DOCKER_BIN ?? 'docker';
+  const composeFile = lifecycleComposeFile(env);
+  const service = adapterService(lane.adapterId, lane.mintId);
+  const environment = {
+    ...process.env,
+    ...env,
+    CFL_LIFECYCLE_CDK_SEED: seed,
+  };
+  try {
+    await execLifecycleComposeCommands(
+      lifecycleComposeServiceRestartPlan(docker, composeFile, service),
+      environment,
+    );
+  } catch (error) {
+    throw new LifecycleMatrixLanePreparationError(error);
+  }
 }
 
 export async function verifyLifecycleScenarioSuccess(
@@ -918,6 +986,7 @@ async function executeEnvironmentLifecycleLane(
   });
   let capabilities;
   try {
+    await rehydrateCdkLifecycleMatrixLane(env, lane, seed);
     capabilities = await initializeLifecycleMatrixLane(client, faultController, seed);
   } catch (error) {
     return [
@@ -1161,14 +1230,10 @@ class DockerComposeLifecycleRestartController implements LifecycleRestartControl
       );
       return;
     }
-    await execFileAsync(docker, ['compose', '-f', composeFile, 'restart', service], {
-      env: environment,
-      timeout: 120_000,
-    });
-    await execFileAsync(docker, ['compose', '-f', composeFile, 'up', '-d', '--wait', service], {
-      env: environment,
-      timeout: 120_000,
-    });
+    await execLifecycleComposeCommands(
+      lifecycleComposeServiceRestartPlan(docker, composeFile, service),
+      environment,
+    );
   }
 }
 

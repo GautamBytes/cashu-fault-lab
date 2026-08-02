@@ -12,10 +12,12 @@ import {
   createEnvironmentLifecycleRuntime,
   HttpLifecycleLabRuntime,
   initializeLifecycleMatrixLane,
+  lifecycleComposeServiceRestartPlan,
   lifecycleMatrixEvidenceSummary,
   lifecycleMatrixRestoreSetupScenario,
   lifecycleMatrixScenarioSeed,
   lifecycleMatrixFundingCommands,
+  lifecycleMatrixNeedsCdkHostRehydration,
   verifyLifecycleScenarioSuccess,
 } from '../src/lifecycle-runtime.js';
 import type {
@@ -324,6 +326,49 @@ describe('HTTP lifecycle lab runtime', () => {
     ).rejects.toMatchObject({ code: 'LIFECYCLE_ADAPTER_CONTRACT' });
 
     expect(client.events).toEqual(['clear-faults', 'reset', 'capabilities']);
+  });
+
+  it('rehydrates only CDK host adapters during funded E2E matrix runs', () => {
+    expect(lifecycleMatrixNeedsCdkHostRehydration({ CFL_WALLET_LIFECYCLE_E2E: '1' }, 'cdk')).toBe(
+      true,
+    );
+    expect(
+      lifecycleMatrixNeedsCdkHostRehydration({ CFL_WALLET_LIFECYCLE_E2E: '1' }, 'cashu-ts'),
+    ).toBe(false);
+    expect(lifecycleMatrixNeedsCdkHostRehydration({}, 'cdk')).toBe(false);
+  });
+
+  it('waits for a restarted compose service without recreating the host adapter', () => {
+    expect(
+      lifecycleComposeServiceRestartPlan(
+        'docker',
+        'infra/compose/wallet-lifecycle.compose.yml',
+        'cdk-nutshell',
+      ),
+    ).toEqual([
+      {
+        executable: 'docker',
+        args: [
+          'compose',
+          '-f',
+          'infra/compose/wallet-lifecycle.compose.yml',
+          'restart',
+          'cdk-nutshell',
+        ],
+      },
+      {
+        executable: 'docker',
+        args: [
+          'compose',
+          '-f',
+          'infra/compose/wallet-lifecycle.compose.yml',
+          'up',
+          '-d',
+          '--wait',
+          'cdk-nutshell',
+        ],
+      },
+    ]);
   });
 
   it('rejects a safe but unsuccessful matrix terminal phase', async () => {
