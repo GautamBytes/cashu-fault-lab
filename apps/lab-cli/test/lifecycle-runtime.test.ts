@@ -268,6 +268,64 @@ describe('HTTP lifecycle lab runtime', () => {
     ]);
   });
 
+  it('retries full matrix lane initialization after transient adapter unavailability', async () => {
+    const client = new FakeClient();
+    const capabilities = client.capabilities.bind(client);
+    let discoveries = 0;
+    client.capabilities = async () => {
+      discoveries += 1;
+      if (discoveries === 1) {
+        client.events.push('capabilities');
+        throw new LifecycleAdapterClientError(
+          'LIFECYCLE_ADAPTER_UNAVAILABLE',
+          'transient adapter restart',
+        );
+      }
+      return capabilities();
+    };
+
+    await initializeLifecycleMatrixLane(
+      client,
+      {
+        configure: async (rule) => {
+          client.events.push(rule === undefined ? 'clear-faults' : 'configure-fault');
+        },
+      },
+      'matrix-seed',
+    );
+
+    expect(client.events).toEqual([
+      'clear-faults',
+      'reset',
+      'capabilities',
+      'clear-faults',
+      'reset',
+      'capabilities',
+    ]);
+  });
+
+  it('does not retry matrix lane initialization after adapter contract failures', async () => {
+    const client = new FakeClient();
+    client.capabilities = async () => {
+      client.events.push('capabilities');
+      throw new LifecycleAdapterClientError('LIFECYCLE_ADAPTER_CONTRACT', 'invalid capabilities');
+    };
+
+    await expect(
+      initializeLifecycleMatrixLane(
+        client,
+        {
+          configure: async (rule) => {
+            client.events.push(rule === undefined ? 'clear-faults' : 'configure-fault');
+          },
+        },
+        'matrix-seed',
+      ),
+    ).rejects.toMatchObject({ code: 'LIFECYCLE_ADAPTER_CONTRACT' });
+
+    expect(client.events).toEqual(['clear-faults', 'reset', 'capabilities']);
+  });
+
   it('rejects a safe but unsuccessful matrix terminal phase', async () => {
     const client = new FakeClient();
     client.operation = async () => ({

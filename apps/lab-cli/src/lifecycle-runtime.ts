@@ -829,7 +829,12 @@ export function lifecycleMatrixEvidenceSummary(
 
 function lifecycleMatrixInitializationRetryable(error: unknown): boolean {
   if (!(error instanceof LifecycleAdapterClientError)) return false;
-  return error.code !== 'LIFECYCLE_ADAPTER_UNAVAILABLE';
+  return [
+    'LIFECYCLE_ADAPTER_HTTP_STATUS',
+    'LIFECYCLE_ADAPTER_RESPONSE',
+    'LIFECYCLE_ADAPTER_TIMEOUT',
+    'LIFECYCLE_ADAPTER_UNAVAILABLE',
+  ].includes(error.code);
 }
 
 export async function initializeLifecycleMatrixLane(
@@ -850,6 +855,14 @@ export async function initializeLifecycleMatrixLane(
     }
   }
   throw lastError;
+}
+
+function lifecycleMatrixFailureReason(
+  lane: EnvironmentLifecycleMatrixLane,
+  error: unknown,
+): string {
+  const detail = error instanceof LifecycleAdapterClientError ? ` (${error.code})` : '';
+  return `Lifecycle matrix lane ${lane.id} capability discovery failed${detail}`;
 }
 
 export async function verifyLifecycleScenarioSuccess(
@@ -906,13 +919,9 @@ async function executeEnvironmentLifecycleLane(
   let capabilities;
   try {
     capabilities = await initializeLifecycleMatrixLane(client, faultController, seed);
-  } catch {
+  } catch (error) {
     return [
-      matrixFailure(
-        lane,
-        'LIFECYCLE_MATRIX_EXECUTION',
-        `Lifecycle matrix lane ${lane.id} capability discovery failed`,
-      ),
+      matrixFailure(lane, 'LIFECYCLE_MATRIX_EXECUTION', lifecycleMatrixFailureReason(lane, error)),
     ];
   }
   if (capabilities.implementation.id !== lane.adapterId) {
