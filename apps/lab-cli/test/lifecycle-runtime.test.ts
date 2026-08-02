@@ -6,6 +6,7 @@ import type {
   LifecycleOperationView,
   LifecycleWalletView,
 } from '@cashu-fault-lab/wallet-lifecycle-contract';
+import { LifecycleAdapterClientError } from '@cashu-fault-lab/wallet-lifecycle-contract';
 import { describe, expect, it } from 'vitest';
 import {
   createEnvironmentLifecycleRuntime,
@@ -232,6 +233,39 @@ describe('HTTP lifecycle lab runtime', () => {
     );
 
     expect(client.events).toEqual(['clear-faults', 'reset', 'capabilities']);
+  });
+
+  it('retries full matrix lane initialization after transient reset failures', async () => {
+    const client = new FakeClient();
+    let resets = 0;
+    client.reset = async () => {
+      client.events.push('reset');
+      resets += 1;
+      if (resets === 1) {
+        throw new LifecycleAdapterClientError(
+          'LIFECYCLE_ADAPTER_HTTP_STATUS',
+          'transient reset failure',
+        );
+      }
+    };
+
+    await initializeLifecycleMatrixLane(
+      client,
+      {
+        configure: async (rule) => {
+          client.events.push(rule === undefined ? 'clear-faults' : 'configure-fault');
+        },
+      },
+      'matrix-seed',
+    );
+
+    expect(client.events).toEqual([
+      'clear-faults',
+      'reset',
+      'clear-faults',
+      'reset',
+      'capabilities',
+    ]);
   });
 
   it('rejects a safe but unsuccessful matrix terminal phase', async () => {

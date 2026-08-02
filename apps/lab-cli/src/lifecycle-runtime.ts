@@ -1,5 +1,6 @@
 import {
   HttpLifecycleAdapterClient,
+  LifecycleAdapterClientError,
   type LifecycleAdapterClient,
   type LifecycleCapabilities,
   type LifecycleOperationInput,
@@ -826,19 +827,9 @@ export function lifecycleMatrixEvidenceSummary(
   };
 }
 
-async function lifecycleCapabilitiesWithRetry(
-  client: LifecycleAdapterClient,
-): Promise<LifecycleCapabilities> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      return await client.capabilities();
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
-    }
-  }
-  throw lastError;
+function lifecycleMatrixInitializationRetryable(error: unknown): boolean {
+  if (!(error instanceof LifecycleAdapterClientError)) return false;
+  return error.code !== 'LIFECYCLE_ADAPTER_UNAVAILABLE';
 }
 
 export async function initializeLifecycleMatrixLane(
@@ -846,9 +837,19 @@ export async function initializeLifecycleMatrixLane(
   faults: LifecycleFaultController,
   seed: string,
 ): Promise<LifecycleCapabilities> {
-  await faults.configure(undefined);
-  await client.reset(seed);
-  return lifecycleCapabilitiesWithRetry(client);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await faults.configure(undefined);
+      await client.reset(seed);
+      return await client.capabilities();
+    } catch (error) {
+      lastError = error;
+      if (attempt === 7 || !lifecycleMatrixInitializationRetryable(error)) break;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 export async function verifyLifecycleScenarioSuccess(
