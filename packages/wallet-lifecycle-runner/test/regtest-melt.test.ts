@@ -88,6 +88,25 @@ async function waitForActiveChannel(): Promise<void> {
   throw new Error('Regtest Lightning channel did not activate');
 }
 
+async function waitForPeer(publicKey: string): Promise<void> {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    try {
+      const peers = Reflect.get(await lncli('lnd-sink', ['listpeers']), 'peers');
+      if (
+        Array.isArray(peers) &&
+        peers.some((peer) => Reflect.get(peer, 'pub_key') === publicKey)
+      ) {
+        return;
+      }
+      await lncli('lnd-sink', ['connect', `${publicKey}@lnd-mint:9735`]);
+    } catch {
+      // Peer gossip can lag container health; the next poll validates the connection.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error('Regtest LND sink did not connect to mint peer');
+}
+
 async function bootstrapRegtest(): Promise<void> {
   const chain = parseJson(await bitcoinCli(['getblockchaininfo']));
   if (chain.chain !== 'regtest') throw new Error('Refusing non-regtest Bitcoin chain');
@@ -129,11 +148,7 @@ async function bootstrapRegtest(): Promise<void> {
 
   const mintPublicKey = Reflect.get(await lncli('lnd-mint', ['getinfo']), 'identity_pubkey');
   if (typeof mintPublicKey !== 'string') throw new Error('LND mint returned no identity');
-  try {
-    await lncli('lnd-sink', ['connect', `${mintPublicKey}@lnd-mint:9735`]);
-  } catch {
-    // An already-connected peer is the only harmless retry outcome; openchannel validates it.
-  }
+  await waitForPeer(mintPublicKey);
   await lncli('lnd-sink', ['openchannel', '--sat_per_vbyte=2', mintPublicKey, '1000000', '400000']);
   await mine(6);
   await waitForActiveChannel();

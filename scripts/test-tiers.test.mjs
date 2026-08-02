@@ -86,3 +86,14 @@ test('environment preflight enables every opt-in lane it owns', () => {
 test('lifecycle compose wrappers use flags supported by GitHub hosted runners', () => {
   assert.doesNotMatch(environmentHelper, /--quiet-build/);
 });
+
+test('lifecycle suites build the runner dependency graph before executing specs', () => {
+  for (const scriptName of ['test:lifecycle:funded:run', 'test:lifecycle:regtest:run']) {
+    const command = root.scripts[scriptName];
+    assert.match(
+      command,
+      /^pnpm exec turbo run build --filter=@cashu-fault-lab\/wallet-lifecycle-runner\.\.\. && /,
+    );
+    assert.match(command, /vitest run test\/(?:funded-lifecycle|regtest-melt)\.test\.ts$/);
+  }
+});
