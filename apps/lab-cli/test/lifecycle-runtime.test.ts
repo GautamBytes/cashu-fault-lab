@@ -1,14 +1,17 @@
 import type {
   LifecycleAdapterClient,
   LifecycleCapabilities,
+  LifecycleEvidenceView,
   LifecycleOperationInput,
   LifecycleOperationView,
+  LifecycleWalletView,
 } from '@cashu-fault-lab/wallet-lifecycle-contract';
 import { describe, expect, it } from 'vitest';
 import {
   createEnvironmentLifecycleRuntime,
   HttpLifecycleLabRuntime,
   initializeLifecycleMatrixLane,
+  lifecycleMatrixEvidenceSummary,
   lifecycleMatrixRestoreSetupScenario,
   lifecycleMatrixScenarioSeed,
   lifecycleMatrixFundingCommands,
@@ -28,6 +31,8 @@ const quoteHash = 'd'.repeat(64);
 class FakeClient implements LifecycleAdapterClient {
   input: LifecycleOperationInput | undefined;
   succeeded = false;
+  intentHash = 'a'.repeat(64);
+  evidenceLog: readonly LifecycleEvidenceView[] = [];
   readonly events: string[] = [];
 
   async capabilities(): Promise<LifecycleCapabilities> {
@@ -63,7 +68,7 @@ class FakeClient implements LifecycleAdapterClient {
       kind: 'mint',
       mint,
       unit: 'sat',
-      intentHash: 'a'.repeat(64),
+      intentHash: this.intentHash,
       phase: 'ambiguous',
       evidenceCode: 'mint_quote_pending',
       amount: 8,
@@ -80,7 +85,7 @@ class FakeClient implements LifecycleAdapterClient {
       kind: 'mint',
       mint,
       unit: 'sat',
-      intentHash: 'a'.repeat(64),
+      intentHash: this.intentHash,
       phase: 'succeeded',
       amount: 8,
       requestHash,
@@ -93,7 +98,7 @@ class FakeClient implements LifecycleAdapterClient {
     throw new Error('not used');
   }
 
-  wallet() {
+  wallet(): Promise<LifecycleWalletView> {
     return Promise.resolve({
       walletId: 'cashu-ts',
       mint,
@@ -104,28 +109,58 @@ class FakeClient implements LifecycleAdapterClient {
   }
 
   evidence() {
-    return Promise.resolve([]);
+    return Promise.resolve(this.evidenceLog);
+  }
+}
+
+class MeltClient extends FakeClient {
+  override async capabilities(): Promise<LifecycleCapabilities> {
+    return {
+      ...(await super.capabilities()),
+      operations: ['melt'],
+    };
+  }
+
+  override async start(input: LifecycleOperationInput): Promise<LifecycleOperationView> {
+    this.input = input;
+    this.succeeded = true;
+    return {
+      operationId,
+      kind: 'melt',
+      mint,
+      unit: 'sat',
+      intentHash: this.intentHash,
+      phase: 'succeeded',
+      amount: 6,
+      requestHash,
+    };
+  }
+
+  override resume(): Promise<LifecycleOperationView> {
+    throw new Error('not used');
+  }
+
+  override wallet(): Promise<LifecycleWalletView> {
+    return Promise.resolve({
+      walletId: 'cashu-ts',
+      mint,
+      unit: 'sat',
+      balances: { available: this.succeeded ? 4 : 10, reserved: 0, recoverable: 0 },
+      proofs: [{ proofId: '1'.repeat(64), state: 'SPENT' as const }],
+    });
   }
 }
 
 describe('HTTP lifecycle lab runtime', () => {
   it('isolates deterministic wallet seeds by matrix lane and scenario', () => {
     const first = lifecycleMatrixScenarioSeed('matrix-seed', 'cdk-nutshell', 'mint-response-lost');
-    const replay = lifecycleMatrixScenarioSeed(
-      'matrix-seed',
-      'cdk-nutshell',
-      'mint-response-lost',
-    );
+    const replay = lifecycleMatrixScenarioSeed('matrix-seed', 'cdk-nutshell', 'mint-response-lost');
     const nextScenario = lifecycleMatrixScenarioSeed(
       'matrix-seed',
       'cdk-nutshell',
       'swap-response-lost',
     );
-    const nextLane = lifecycleMatrixScenarioSeed(
-      'matrix-seed',
-      'cdk-mintd',
-      'mint-response-lost',
-    );
+    const nextLane = lifecycleMatrixScenarioSeed('matrix-seed', 'cdk-mintd', 'mint-response-lost');
 
     expect(first).toBe(replay);
     expect(first).not.toBe(nextScenario);
@@ -261,6 +296,37 @@ describe('HTTP lifecycle lab runtime', () => {
     );
   });
 
+  it('rejects terminal evidence rebound to a different intent hash', async () => {
+    const client = new FakeClient();
+    const firstIntentHash = 'a'.repeat(64);
+    client.operation = async () => ({
+      operationId,
+      kind: 'mint',
+      mint,
+      unit: 'sat',
+      intentHash: 'b'.repeat(64),
+      phase: 'succeeded',
+      amount: 8,
+      requestHash,
+      quoteHash,
+      outputPlanHash,
+    });
+    const scenario: LifecycleScenarioSpec = {
+      id: 'terminal-intent-binding',
+      seed: 'matrix-seed',
+      commands: [
+        {
+          type: 'start',
+          input: { operationId, kind: 'mint', mint, unit: 'sat', amount: 8, method: 'bolt11' },
+        },
+      ],
+    };
+
+    await expect(
+      verifyLifecycleScenarioSuccess(client, scenario, new Map([[operationId, firstIntentHash]])),
+    ).rejects.toThrow('Lifecycle operation identity changed during terminal verification');
+  });
+
   it('configures packaged restart scenarios with a compose restart controller', () => {
     const runtime = createEnvironmentLifecycleRuntime({});
 
@@ -372,9 +438,7 @@ describe('HTTP lifecycle lab runtime', () => {
       ]),
     );
     expect(results).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'LIFECYCLE_MATRIX_NOT_EXECUTED' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ code: 'LIFECYCLE_MATRIX_NOT_EXECUTED' })]),
     );
   });
 
@@ -418,7 +482,7 @@ describe('HTTP lifecycle lab runtime', () => {
 
     expect(execution.result.ok).toBe(true);
     expect(faults).toEqual([undefined, faultRule, undefined]);
-    if (!execution.result.ok) throw new Error('scenario unexpectedly failed');
+    if (!execution.result.ok) throw new Error(execution.result.artifact.failure.message);
     expect(execution.result.model.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'request_dispatched', bodyHash: requestHash }),
@@ -428,5 +492,91 @@ describe('HTTP lifecycle lab runtime', () => {
         expect.objectContaining({ type: 'phase_observed', phase: 'succeeded' }),
       ]),
     );
+  });
+
+  it('maps authenticated Lightning settlement evidence into melt quiescence', async () => {
+    const client = new MeltClient();
+    client.evidenceLog = [
+      {
+        sequence: 1,
+        operationId,
+        source: 'lightning',
+        event: 'settlement_verified',
+        dataHash: 'f'.repeat(64),
+      },
+    ];
+    const runtime = new HttpLifecycleLabRuntime({
+      adapter: async () => ({ client, componentVersion: '1.0.0' }),
+      faultController: { configure: async () => undefined },
+    });
+    const scenario: LifecycleScenarioSpec = {
+      id: 'melt-settlement-evidence',
+      seed: 'seed-42',
+      requireQuiescence: true,
+      commands: [
+        {
+          type: 'start',
+          input: {
+            operationId,
+            kind: 'melt',
+            mint,
+            unit: 'sat',
+            invoice: 'lnbc1redacted',
+          },
+        },
+      ],
+    };
+
+    const execution = await runtime.run({
+      scenario,
+      seed: scenario.seed,
+      adapterId: 'cashu-ts',
+      mintId: 'nutshell-local',
+    });
+
+    if (!execution.result.ok) {
+      throw new Error(JSON.stringify(execution.result.artifact.observations));
+    }
+    expect(execution.result.ok).toBe(true);
+    expect(execution.result.model.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'lightning_settlement_observed',
+          operationId,
+          evidenceHash: 'f'.repeat(64),
+          provenance: 'lightning',
+        }),
+      ]),
+    );
+  });
+
+  it('summarizes passed matrix evidence provenance without upgrading adapter claims', () => {
+    expect(
+      lifecycleMatrixEvidenceSummary([
+        {
+          type: 'operation_observed',
+          operation: {
+            operationId,
+            kind: 'mint',
+            mint,
+            unit: 'sat',
+            intentHash: 'a'.repeat(64),
+            phase: 'created',
+          },
+          provenance: 'adapter_claimed',
+        },
+        { type: 'phase_observed', operationId, phase: 'succeeded', provenance: 'adapter_claimed' },
+        {
+          type: 'lightning_settlement_observed',
+          operationId,
+          evidenceHash: 'f'.repeat(64),
+          provenance: 'lightning',
+        },
+      ]),
+    ).toEqual({
+      confidence: 'adapter_claimed',
+      observationCount: 3,
+      provenances: ['adapter_claimed', 'lightning'],
+    });
   });
 });

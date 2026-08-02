@@ -25,6 +25,13 @@ const EFFECT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/u;
 const HASH_PATTERN = /^[a-f0-9]{64}$/u;
 const UNIT_PATTERN = /^[a-z0-9_-]{1,16}$/u;
 const PATH_PATTERN = /^\/v1\/[a-z0-9/_-]{1,128}$/u;
+const PROVENANCES = new Set([
+  'adapter_claimed',
+  'durable_state',
+  'mint',
+  'lightning',
+  'runner_derived',
+]);
 
 function fail(message: string): never {
   throw new Error(`Lifecycle oracle safety violation: ${message}`);
@@ -64,6 +71,7 @@ function sameRequest(left: RequestDispatch, right: RequestDispatch): boolean {
 function sameSettlement(left: SettlementObservation, right: SettlementObservation): boolean {
   return (
     left.operationId === right.operationId &&
+    left.evidenceHash === right.evidenceHash &&
     left.invoiceHash === right.invoiceHash &&
     left.paymentHash === right.paymentHash &&
     left.amount === right.amount &&
@@ -165,6 +173,11 @@ function validProofTransition(from: LifecycleProofState, to: LifecycleProofState
   return false;
 }
 
+function settlementKey(observation: SettlementObservation): string {
+  if (observation.invoiceHash !== undefined) return `invoice\0${observation.invoiceHash}`;
+  return `evidence\0${observation.evidenceHash ?? ''}`;
+}
+
 export function evaluateLifecycleModel(model: LifecycleModel): LifecycleEvaluation {
   const operations = new Map<string, LifecycleOperationRecord>();
   const balances = new Map<string, number>();
@@ -176,6 +189,9 @@ export function evaluateLifecycleModel(model: LifecycleModel): LifecycleEvaluati
   const outputs = new Map<string, OutputsObservation>();
 
   for (const observation of model.observations) {
+    if (observation.provenance !== undefined && !PROVENANCES.has(observation.provenance)) {
+      fail('observation provenance is invalid');
+    }
     switch (observation.type) {
       case 'operation_observed': {
         let created: LifecycleOperationRecord;
@@ -299,20 +315,29 @@ export function evaluateLifecycleModel(model: LifecycleModel): LifecycleEvaluati
       }
       case 'lightning_settlement_observed': {
         const operation = operationFor(operations, observation.operationId);
-        if (
-          operation.kind !== 'melt' ||
-          !HASH_PATTERN.test(observation.invoiceHash) ||
-          !HASH_PATTERN.test(observation.paymentHash) ||
-          !safePositive(observation.amount) ||
-          observation.unit !== operation.unit
-        ) {
+        const hasProtocolBinding =
+          observation.invoiceHash !== undefined &&
+          HASH_PATTERN.test(observation.invoiceHash) &&
+          observation.paymentHash !== undefined &&
+          HASH_PATTERN.test(observation.paymentHash) &&
+          observation.amount !== undefined &&
+          safePositive(observation.amount) &&
+          observation.unit !== undefined &&
+          observation.unit === operation.unit;
+        const hasAuthenticatedEvidence =
+          observation.provenance === 'lightning' &&
+          HASH_PATTERN.test(observation.evidenceHash ?? '');
+        if (operation.kind !== 'melt' || (!hasProtocolBinding && !hasAuthenticatedEvidence)) {
           fail(`operation ${observation.operationId} Lightning settlement evidence is invalid`);
         }
-        const previous = settlements.get(observation.invoiceHash);
+        const key = settlementKey(observation);
+        const previous = settlements.get(key);
         if (previous !== undefined && !sameSettlement(previous, observation)) {
-          fail(`Lightning invoice settled more than once: ${observation.invoiceHash}`);
+          fail(
+            `Lightning invoice settled more than once: ${observation.invoiceHash ?? observation.evidenceHash}`,
+          );
         }
-        settlements.set(observation.invoiceHash, previous ?? observation);
+        settlements.set(key, previous ?? observation);
         break;
       }
       case 'outputs_persisted': {
@@ -391,9 +416,7 @@ export function assertLifecycleQuiescence(model: LifecycleModel): void {
     }
     if (
       operation.kind === 'mint' &&
-      ![...evaluation.quotes.values()].some(
-        (quote) => quote.operationId === operation.operationId,
-      )
+      ![...evaluation.quotes.values()].some((quote) => quote.operationId === operation.operationId)
     ) {
       fail(`operation ${operation.operationId} has no quote evidence`);
     }

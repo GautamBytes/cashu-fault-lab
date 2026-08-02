@@ -678,7 +678,7 @@ impl LifecycleEngine {
         let evidence = LifecycleEvidence {
             sequence: 0,
             operation_id: operation.operation_id.clone(),
-            source: "adapter".to_owned(),
+            source: lifecycle_evidence_source(&execution.event).to_owned(),
             event: execution.event,
             data_hash: evidence_hash(&operation),
         };
@@ -913,6 +913,14 @@ fn evidence_hash(operation: &LifecycleOperation) -> String {
         b"cashu-fault-lab/cdk-lifecycle-evidence-v1",
         &[public.as_bytes()],
     )
+}
+
+fn lifecycle_evidence_source(event: &str) -> &'static str {
+    if event == "melt_settlement_verified" || event == "melt_settlement_verified_legacy" {
+        "lightning"
+    } else {
+        "adapter"
+    }
 }
 
 pub fn deterministic_exact_amount_plan(
@@ -1400,6 +1408,17 @@ struct NativeMeltRecoveryPlan {
     balance_before: u64,
     #[serde(default)]
     input_fee: u64,
+}
+
+struct VerifiedMeltExecution<'a> {
+    invoice: &'a str,
+    quote_id: &'a [u8],
+    recovery_plan: &'a [u8],
+    amount: u64,
+    input_fee: u64,
+    fee_reserve: u64,
+    actual_fee: u64,
+    change: u64,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -2130,16 +2149,16 @@ impl NativeCdkLifecycleWallet {
                         .change()
                         .and_then(|proofs| proofs.total_amount().ok())
                         .map_or(0, |amount| amount.to_u64());
-                    self.verified_melt_execution(
+                    self.verified_melt_execution(VerifiedMeltExecution {
                         invoice,
-                        quote_id.as_bytes(),
-                        &recovery_plan,
-                        result.amount().to_u64(),
+                        quote_id: quote_id.as_bytes(),
+                        recovery_plan: &recovery_plan,
+                        amount: result.amount().to_u64(),
                         input_fee,
                         fee_reserve,
-                        result.fee_paid().to_u64(),
+                        actual_fee: result.fee_paid().to_u64(),
                         change,
-                    )
+                    })
                     .await
                 }
                 Ok(MeltOutcome::Paid(_)) | Ok(MeltOutcome::Pending(_)) => {
@@ -2156,16 +2175,16 @@ impl NativeCdkLifecycleWallet {
                     .change()
                     .and_then(|proofs| proofs.total_amount().ok())
                     .map_or(0, |amount| amount.to_u64());
-                self.verified_melt_execution(
+                self.verified_melt_execution(VerifiedMeltExecution {
                     invoice,
-                    quote_id.as_bytes(),
-                    &recovery_plan,
-                    result.amount().to_u64(),
+                    quote_id: quote_id.as_bytes(),
+                    recovery_plan: &recovery_plan,
+                    amount: result.amount().to_u64(),
                     input_fee,
                     fee_reserve,
-                    result.fee_paid().to_u64(),
+                    actual_fee: result.fee_paid().to_u64(),
                     change,
-                )
+                })
                 .await
             }
             Ok(_) => {
@@ -2178,26 +2197,29 @@ impl NativeCdkLifecycleWallet {
 
     async fn verified_melt_execution(
         &self,
-        invoice: &str,
-        quote_id: &[u8],
-        recovery_plan: &[u8],
-        amount: u64,
-        input_fee: u64,
-        fee_reserve: u64,
-        actual_fee: u64,
-        change: u64,
+        input: VerifiedMeltExecution<'_>,
     ) -> LifecycleExecution {
         let Some(probe) = self.settlement_probe.as_ref() else {
             return LifecycleExecution::recovery_blocked("lightning_settlement_probe_unavailable")
-                .with_private_material(recovery_plan.to_vec());
+                .with_private_material(input.recovery_plan.to_vec());
         };
-        let quote_hash = hash_parts(b"cashu-fault-lab/cdk-lifecycle-melt-quote-v1", &[quote_id]);
-        match probe.settled(invoice, &quote_hash).await {
-            Ok(true) => LifecycleExecution::succeeded(Some(amount), "melt_settlement_verified")
-                .with_fees(input_fee, fee_reserve, actual_fee, change)
-                .with_private_material(recovery_plan.to_vec()),
+        let quote_hash = hash_parts(
+            b"cashu-fault-lab/cdk-lifecycle-melt-quote-v1",
+            &[input.quote_id],
+        );
+        match probe.settled(input.invoice, &quote_hash).await {
+            Ok(true) => {
+                LifecycleExecution::succeeded(Some(input.amount), "melt_settlement_verified")
+                    .with_fees(
+                        input.input_fee,
+                        input.fee_reserve,
+                        input.actual_fee,
+                        input.change,
+                    )
+                    .with_private_material(input.recovery_plan.to_vec())
+            }
             Ok(false) | Err(_) => LifecycleExecution::ambiguous("lightning_settlement_unverified")
-                .with_private_material(recovery_plan.to_vec()),
+                .with_private_material(input.recovery_plan.to_vec()),
         }
     }
 

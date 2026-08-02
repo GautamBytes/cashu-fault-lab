@@ -11,6 +11,7 @@ import type { LifecycleObservation } from '@cashu-fault-lab/wallet-lifecycle-ora
 import {
   LifecycleScenarioRunner,
   replayLifecycleFailure,
+  lifecycleSeedHash,
   validateLifecycleScenarioSpec,
   type LifecycleDriver,
   type LifecycleDriverStep,
@@ -24,6 +25,7 @@ import { promisify } from 'node:util';
 import type {
   LifecycleLabRuntime,
   LifecycleMatrixCliResult,
+  LifecycleMatrixEvidenceSummary,
   LifecycleRunExecution,
   LifecycleRunOptions,
 } from './commands/lifecycle.js';
@@ -117,7 +119,9 @@ function phasePath(
 class HttpLifecycleDriver implements LifecycleDriver {
   readonly #phases = new Map<string, LifecycleOperationView['phase']>();
   readonly #inputs = new Map<string, LifecycleOperationInput>();
+  readonly #intentHashes = new Map<string, string>();
   readonly #quoteVersions = new Map<string, number>();
+  readonly #evidenceKeys = new Set<string>();
   #wallet: LifecycleWalletView | undefined;
   #openingRecorded = false;
 
@@ -130,7 +134,9 @@ class HttpLifecycleDriver implements LifecycleDriver {
   async reset(seed: string): Promise<void> {
     this.#phases.clear();
     this.#inputs.clear();
+    this.#intentHashes.clear();
     this.#quoteVersions.clear();
+    this.#evidenceKeys.clear();
     this.#openingRecorded = false;
     await this.faults.configure(undefined);
     await this.client.reset(seed);
@@ -180,6 +186,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
     const opening = this.#openingObservations(view.operationId, before);
     if (opening.length > 0) observations.splice(1, 0, ...opening);
     observations.push(...this.#walletObservations(input, view, before, after));
+    observations.push(...(await this.#evidenceObservations()));
     this.#wallet = structuredClone(after);
     return { observations };
   }
@@ -213,6 +220,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
               amount,
               from: 'external:opening',
               to: `wallet:${wallet.walletId}:${bucket}`,
+              provenance: 'adapter_claimed',
             },
           ];
     });
@@ -238,6 +246,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
       proofId: proof.proofId,
       owner: `wallet:${after.walletId}`,
       state: proof.state,
+      provenance: 'adapter_claimed',
     }));
 
     if (view.kind === 'mint' && view.quoteHash !== undefined && view.amount !== undefined) {
@@ -252,6 +261,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
         amountPaid: succeeded ? view.amount : 0,
         amountIssued: succeeded ? view.amount : 0,
         updatedAt,
+        provenance: 'adapter_claimed',
       });
     }
 
@@ -270,6 +280,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
         amount: delta,
         from: 'external:fixture',
         to: `wallet:${after.walletId}:available`,
+        provenance: 'adapter_claimed',
       });
     } else if (delta < 0) {
       const destination =
@@ -286,6 +297,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
         amount: -delta,
         from: `wallet:${after.walletId}:available`,
         to: destination,
+        provenance: 'adapter_claimed',
       });
     } else if (view.kind === 'swap' && view.amount !== undefined) {
       observations.push(
@@ -297,6 +309,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
           amount: view.amount,
           from: `wallet:${after.walletId}:available`,
           to: `wallet:${after.walletId}:reserved`,
+          provenance: 'adapter_claimed',
         },
         {
           type: 'value_moved',
@@ -306,8 +319,34 @@ class HttpLifecycleDriver implements LifecycleDriver {
           amount: view.amount,
           from: `wallet:${after.walletId}:reserved`,
           to: `wallet:${after.walletId}:available`,
+          provenance: 'adapter_claimed',
         },
       );
+    }
+    return observations;
+  }
+
+  async #evidenceObservations(): Promise<readonly LifecycleObservation[]> {
+    const evidence = await this.client.evidence();
+    const observations: LifecycleObservation[] = [];
+    for (const item of evidence) {
+      const key = `${item.sequence}\0${item.operationId}\0${item.source}\0${item.event}\0${item.dataHash}`;
+      if (this.#evidenceKeys.has(key)) continue;
+      this.#evidenceKeys.add(key);
+      if (!this.#inputs.has(item.operationId)) continue;
+      if (
+        item.source === 'lightning' &&
+        (item.event === 'settlement_verified' ||
+          item.event === 'melt_settlement_verified' ||
+          item.event === 'melt_settlement_verified_legacy')
+      ) {
+        observations.push({
+          type: 'lightning_settlement_observed',
+          operationId: item.operationId,
+          evidenceHash: item.dataHash,
+          provenance: 'lightning',
+        });
+      }
     }
     return observations;
   }
@@ -324,6 +363,11 @@ class HttpLifecycleDriver implements LifecycleDriver {
     ) {
       throw new Error('Lifecycle adapter changed operation identity');
     }
+    const firstIntentHash = this.#intentHashes.get(view.operationId);
+    if (firstIntentHash !== undefined && view.intentHash !== firstIntentHash) {
+      throw new Error('Lifecycle adapter changed operation identity');
+    }
+    this.#intentHashes.set(view.operationId, view.intentHash);
     const previous = this.#phases.get(view.operationId) ?? 'created';
     const observations: LifecycleObservation[] = [];
     if (!this.#phases.has(view.operationId)) {
@@ -337,6 +381,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
           intentHash: view.intentHash,
           phase: 'created',
         },
+        provenance: 'adapter_claimed',
       });
     }
     for (const phase of phasePath(previous, view.phase)) {
@@ -349,6 +394,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
         operationId: view.operationId,
         phase,
         ...(acceptsEvidenceCode ? { evidenceCode: view.evidenceCode } : {}),
+        provenance: 'adapter_claimed',
       });
     }
     const kind = requestKind(view.kind);
@@ -360,6 +406,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
         method: 'POST',
         path: requestPath(kind),
         bodyHash: view.requestHash,
+        provenance: 'adapter_claimed',
       });
     }
     if (
@@ -375,6 +422,7 @@ class HttpLifecycleDriver implements LifecycleDriver {
         outputPlanHash: view.outputPlanHash,
         amount: view.amount,
         unit: view.unit,
+        provenance: 'adapter_claimed',
       });
     }
     this.#phases.set(view.operationId, view.phase);
@@ -749,6 +797,50 @@ function matrixFailure(
   };
 }
 
+function observedIntentHashes(
+  observations: readonly LifecycleObservation[],
+): ReadonlyMap<string, string> {
+  return new Map(
+    observations.flatMap((observation) =>
+      observation.type === 'operation_observed'
+        ? [[observation.operation.operationId, observation.operation.intentHash] as const]
+        : [],
+    ),
+  );
+}
+
+export function lifecycleMatrixEvidenceSummary(
+  observations: readonly LifecycleObservation[],
+): LifecycleMatrixEvidenceSummary {
+  const provenances = [
+    ...new Set(observations.map((observation) => observation.provenance ?? 'runner_derived')),
+  ];
+  return {
+    confidence: provenances.includes('adapter_claimed')
+      ? 'adapter_claimed'
+      : provenances.some((provenance) => provenance === 'runner_derived')
+        ? 'derived'
+        : 'observed',
+    observationCount: observations.length,
+    provenances,
+  };
+}
+
+async function lifecycleCapabilitiesWithRetry(
+  client: LifecycleAdapterClient,
+): Promise<LifecycleCapabilities> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await client.capabilities();
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 export async function initializeLifecycleMatrixLane(
   client: LifecycleAdapterClient,
   faults: LifecycleFaultController,
@@ -756,15 +848,15 @@ export async function initializeLifecycleMatrixLane(
 ): Promise<LifecycleCapabilities> {
   await faults.configure(undefined);
   await client.reset(seed);
-  return client.capabilities();
+  return lifecycleCapabilitiesWithRetry(client);
 }
 
 export async function verifyLifecycleScenarioSuccess(
   client: LifecycleAdapterClient,
   scenario: LifecycleScenarioSpec,
+  expectedIntentHashes: ReadonlyMap<string, string> = new Map(),
 ): Promise<
-  | { readonly operationId: string; readonly phase: LifecycleOperationView['phase'] }
-  | undefined
+  { readonly operationId: string; readonly phase: LifecycleOperationView['phase'] } | undefined
 > {
   const inputs = new Map(
     scenario.commands.flatMap((command) =>
@@ -777,7 +869,9 @@ export async function verifyLifecycleScenarioSuccess(
       operation.operationId !== input.operationId ||
       operation.kind !== input.kind ||
       operation.mint !== input.mint ||
-      operation.unit !== input.unit
+      operation.unit !== input.unit ||
+      (expectedIntentHashes.has(operationId) &&
+        operation.intentHash !== expectedIntentHashes.get(operationId))
     ) {
       throw new Error('Lifecycle operation identity changed during terminal verification');
     }
@@ -864,6 +958,9 @@ async function executeEnvironmentLifecycleLane(
         id: resultId,
         implementationId: lane.adapterId,
         mintId: lane.mintId,
+        scenarioId,
+        seedHash: lifecycleSeedHash(scenario.seed),
+        componentVersion: capabilities.implementation.version,
         status: 'not_applicable',
         reason: `Missing lifecycle operations: ${missing.join(', ')}`,
       });
@@ -886,6 +983,9 @@ async function executeEnvironmentLifecycleLane(
           id: resultId,
           implementationId: lane.adapterId,
           mintId: lane.mintId,
+          scenarioId,
+          seedHash: lifecycleSeedHash(scenario.seed),
+          componentVersion: capabilities.implementation.version,
           status: 'failed',
           code: setupExecution.result.ok
             ? 'LIFECYCLE_RESTORE_SETUP'
@@ -907,6 +1007,9 @@ async function executeEnvironmentLifecycleLane(
         id: resultId,
         implementationId: lane.adapterId,
         mintId: lane.mintId,
+        scenarioId,
+        seedHash: lifecycleSeedHash(scenario.seed),
+        componentVersion: capabilities.implementation.version,
         status: 'failed',
         code: execution.result.artifact.failure.code,
         reason: `Lifecycle matrix scenario ${scenarioId} failed; use lifecycle run for replay evidence`,
@@ -915,12 +1018,19 @@ async function executeEnvironmentLifecycleLane(
     }
     let terminalFailure;
     try {
-      terminalFailure = await verifyLifecycleScenarioSuccess(client, scenario);
+      terminalFailure = await verifyLifecycleScenarioSuccess(
+        client,
+        scenario,
+        observedIntentHashes(execution.result.model.observations),
+      );
     } catch {
       results.push({
         id: resultId,
         implementationId: lane.adapterId,
         mintId: lane.mintId,
+        scenarioId,
+        seedHash: lifecycleSeedHash(scenario.seed),
+        componentVersion: capabilities.implementation.version,
         status: 'failed',
         code: 'LIFECYCLE_OPERATION_EVIDENCE',
         reason: `Lifecycle matrix scenario ${scenarioId} could not verify terminal operation evidence`,
@@ -932,6 +1042,9 @@ async function executeEnvironmentLifecycleLane(
         id: resultId,
         implementationId: lane.adapterId,
         mintId: lane.mintId,
+        scenarioId,
+        seedHash: lifecycleSeedHash(scenario.seed),
+        componentVersion: capabilities.implementation.version,
         status: 'failed',
         code: 'LIFECYCLE_UNEXPECTED_TERMINAL_PHASE',
         reason: `Lifecycle matrix scenario ${scenarioId} did not recover successfully`,
@@ -942,6 +1055,10 @@ async function executeEnvironmentLifecycleLane(
       id: resultId,
       implementationId: lane.adapterId,
       mintId: lane.mintId,
+      scenarioId,
+      seedHash: lifecycleSeedHash(scenario.seed),
+      componentVersion: capabilities.implementation.version,
+      evidence: lifecycleMatrixEvidenceSummary(execution.result.model.observations),
       status: 'passed',
     });
   }

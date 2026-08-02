@@ -5,8 +5,10 @@ import type {
 
 export type LifecycleProofState = 'UNSPENT' | 'PENDING' | 'SPENT';
 export type LifecycleRequestKind = 'mint' | 'swap' | 'melt';
+export type LifecycleObservationProvenance =
+  'adapter_claimed' | 'durable_state' | 'mint' | 'lightning' | 'runner_derived';
 
-export type LifecycleObservation =
+type LifecycleObservationBody =
   | {
       readonly type: 'operation_observed';
       readonly operation: LifecycleOperationRecord;
@@ -52,10 +54,11 @@ export type LifecycleObservation =
   | {
       readonly type: 'lightning_settlement_observed';
       readonly operationId: string;
-      readonly invoiceHash: string;
-      readonly paymentHash: string;
-      readonly amount: number;
-      readonly unit: string;
+      readonly invoiceHash?: string;
+      readonly paymentHash?: string;
+      readonly amount?: number;
+      readonly unit?: string;
+      readonly evidenceHash?: string;
     }
   | {
       readonly type: 'outputs_persisted';
@@ -64,6 +67,10 @@ export type LifecycleObservation =
       readonly amount: number;
       readonly unit: string;
     };
+
+export type LifecycleObservation = LifecycleObservationBody & {
+  readonly provenance?: LifecycleObservationProvenance;
+};
 
 export interface LifecycleModel {
   readonly observations: readonly LifecycleObservation[];

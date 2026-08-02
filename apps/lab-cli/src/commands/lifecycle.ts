@@ -42,11 +42,21 @@ export interface LifecycleRunExecution {
   readonly imageDigests?: Readonly<Record<string, string>>;
 }
 
+export interface LifecycleMatrixEvidenceSummary {
+  readonly confidence: 'observed' | 'derived' | 'adapter_claimed';
+  readonly observationCount: number;
+  readonly provenances: readonly string[];
+}
+
 export interface LifecycleMatrixCliResult {
   readonly id: string;
   readonly implementationId: string;
   readonly mintId: string;
   readonly status: 'passed' | 'failed' | 'not_applicable';
+  readonly scenarioId?: string;
+  readonly seedHash?: string;
+  readonly componentVersion?: string;
+  readonly evidence?: LifecycleMatrixEvidenceSummary;
   readonly code?: string;
   readonly reason?: string;
 }
@@ -427,7 +437,9 @@ export function registerLifecycleCommands(
         : `${results
             .map((result) => {
               const label = result.status === 'not_applicable' ? 'N/A' : result.status;
-              return `  ${result.id} @ ${result.mintId}: ${label}${result.reason === undefined ? '' : ` (${result.reason})`}`;
+              const evidence =
+                result.evidence === undefined ? '' : ` confidence=${result.evidence.confidence}`;
+              return `  ${result.id} @ ${result.mintId}: ${label}${evidence}${result.reason === undefined ? '' : ` (${result.reason})`}`;
             })
             .join(
               '\n',

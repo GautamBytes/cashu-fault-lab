@@ -116,6 +116,27 @@ struct UnspentSendRecoveryWallet;
 
 struct MintQuoteMaterialWallet;
 
+struct VerifiedMeltWallet;
+
+#[async_trait]
+impl LifecycleWalletPort for VerifiedMeltWallet {
+    async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    async fn execute(&self, _request: &LifecycleInput) -> LifecycleExecution {
+        LifecycleExecution::succeeded(Some(8), "melt_settlement_verified")
+    }
+
+    async fn recover(
+        &self,
+        request: &LifecycleInput,
+        _private_material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        self.execute(request).await
+    }
+}
+
 #[async_trait]
 impl LifecycleWalletPort for MintQuoteMaterialWallet {
     async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
@@ -2264,6 +2285,23 @@ async fn lifecycle_engine_operations_emit_sanitized_observations() {
         assert_eq!(observation.data_hash.len(), 64);
         assert!(!observation.data_hash.contains("secret"));
     }
+}
+
+#[tokio::test]
+async fn lifecycle_engine_marks_verified_melt_evidence_as_lightning_sourced() {
+    let path = database_path("melt-source");
+    let store = Arc::new(LifecycleStore::open(path, [12_u8; 32]).expect("open lifecycle store"));
+    let engine = LifecycleEngine::new(store, Arc::new(VerifiedMeltWallet));
+    let operation = engine
+        .start(input("AAAAAAAAAAAAAAAAAAAAAA", LifecycleKind::Melt))
+        .await
+        .expect("execute melt");
+    assert_eq!(operation.phase, LifecyclePhase::Succeeded);
+
+    let evidence = engine.evidence().expect("read evidence");
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(evidence[0].source, "lightning");
+    assert_eq!(evidence[0].event, "melt_settlement_verified");
 }
 
 #[tokio::test]
