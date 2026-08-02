@@ -890,11 +890,18 @@ export function lifecycleComposeServiceRestartPlan(
   docker: string,
   composeFile: string,
   service: string,
+  options: { readonly wait?: boolean } = {},
 ): readonly LifecycleComposeCommand[] {
-  return [
+  const commands: LifecycleComposeCommand[] = [
     { executable: docker, args: ['compose', '-f', composeFile, 'restart', service] },
-    { executable: docker, args: ['compose', '-f', composeFile, 'up', '-d', '--wait', service] },
   ];
+  if (options.wait !== false) {
+    commands.push({
+      executable: docker,
+      args: ['compose', '-f', composeFile, 'up', '-d', '--wait', service],
+    });
+  }
+  return commands;
 }
 
 async function execLifecycleComposeCommands(
@@ -913,6 +920,7 @@ async function rehydrateCdkLifecycleMatrixLane(
   env: Readonly<Record<string, string | undefined>>,
   lane: EnvironmentLifecycleMatrixLane,
   seed: string,
+  client: LifecycleAdapterClient,
 ): Promise<void> {
   if (!lifecycleMatrixNeedsCdkHostRehydration(env, lane.adapterId)) return;
   const docker = env.CFL_DOCKER_BIN ?? 'docker';
@@ -925,12 +933,32 @@ async function rehydrateCdkLifecycleMatrixLane(
   };
   try {
     await execLifecycleComposeCommands(
-      lifecycleComposeServiceRestartPlan(docker, composeFile, service),
+      lifecycleComposeServiceRestartPlan(docker, composeFile, service, { wait: false }),
       environment,
     );
   } catch (error) {
     throw new LifecycleMatrixLanePreparationError(error);
   }
+  await waitForLifecycleMatrixAdapter(client);
+}
+
+export async function waitForLifecycleMatrixAdapter(
+  client: LifecycleAdapterClient,
+  timeoutMs = 120_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      await client.capabilities();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!lifecycleMatrixInitializationRetryable(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  throw lastError;
 }
 
 export async function verifyLifecycleScenarioSuccess(
@@ -986,7 +1014,7 @@ async function executeEnvironmentLifecycleLane(
   });
   let capabilities;
   try {
-    await rehydrateCdkLifecycleMatrixLane(env, lane, seed);
+    await rehydrateCdkLifecycleMatrixLane(env, lane, seed, client);
     capabilities = await initializeLifecycleMatrixLane(client, faultController, seed);
   } catch (error) {
     return [

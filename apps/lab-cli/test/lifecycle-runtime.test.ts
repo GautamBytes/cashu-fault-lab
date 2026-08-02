@@ -19,6 +19,7 @@ import {
   lifecycleMatrixFundingCommands,
   lifecycleMatrixNeedsCdkHostRehydration,
   verifyLifecycleScenarioSuccess,
+  waitForLifecycleMatrixAdapter,
 } from '../src/lifecycle-runtime.js';
 import type {
   LifecycleFaultRule,
@@ -369,6 +370,48 @@ describe('HTTP lifecycle lab runtime', () => {
         ],
       },
     ]);
+  });
+
+  it('restarts CDK host adapters without compose wait before endpoint probing', () => {
+    expect(
+      lifecycleComposeServiceRestartPlan(
+        'docker',
+        'infra/compose/wallet-lifecycle.compose.yml',
+        'cdk-nutshell',
+        { wait: false },
+      ),
+    ).toEqual([
+      {
+        executable: 'docker',
+        args: [
+          'compose',
+          '-f',
+          'infra/compose/wallet-lifecycle.compose.yml',
+          'restart',
+          'cdk-nutshell',
+        ],
+      },
+    ]);
+  });
+
+  it('waits for transient lifecycle adapter availability before matrix initialization', async () => {
+    const client = new FakeClient();
+    const capabilities = client.capabilities.bind(client);
+    let probes = 0;
+    client.capabilities = async () => {
+      probes += 1;
+      if (probes === 1) {
+        throw new LifecycleAdapterClientError(
+          'LIFECYCLE_ADAPTER_UNAVAILABLE',
+          'adapter is restarting',
+        );
+      }
+      return capabilities();
+    };
+
+    await waitForLifecycleMatrixAdapter(client, 2_000);
+
+    expect(probes).toBe(2);
   });
 
   it('rejects a safe but unsuccessful matrix terminal phase', async () => {
