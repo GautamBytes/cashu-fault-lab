@@ -317,6 +317,40 @@ describe.skipIf(process.env.CFL_POSTGRES_E2E !== '1')('PostgresCashuTsLifecycleS
     );
   });
 
+  test('resets a lifecycle run after proofs have been persisted', async () => {
+    if (pool === undefined) throw new Error('PostgreSQL pool did not start');
+    const options = {
+      pool,
+      key: Buffer.alloc(32, 49),
+      tenantId: 'cashu-ts-lifecycle-test',
+      runId: 'reset-with-proofs',
+    } as const;
+    const store = new PostgresCashuTsLifecycleStore(options);
+    const operations = new CashuTsLifecycleOperations({ store, wallet: new RecoveringWallet() });
+    await operations.reset('first-seed');
+    await operations.start(input);
+    await store.applyProofChanges({
+      operationId: input.operationId,
+      add: [
+        {
+          proofId: 'd'.repeat(64),
+          mint: input.mint,
+          unit: input.unit,
+          amount: 8,
+          state: 'UNSPENT',
+          bucket: 'available',
+          material: { id: '00aa', secret: 'reset-proof', C: `02${'13'.repeat(32)}` },
+        },
+      ],
+      update: [],
+    });
+
+    await expect(store.reset('second-seed')).resolves.toBeUndefined();
+    await expect(store.loadSeed()).resolves.toBe('second-seed');
+    await expect(store.get(input.operationId)).resolves.toBeUndefined();
+    await expect(store.listProofs(input.mint, input.unit)).resolves.toEqual([]);
+  });
+
   test('rolls back the prepared transition when its proof reservation cannot commit', async () => {
     if (pool === undefined) throw new Error('PostgreSQL pool did not start');
     const options = {

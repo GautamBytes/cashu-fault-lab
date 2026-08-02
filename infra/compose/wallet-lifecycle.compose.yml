@@ -282,7 +282,7 @@ services:
       CASHU_FAULT_LAB_CDK_LIFECYCLE_DATABASE_PATH: /var/lib/cashu-fault-lab/lifecycle.sqlite
       CASHU_FAULT_LAB_CDK_LIFECYCLE_WALLET_PATH: /var/lib/cashu-fault-lab/wallet.sqlite
       CASHU_FAULT_LAB_CDK_LIFECYCLE_STATE_KEY: ERERERERERERERERERERERERERERERERERERERERERE
-      CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED: wallet-lifecycle-funded
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED: ${CFL_LIFECYCLE_CDK_SEED:-wallet-lifecycle-funded}
     depends_on:
       nutshell-gateway:
         condition: service_healthy
@@ -310,7 +310,7 @@ services:
       CASHU_FAULT_LAB_CDK_LIFECYCLE_DATABASE_PATH: /var/lib/cashu-fault-lab/lifecycle.sqlite
       CASHU_FAULT_LAB_CDK_LIFECYCLE_WALLET_PATH: /var/lib/cashu-fault-lab/wallet.sqlite
       CASHU_FAULT_LAB_CDK_LIFECYCLE_STATE_KEY: IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI
-      CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED: wallet-lifecycle-funded
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED: ${CFL_LIFECYCLE_CDK_SEED:-wallet-lifecycle-funded}
     depends_on:
       mintd-gateway:
         condition: service_healthy

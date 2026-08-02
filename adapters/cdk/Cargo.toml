@@ -15,7 +15,7 @@ cdk-sqlite = { version = "=0.17.3", features = ["sqlcipher"] }
 ciborium = "=0.2.2"
 getrandom = "=0.3.4"
 hex = "=0.4.3"
-reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "=0.31.0", features = ["bundled-sqlcipher"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.150"

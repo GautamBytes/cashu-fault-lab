@@ -14,7 +14,7 @@ use cdk::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use crate::lifecycle_store::LifecycleStore;
+use crate::{lifecycle_store::LifecycleStore, lightning_probe::CdkLightningSettlementProbe};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -208,10 +208,13 @@ impl LifecycleExecution {
         Self::failure(LifecyclePhase::RecoveryBlocked, code)
     }
 
-    pub fn melt_recovered(fee_reserve: u64) -> Self {
-        let mut execution = Self::succeeded(None, "melt_reconciled");
-        execution.fee_reserve = Some(fee_reserve);
-        execution
+    pub fn melt_recovered(amount: u64, fee_reserve: u64, actual_fee: u64, change: u64) -> Self {
+        Self::succeeded(Some(amount), "melt_settlement_verified").with_fees(
+            0,
+            fee_reserve,
+            actual_fee,
+            change,
+        )
     }
 
     pub fn send_succeeded(amount: u64, recipient: &str, token: &str) -> Self {
@@ -664,10 +667,18 @@ impl LifecycleEngine {
         operation.fee_reserve = execution.fee_reserve;
         operation.actual_fee = execution.actual_fee;
         operation.change = execution.change;
+        if operation.kind == LifecycleKind::Mint
+            && let Some(quote_id) = execution.private_material.as_deref()
+        {
+            operation.quote_hash = Some(hash_parts(
+                b"cashu-fault-lab/cdk-lifecycle-mint-quote-v1",
+                &[quote_id],
+            ));
+        }
         let evidence = LifecycleEvidence {
             sequence: 0,
             operation_id: operation.operation_id.clone(),
-            source: "adapter".to_owned(),
+            source: lifecycle_evidence_source(&execution.event).to_owned(),
             event: execution.event,
             data_hash: evidence_hash(&operation),
         };
@@ -902,6 +913,14 @@ fn evidence_hash(operation: &LifecycleOperation) -> String {
         b"cashu-fault-lab/cdk-lifecycle-evidence-v1",
         &[public.as_bytes()],
     )
+}
+
+fn lifecycle_evidence_source(event: &str) -> &'static str {
+    if event == "melt_settlement_verified" || event == "melt_settlement_verified_legacy" {
+        "lightning"
+    } else {
+        "adapter"
+    }
 }
 
 pub fn deterministic_exact_amount_plan(
@@ -1329,6 +1348,7 @@ pub struct NativeCdkLifecycleWallet {
     reset_new_path: Mutex<Option<PathBuf>>,
     reset_generation: Mutex<Option<u64>>,
     facade: Option<Arc<dyn NativeCdkFacade>>,
+    settlement_probe: Option<Arc<dyn CdkLightningSettlementProbe>>,
 }
 
 #[async_trait]
@@ -1379,6 +1399,34 @@ enum NativePreparedPlan {
     },
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct NativeMeltRecoveryPlan {
+    quote_id: String,
+    amount: u64,
+    fee_reserve: u64,
+    balance_before: u64,
+    #[serde(default)]
+    input_fee: u64,
+}
+
+struct VerifiedMeltExecution<'a> {
+    invoice: &'a str,
+    quote_id: &'a [u8],
+    recovery_plan: &'a [u8],
+    amount: u64,
+    input_fee: u64,
+    fee_reserve: u64,
+    actual_fee: u64,
+    change: u64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct NativeReceiveRecoveryPlan {
+    balance_before: u64,
+}
+
 impl NativeCdkLifecycleWallet {
     pub const fn operation_bound(kind: LifecycleKind) -> bool {
         matches!(
@@ -1387,9 +1435,41 @@ impl NativeCdkLifecycleWallet {
                 | LifecycleKind::Swap
                 | LifecycleKind::Send
                 | LifecycleKind::Receive
+                | LifecycleKind::Melt
                 | LifecycleKind::Restore
                 | LifecycleKind::Reconcile
         )
+    }
+
+    pub fn receive_recovery_amount(
+        balance_before: u64,
+        balance_after: u64,
+    ) -> Result<u64, &'static str> {
+        match balance_after.checked_sub(balance_before) {
+            Some(0) => Err("receive_value_unverified"),
+            Some(amount) => Ok(amount),
+            None => Err("receive_value_mismatch"),
+        }
+    }
+
+    pub fn melt_recovery_fees(
+        balance_before: u64,
+        balance_after: u64,
+        amount: u64,
+        input_fee: u64,
+        fee_reserve: u64,
+    ) -> Result<(u64, u64), &'static str> {
+        let debit = balance_before
+            .checked_sub(balance_after)
+            .ok_or("melt_balance_increased")?;
+        let actual_fee = debit
+            .checked_sub(amount)
+            .and_then(|value| value.checked_sub(input_fee))
+            .ok_or("melt_value_mismatch")?;
+        let change = fee_reserve
+            .checked_sub(actual_fee)
+            .ok_or("melt_fee_exceeds_reserve")?;
+        Ok((actual_fee, change))
     }
 
     pub const fn aggregate_recovery_phase(_kind: LifecycleKind) -> LifecyclePhase {
@@ -1433,7 +1513,13 @@ impl NativeCdkLifecycleWallet {
             reset_new_path: Mutex::new(None),
             reset_generation: Mutex::new(None),
             facade: None,
+            settlement_probe: None,
         })
+    }
+
+    pub fn with_settlement_probe(mut self, probe: Arc<dyn CdkLightningSettlementProbe>) -> Self {
+        self.settlement_probe = Some(probe);
+        self
     }
 
     pub fn with_facade(
@@ -1975,13 +2061,32 @@ impl NativeCdkLifecycleWallet {
         let Some(quote_id) = material.and_then(|bytes| std::str::from_utf8(bytes).ok()) else {
             return LifecycleExecution::recovery_blocked("mint_quote_identity_unavailable");
         };
-        let quote = match wallet
+        let mut quote = match wallet
             .fetch_mint_quote(quote_id, Some(PaymentMethod::BOLT11))
             .await
         {
             Ok(quote) => quote,
             Err(_) => return LifecycleExecution::recovery_blocked("mint_quote_state_unavailable"),
         };
+        // Fake and real Lightning backends can report UNPAID briefly after the quote response.
+        // A single check races that transition and leaves an otherwise recoverable mint
+        // ambiguous. Poll only the already-persisted quote identity; never create a second quote.
+        for _ in 0..80 {
+            if quote.state != MintQuoteState::Unpaid {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            quote = match wallet
+                .fetch_mint_quote(quote_id, Some(PaymentMethod::BOLT11))
+                .await
+            {
+                Ok(quote) => quote,
+                Err(_) => {
+                    return LifecycleExecution::recovery_blocked("mint_quote_state_unavailable")
+                        .with_private_material(quote_id.as_bytes().to_vec());
+                }
+            };
+        }
         match quote.state {
             MintQuoteState::Issued => {
                 LifecycleExecution::succeeded(request.amount, "mint_reconciled")
@@ -2006,6 +2111,13 @@ impl NativeCdkLifecycleWallet {
         let Some(invoice) = request.secret.as_deref() else {
             return LifecycleExecution::failed_definitive("invoice_missing");
         };
+        if self.settlement_probe.is_none() {
+            return LifecycleExecution::recovery_blocked("lightning_settlement_probe_unavailable");
+        }
+        let balance_before = match wallet.total_balance().await {
+            Ok(balance) => balance.to_u64(),
+            Err(_) => return LifecycleExecution::recovery_blocked("wallet_balance_failed"),
+        };
         let quote = match wallet
             .melt_quote(PaymentMethod::BOLT11, invoice, None, None)
             .await
@@ -2013,10 +2125,21 @@ impl NativeCdkLifecycleWallet {
             Ok(quote) => quote,
             Err(_) => return LifecycleExecution::failed_definitive("melt_quote_rejected"),
         };
-        let quote_id = quote.id.as_bytes().to_vec();
+        let quote_id = quote.id.clone();
         let prepared = match wallet.prepare_melt(&quote.id, HashMap::new()).await {
             Ok(prepared) => prepared,
             Err(_) => return LifecycleExecution::failed_definitive("melt_prepare_failed"),
+        };
+        let input_fee = prepared.input_fee().to_u64();
+        let recovery_plan = match serde_json::to_vec(&NativeMeltRecoveryPlan {
+            quote_id: quote_id.clone(),
+            amount: quote.amount.to_u64(),
+            fee_reserve: quote.fee_reserve.to_u64(),
+            balance_before,
+            input_fee,
+        }) {
+            Ok(plan) => plan,
+            Err(_) => return LifecycleExecution::recovery_blocked("melt_plan_invalid"),
         };
         let fee_reserve = quote.fee_reserve.to_u64();
         if request.prefer_async == Some(true) {
@@ -2026,15 +2149,24 @@ impl NativeCdkLifecycleWallet {
                         .change()
                         .and_then(|proofs| proofs.total_amount().ok())
                         .map_or(0, |amount| amount.to_u64());
-                    LifecycleExecution::succeeded(Some(result.amount().to_u64()), "melt_observed")
-                        .with_fees(0, fee_reserve, result.fee_paid().to_u64(), change)
-                        .with_private_material(quote_id)
+                    self.verified_melt_execution(VerifiedMeltExecution {
+                        invoice,
+                        quote_id: quote_id.as_bytes(),
+                        recovery_plan: &recovery_plan,
+                        amount: result.amount().to_u64(),
+                        input_fee,
+                        fee_reserve,
+                        actual_fee: result.fee_paid().to_u64(),
+                        change,
+                    })
+                    .await
                 }
                 Ok(MeltOutcome::Paid(_)) | Ok(MeltOutcome::Pending(_)) => {
-                    LifecycleExecution::ambiguous("melt_pending").with_private_material(quote_id)
+                    LifecycleExecution::ambiguous("melt_pending")
+                        .with_private_material(recovery_plan)
                 }
                 Err(_) => LifecycleExecution::ambiguous("melt_response_ambiguous")
-                    .with_private_material(quote_id),
+                    .with_private_material(recovery_plan),
             };
         }
         match prepared.confirm().await {
@@ -2043,18 +2175,69 @@ impl NativeCdkLifecycleWallet {
                     .change()
                     .and_then(|proofs| proofs.total_amount().ok())
                     .map_or(0, |amount| amount.to_u64());
-                LifecycleExecution::succeeded(Some(result.amount().to_u64()), "melt_observed")
-                    .with_fees(0, fee_reserve, result.fee_paid().to_u64(), change)
-                    .with_private_material(quote_id)
+                self.verified_melt_execution(VerifiedMeltExecution {
+                    invoice,
+                    quote_id: quote_id.as_bytes(),
+                    recovery_plan: &recovery_plan,
+                    amount: result.amount().to_u64(),
+                    input_fee,
+                    fee_reserve,
+                    actual_fee: result.fee_paid().to_u64(),
+                    change,
+                })
+                .await
             }
-            Ok(_) => LifecycleExecution::ambiguous("melt_pending").with_private_material(quote_id),
+            Ok(_) => {
+                LifecycleExecution::ambiguous("melt_pending").with_private_material(recovery_plan)
+            }
             Err(_) => LifecycleExecution::ambiguous("melt_response_ambiguous")
-                .with_private_material(quote_id),
+                .with_private_material(recovery_plan),
         }
     }
 
-    async fn recover_melt(&self, wallet: &Wallet, material: Option<&[u8]>) -> LifecycleExecution {
-        let Some(quote_id) = material.and_then(|bytes| std::str::from_utf8(bytes).ok()) else {
+    async fn verified_melt_execution(
+        &self,
+        input: VerifiedMeltExecution<'_>,
+    ) -> LifecycleExecution {
+        let Some(probe) = self.settlement_probe.as_ref() else {
+            return LifecycleExecution::recovery_blocked("lightning_settlement_probe_unavailable")
+                .with_private_material(input.recovery_plan.to_vec());
+        };
+        let quote_hash = hash_parts(
+            b"cashu-fault-lab/cdk-lifecycle-melt-quote-v1",
+            &[input.quote_id],
+        );
+        match probe.settled(input.invoice, &quote_hash).await {
+            Ok(true) => {
+                LifecycleExecution::succeeded(Some(input.amount), "melt_settlement_verified")
+                    .with_fees(
+                        input.input_fee,
+                        input.fee_reserve,
+                        input.actual_fee,
+                        input.change,
+                    )
+                    .with_private_material(input.recovery_plan.to_vec())
+            }
+            Ok(false) | Err(_) => LifecycleExecution::ambiguous("lightning_settlement_unverified")
+                .with_private_material(input.recovery_plan.to_vec()),
+        }
+    }
+
+    async fn recover_melt(
+        &self,
+        wallet: &Wallet,
+        request: &LifecycleInput,
+        material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        let Some(material) = material else {
+            return LifecycleExecution::recovery_blocked("melt_quote_identity_unavailable");
+        };
+        let plan = serde_json::from_slice::<NativeMeltRecoveryPlan>(material).ok();
+        let quote_id = if let Some(plan) = plan.as_ref() {
+            plan.quote_id.as_str()
+        } else if let Ok(legacy_quote_id) = std::str::from_utf8(material) {
+            legacy_quote_id
+        } else {
             return LifecycleExecution::recovery_blocked("melt_quote_identity_unavailable");
         };
         let quote = match wallet.check_melt_quote_status(quote_id).await {
@@ -2062,14 +2245,97 @@ impl NativeCdkLifecycleWallet {
             Err(_) => return LifecycleExecution::recovery_blocked("melt_quote_state_unavailable"),
         };
         match quote.state {
-            MeltQuoteState::Paid => LifecycleExecution::melt_recovered(quote.fee_reserve.to_u64())
-                .with_private_material(quote_id.as_bytes().to_vec()),
+            MeltQuoteState::Paid => {
+                let Some(invoice) = request.secret.as_deref() else {
+                    return LifecycleExecution::recovery_blocked("invoice_missing")
+                        .with_private_material(material.to_vec());
+                };
+                let Some(probe) = self.settlement_probe.as_ref() else {
+                    return LifecycleExecution::recovery_blocked(
+                        "lightning_settlement_probe_unavailable",
+                    )
+                    .with_private_material(material.to_vec());
+                };
+                let quote_hash = hash_parts(
+                    b"cashu-fault-lab/cdk-lifecycle-melt-quote-v1",
+                    &[quote_id.as_bytes()],
+                );
+                match probe.settled(invoice, &quote_hash).await {
+                    Ok(true) => {
+                        if let Some(plan) = plan.as_ref() {
+                            let balance_after = match wallet.total_balance().await {
+                                Ok(balance) => balance.to_u64(),
+                                Err(_) => {
+                                    return LifecycleExecution::recovery_blocked(
+                                        "wallet_balance_failed",
+                                    )
+                                    .with_private_material(material.to_vec());
+                                }
+                            };
+                            let (actual_fee, change) = match Self::melt_recovery_fees(
+                                plan.balance_before,
+                                balance_after,
+                                plan.amount,
+                                plan.input_fee,
+                                plan.fee_reserve,
+                            ) {
+                                Ok(fees) => fees,
+                                Err(code) => {
+                                    return LifecycleExecution::recovery_blocked(code)
+                                        .with_private_material(material.to_vec());
+                                }
+                            };
+                            LifecycleExecution::melt_recovered(
+                                plan.amount,
+                                plan.fee_reserve,
+                                actual_fee,
+                                change,
+                            )
+                            .with_input_fee(plan.input_fee)
+                            .with_private_material(material.to_vec())
+                        } else {
+                            let mut execution = LifecycleExecution::succeeded(
+                                None,
+                                "melt_settlement_verified_legacy",
+                            );
+                            execution.fee_reserve = Some(quote.fee_reserve.to_u64());
+                            execution.with_private_material(material.to_vec())
+                        }
+                    }
+                    Ok(false) | Err(_) => {
+                        LifecycleExecution::recovery_blocked("lightning_settlement_unverified")
+                            .with_private_material(material.to_vec())
+                    }
+                }
+            }
             MeltQuoteState::Unpaid | MeltQuoteState::Failed => {
                 LifecycleExecution::failed_definitive("melt_quote_unpaid")
-                    .with_private_material(quote_id.as_bytes().to_vec())
+                    .with_private_material(material.to_vec())
             }
             _ => LifecycleExecution::recovery_blocked("melt_quote_not_terminal")
-                .with_private_material(quote_id.as_bytes().to_vec()),
+                .with_private_material(material.to_vec()),
+        }
+    }
+
+    async fn recover_receive(
+        &self,
+        wallet: &Wallet,
+        material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        let Some(material) = material else {
+            return LifecycleExecution::recovery_blocked("receive_plan_unavailable");
+        };
+        let plan: NativeReceiveRecoveryPlan = match serde_json::from_slice(material) {
+            Ok(plan) => plan,
+            Err(_) => return LifecycleExecution::recovery_blocked("receive_plan_invalid"),
+        };
+        let balance_after = match wallet.total_balance().await {
+            Ok(balance) => balance.to_u64(),
+            Err(_) => return LifecycleExecution::recovery_blocked("wallet_balance_failed"),
+        };
+        match Self::receive_recovery_amount(plan.balance_before, balance_after) {
+            Ok(amount) => LifecycleExecution::succeeded(Some(amount), "receive_reconciled"),
+            Err(code) => LifecycleExecution::recovery_blocked(code),
         }
     }
 }
@@ -2166,6 +2432,17 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         match request.kind {
             LifecycleKind::Swap => self.prepare_swap_plan(&wallet, request).await.map(Some),
             LifecycleKind::Send => self.prepare_send_plan(&wallet, request).await.map(Some),
+            LifecycleKind::Receive => {
+                let balance_before = wallet
+                    .total_balance()
+                    .await
+                    .map_err(|_| LifecycleExecution::recovery_blocked("wallet_balance_failed"))?;
+                serde_json::to_vec(&NativeReceiveRecoveryPlan {
+                    balance_before: balance_before.to_u64(),
+                })
+                .map(Some)
+                .map_err(|_| LifecycleExecution::recovery_blocked("receive_plan_invalid"))
+            }
             _ => Ok(None),
         }
     }
@@ -2294,12 +2571,9 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
         }
         match request.kind {
             LifecycleKind::Mint => self.recover_mint(&wallet, request, private_material).await,
-            LifecycleKind::Melt => self.recover_melt(&wallet, private_material).await,
+            LifecycleKind::Melt => self.recover_melt(&wallet, request, private_material).await,
             LifecycleKind::Restore => self.execute(request).await,
-            LifecycleKind::Receive => {
-                let _ = Self::aggregate_recovery_phase(request.kind);
-                LifecycleExecution::recovery_blocked("operation_bound_recovery_unavailable")
-            }
+            LifecycleKind::Receive => self.recover_receive(&wallet, private_material).await,
             LifecycleKind::Swap | LifecycleKind::Send => unreachable!("handled above"),
             LifecycleKind::Reconcile => {
                 LifecycleExecution::recovery_blocked("reconcile_requires_engine")
@@ -2362,10 +2636,17 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
 
     async fn capabilities(&self) -> Result<LifecycleRuntimeCapabilities, &'static str> {
         if let Some(facade) = self.facade.as_ref() {
-            return facade
+            let mut capabilities = facade
                 .capabilities()
                 .await
-                .map_err(|_| "mint_capabilities_unavailable");
+                .map_err(|_| "mint_capabilities_unavailable")?;
+            if self.settlement_probe.is_none() {
+                capabilities
+                    .operations
+                    .retain(|operation| *operation != "melt");
+                capabilities.nuts.retain(|nut| *nut != 5);
+            }
+            return Ok(capabilities);
         }
         let wallet = self.required_wallet().await?;
         let info = wallet
@@ -2379,6 +2660,7 @@ impl LifecycleWalletPort for NativeCdkLifecycleWallet {
                 .get_settings(&self.unit, &PaymentMethod::BOLT11)
                 .is_some();
         let supports_melt = Self::operation_bound(LifecycleKind::Melt)
+            && self.settlement_probe.is_some()
             && !info.nuts.nut05.disabled
             && info
                 .nuts

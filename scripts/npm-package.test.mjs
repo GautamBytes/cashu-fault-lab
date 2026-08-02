@@ -67,7 +67,7 @@ test('the npm README stays concise and sends developers to the full website', as
   assert.ok(words.length <= 220, `npm README should stay under 220 words; found ${words.length}`);
   assert.match(readme, /npx cashu-fault-lab doctor/u);
   assert.match(readme, /npx cashu-fault-lab demo/u);
-  assert.match(readme, /https:\/\/cashu-fault-lab\.vercel\.app\//u);
+  assert.match(readme, /https:\/\/www\.cashulabs\.online\//u);
   assert.match(readme, /experimental developer preview/iu);
   assert.match(readme, /not a certification/iu);
 });

@@ -223,6 +223,7 @@ services:
       retries: 60
     ports:
       - '127.0.0.1:${CFL_REGTEST_ADAPTER_PORT:-4141}:14101'
+      - '127.0.0.1:${CFL_REGTEST_CDK_ADAPTER_PORT:-4151}:14102'
       - '127.0.0.1:${CFL_REGTEST_GATEWAY_PORT:-4341}:14300'
     networks: [lightning-regtest]
 
@@ -290,6 +291,47 @@ services:
     init: true
     network_mode: service:lifecycle-lane
 
+  cdk-regtest-state-init:
+    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+    command: ['sh', '-c', 'chown -R 65532:65532 /state && chmod 700 /state']
+    user: '0:0'
+    volumes:
+      - cdk-regtest-state:/state
+
+  cdk-regtest:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: cdk-adapter
+    environment:
+      CASHU_FAULT_LAB_CONTROL_TOKEN: ${CFL_LIFECYCLE_CDK_TOKEN:?set CFL_LIFECYCLE_CDK_TOKEN}
+      CASHU_FAULT_LAB_CDK_LISTEN: 127.0.0.1:4102
+      CASHU_FAULT_LAB_CDK_MINT_URL: http://127.0.0.1:4300
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_DATABASE_PATH: /var/lib/cashu-fault-lab/lifecycle.sqlite
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_WALLET_PATH: /var/lib/cashu-fault-lab/wallet.sqlite
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_STATE_KEY: REREREREREREREREREREREREREREREREREREREREREQ
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED: ${CFL_LIFECYCLE_CDK_SEED:-wallet-lifecycle-regtest}
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_LIGHTNING_PROBE_URL: http://127.0.0.1:4400/v1/settlement
+      CASHU_FAULT_LAB_CDK_LIFECYCLE_LIGHTNING_PROBE_TOKEN: ${CFL_LIGHTNING_PROBE_TOKEN:?set CFL_LIGHTNING_PROBE_TOKEN}
+    depends_on:
+      regtest-gateway:
+        condition: service_healthy
+      cdk-regtest-state-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'curl --fail --silent --header "Authorization: Bearer $$CASHU_FAULT_LAB_CONTROL_TOKEN" http://127.0.0.1:4102/v1/capabilities >/dev/null',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    init: true
+    network_mode: service:lifecycle-lane
+    volumes:
+      - cdk-regtest-state:/var/lib/cashu-fault-lab
+
 networks:
   lightning-regtest:
 
@@ -300,3 +342,4 @@ volumes:
   nutshell-regtest:
   lifecycle-postgres:
   settlement-probe-credentials:
+  cdk-regtest-state:

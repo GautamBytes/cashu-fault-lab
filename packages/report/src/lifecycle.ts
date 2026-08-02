@@ -130,6 +130,7 @@ function observationView(
           intentHash: observation.operation.intentHash,
           phase: observation.operation.phase,
         },
+        ...(observation.provenance === undefined ? {} : { provenance: observation.provenance }),
       };
     case 'phase_observed':
       return OPERATION_ID.test(observation.operationId)
@@ -140,6 +141,7 @@ function observationView(
             ...(observation.evidenceCode !== undefined && ID.test(observation.evidenceCode)
               ? { evidenceCode: observation.evidenceCode }
               : {}),
+            ...(observation.provenance === undefined ? {} : { provenance: observation.provenance }),
           }
         : undefined;
     case 'value_moved':
@@ -152,6 +154,7 @@ function observationView(
             amount: observation.amount,
             from: observation.from,
             to: observation.to,
+            ...(observation.provenance === undefined ? {} : { provenance: observation.provenance }),
           }
         : undefined;
     case 'request_dispatched':
@@ -168,8 +171,11 @@ function observationView(
         : undefined;
     case 'lightning_settlement_observed':
       return OPERATION_ID.test(observation.operationId) &&
-        HASH.test(observation.invoiceHash) &&
-        HASH.test(observation.paymentHash)
+        ((observation.invoiceHash !== undefined &&
+          HASH.test(observation.invoiceHash) &&
+          observation.paymentHash !== undefined &&
+          HASH.test(observation.paymentHash)) ||
+          (observation.evidenceHash !== undefined && HASH.test(observation.evidenceHash)))
         ? { ...observation }
         : undefined;
     case 'outputs_persisted':

@@ -76,6 +76,14 @@ class MintRecoveryDriver implements LifecycleDriver {
           unit: 'sat',
         },
         {
+          type: 'mint_quote_observed',
+          operationId,
+          quoteHash: 'e'.repeat(64),
+          amountPaid: 64,
+          amountIssued: 64,
+          updatedAt: 1,
+        },
+        {
           type: 'value_moved',
           operationId,
           effectId: 'mint_issue_1',
@@ -114,7 +122,7 @@ describe('lifecycle scenario runner', () => {
     if (!result.ok) throw new Error('scenario unexpectedly failed');
     expect(driver.requests).toEqual([requestHash, requestHash]);
     expect(result.history).toHaveLength(4);
-    expect(result.model.observations).toHaveLength(10);
+    expect(result.model.observations).toHaveLength(11);
     expect(result.model.observations.at(-1)).toMatchObject({
       type: 'phase_observed',
       phase: 'succeeded',

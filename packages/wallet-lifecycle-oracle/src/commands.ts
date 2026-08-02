@@ -5,6 +5,7 @@ function copyObservation(observation: LifecycleObservation): LifecycleObservatio
     return Object.freeze({
       type: observation.type,
       operation: Object.freeze({ ...observation.operation }),
+      ...(observation.provenance === undefined ? {} : { provenance: observation.provenance }),
     });
   }
   return Object.freeze({ ...observation });
