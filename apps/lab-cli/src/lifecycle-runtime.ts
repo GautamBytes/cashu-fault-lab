@@ -914,6 +914,20 @@ export function lifecycleComposeServicesRestartPlan(
   return commands;
 }
 
+export function lifecycleComposeServicesRecreatePlan(
+  docker: string,
+  composeFile: string,
+  services: readonly string[],
+): readonly LifecycleComposeCommand[] {
+  if (services.length === 0) throw new Error('Lifecycle compose recreate requires a service');
+  return [
+    {
+      executable: docker,
+      args: ['compose', '-f', composeFile, 'up', '-d', '--force-recreate', '--wait', ...services],
+    },
+  ];
+}
+
 async function execLifecycleComposeCommands(
   commands: readonly LifecycleComposeCommand[],
   environment: NodeJS.ProcessEnv,
@@ -944,7 +958,7 @@ async function rehydrateCdkLifecycleMatrixLane(
   let restartError: unknown;
   try {
     await execLifecycleComposeCommands(
-      lifecycleComposeServicesRestartPlan(docker, composeFile, services, { wait: false }),
+      lifecycleComposeServicesRecreatePlan(docker, composeFile, services),
       environment,
     );
   } catch (error) {
