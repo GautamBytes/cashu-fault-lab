@@ -126,7 +126,11 @@ test('lifecycle suites build the runner dependency graph before executing specs'
   assert.match(funded, /turbo run build --filter=@cashu-fault-lab\/lab-cli\.\.\./);
   assert.match(
     funded,
-    /docker compose -f infra\/compose\/wallet-lifecycle\.compose\.yml up -d --no-deps --force-recreate --wait --wait-timeout 120 cdk-nutshell cdk-mintd/,
+    /docker compose -f infra\/compose\/wallet-lifecycle\.compose\.yml restart cdk-nutshell cdk-mintd/,
+  );
+  assert.match(
+    funded,
+    /node scripts\/wait-lifecycle-cdk-host\.mjs && node apps\/lab-cli\/dist\/bin\.js lifecycle matrix/,
   );
   assert.match(
     funded,
