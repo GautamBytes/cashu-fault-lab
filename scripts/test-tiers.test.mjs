@@ -18,6 +18,8 @@ test('default tests are Docker-free and explicit tiers are available', () => {
   assert.match(root.scripts['test:funded'], /test:funded:run/);
   assert.match(root.scripts['test:lifecycle:funded'], /lifecycle-funded/);
   assert.match(root.scripts['test:lifecycle:funded'], /test:lifecycle:funded:run/);
+  assert.match(root.scripts['test:lifecycle:regtest'], /lifecycle-regtest/);
+  assert.match(root.scripts['test:lifecycle:regtest'], /test:lifecycle:regtest:run/);
   assert.equal(
     root.scripts['test:all'],
     'pnpm test:unit && pnpm test:integration && pnpm test:funded',
@@ -47,6 +49,8 @@ test('unit package tests exclude every container-backed suite', () => {
     'docker-funded-e2e.test.ts',
     'nostr-relay-e2e.test.ts',
     'cross-language-docker.test.ts',
+    'funded-lifecycle.test.ts',
+    'regtest-melt.test.ts',
   ]) {
     assert.match(command, new RegExp(suite.replaceAll('.', '\\.')));
   }
@@ -75,5 +79,6 @@ test('environment preflight enables every opt-in lane it owns', () => {
   assert.match(environmentHelper, /CFL_NOSTR_RELAY_E2E:\s*'1'/);
   assert.match(environmentHelper, /'CFL_REAL_MINT_URL'/);
   assert.match(environmentHelper, /CFL_WALLET_LIFECYCLE_E2E:\s*'1'/);
+  assert.match(environmentHelper, /CFL_WALLET_LIFECYCLE_REGTEST:\s*'1'/);
   assert.match(environmentHelper, /pass <= 2/);
 });

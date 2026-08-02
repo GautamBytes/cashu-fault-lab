@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "profile": "wallet-lifecycle-v1",
+  "releaseSuiteDigest": "sha256:bfe91ccd60b6cc786e64f486c7bde6ad40f49a1f0cfbec2f48a61d1721629749",
+  "minimumWalletImplementations": 2,
+  "minimumMintImplementations": 2,
+  "requireCrossLanguage": true,
+  "requireDistinctBuilds": true,
+  "requireReplayEvidence": true,
+  "allowSkippedRequired": false,
+  "requiredOperations": ["mint", "swap", "send", "receive", "melt", "restore", "reconcile"],
+  "requiredScenarios": [
+    "mint-response-lost",
+    "swap-response-lost",
+    "melt-pending-restart",
+    "melt-paid-response-lost",
+    "receive-crash-before-save",
+    "restore-duplicate",
+    "concurrent-resume",
+    "stale-quote",
+    "security-quote-redaction"
+  ],
+  "requiredInvariants": [
+    "value-conservation",
+    "idempotent-effect",
+    "proof-exclusivity",
+    "quote-monotonicity",
+    "request-identity-immutability",
+    "at-most-once-lightning-settlement",
+    "exact-replay",
+    "no-secret-leakage",
+    "no-unsupported-pass"
+  ]
+}

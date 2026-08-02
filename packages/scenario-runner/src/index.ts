@@ -41,8 +41,14 @@ export {
   type MatrixScenarioEvidence,
 } from './matrix.js';
 export {
+  evaluateLifecycleReleaseSuite,
   evaluateReleasePolicy,
+  validateLifecycleReleaseSuite,
   validateReleasePolicy,
+  type LifecycleReleaseEvidence,
+  type LifecycleReleaseReasonCode,
+  type LifecycleReleaseResult,
+  type LifecycleReleaseSuite,
   type ReleaseGateReason,
   type ReleaseGateReasonCode,
   type ReleaseGateResult,

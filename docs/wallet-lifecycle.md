@@ -19,10 +19,23 @@ when durable encrypted SQLite state is configured; CDK `melt` remains disabled u
 independent settlement authority exists. Runtime capability discovery also removes operations whose
 required NUTs are absent at the configured mint.
 
-The developer-preview workflow now includes the semantic mint-fault corpus and `lifecycle run`,
-`lifecycle matrix`, and `lifecycle replay`. The funded cross-implementation matrix and Lightning
-regtest lane remain follow-up work. The matrix reports unavailable lanes as `N/A` and does not count
-them as passes.
+The developer-preview workflow includes the semantic mint-fault corpus, `lifecycle run`,
+`lifecycle matrix`, and `lifecycle replay`. The funded matrix runs cashu-ts and CDK against pinned
+Nutshell and mintd images. The opt-in Lightning lane runs a real response-loss melt through pinned
+Bitcoin Core, two authenticated LND nodes, and a Nutshell LND backend. Unsupported lanes still
+report `N/A` and never count as passes.
+
+Run the Docker-backed suites only on a disposable development host:
+
+```bash
+pnpm test:lifecycle:funded
+pnpm test:lifecycle:regtest
+```
+
+Both commands remove their named Compose volumes before and after the run. The funded suite runs all
+four wallet/mint combinations twice from clean state. The regtest suite opens a balanced local
+channel, loses the committed melt response, restarts the adapter, resumes concurrently, and checks
+the sink and payer independently for exactly one settlement and conserved NUT-08 change.
 
 ## Run a lifecycle scenario
 
@@ -138,7 +151,17 @@ recovery-blocked. An unverified PAID quote is never treated as independent Light
   streamed responses at 1 MiB.
 - Development source/build digests are deterministic fixture identities, not release provenance.
 
+## Release qualification
+
+`spec/lifecycle-release-suite.json` is the strict `wallet-lifecycle-v1` qualification policy. Its
+digest binds the complete required operation, scenario, invariant, and provenance requirements.
+The evaluator rejects malformed or contradictory evidence, duplicate participants, skipped
+required scenarios, missing replay digests, failed artifact secret scans, fewer than two independent
+wallet languages, or fewer than two mint implementations. Repository fixtures use development
+identities, so passing local tests is strong implementation evidence but is not an external
+certification claim. See the [maintainer checklist](maintainers/release-checklist.md).
+
 The normative contract is [the lifecycle OpenAPI document](../spec/lifecycle-openapi.yaml). The
-approved architecture and remaining work are recorded in the
+approved architecture and implementation history are recorded in the
 [design](superpowers/specs/2026-08-01-wallet-lifecycle-lab-design.md) and
 [implementation plan](superpowers/plans/2026-08-01-wallet-lifecycle-v1.md).

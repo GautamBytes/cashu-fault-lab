@@ -56,6 +56,21 @@ function requireNonEmptyString(
   return value;
 }
 
+function scenarioDisplayName(scenario: Record<string, unknown>, sourcePath: string): string {
+  const name = scenario.name;
+  if (typeof name === 'string' && name.trim() !== '') return name;
+
+  const id = scenario.id;
+  if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+    throw new Error(`Scenario ${sourcePath} must contain a non-empty name or valid id`);
+  }
+
+  return id
+    .split('-')
+    .map((word, index) => (index === 0 ? `${word.charAt(0).toUpperCase()}${word.slice(1)}` : word))
+    .join(' ');
+}
+
 async function discoverJsonFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const paths = await Promise.all(
@@ -85,7 +100,7 @@ async function parseScenario(scenariosRoot: string, filePath: string): Promise<S
 
   return {
     slug: location.slug,
-    name: requireNonEmptyString(parsed, 'name', location.sourcePath),
+    name: scenarioDisplayName(parsed, location.sourcePath),
     description: requireNonEmptyString(parsed, 'description', location.sourcePath),
     family: location.family,
     commandCount: parsed.commands.length,

@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '37 2 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -361,6 +364,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Run four lifecycle lanes twice from clean volumes
         run: pnpm test:lifecycle:funded
+
+  lightning-regtest-lifecycle:
+    name: Lightning regtest wallet lifecycle
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify one real Lightning settlement through recovery
+        run: pnpm test:lifecycle:regtest
 
   real-mint:
     name: Real mint — ${{ matrix.mint.name }}

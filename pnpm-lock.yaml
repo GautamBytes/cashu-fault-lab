@@ -122,6 +122,8 @@ importers:
         specifier: 15.0.0
         version: 15.0.0
 
+  apps/lightning-regtest-probe: {}
+
   apps/nostr-fault-relay:
     dependencies:
       nostr-tools:
@@ -361,6 +363,9 @@ importers:
       '@cashu-fault-lab/adapter-cashu-ts':
         specifier: workspace:*
         version: link:../../adapters/cashu-ts
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
       fast-check:
         specifier: 4.9.0
         version: 4.9.0

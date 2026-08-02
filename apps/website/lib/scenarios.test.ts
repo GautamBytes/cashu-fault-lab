@@ -12,13 +12,14 @@ describe('getScenarioGroups', () => {
     const groups = await getScenarioGroups();
     const all = groups.flatMap((group) => group.scenarios);
 
-    expect(all).toHaveLength(32);
+    expect(all).toHaveLength(41);
     expect(groups.map((group) => group.family)).toEqual([
       'concurrency',
       'conformance',
       'crash-recovery',
       'retry',
       'security',
+      'wallet-lifecycle',
     ]);
     expect(all.find((item) => item.slug === 'retry/response-lost')).toMatchObject({
       name: 'http-response-lost',
@@ -26,6 +27,11 @@ describe('getScenarioGroups', () => {
       commandCount: 3,
       sourceUrl:
         'https://github.com/GautamBytes/cashu-fault-lab/blob/main/scenarios/retry/response-lost.json',
+    });
+    expect(all.find((item) => item.slug === 'wallet-lifecycle/concurrent-resume')).toMatchObject({
+      name: 'Concurrent resume',
+      family: 'wallet-lifecycle',
+      commandCount: 4,
     });
   });
 });

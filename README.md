@@ -70,9 +70,11 @@ request material before side effects, reconcile ambiguous outcomes, and expose o
 operation, wallet, and evidence views.
 
 Current code includes the state model, contract, independent oracle, deterministic replay,
-cashu-ts and CDK lifecycle operations, the semantic mint-fault corpus, and lifecycle CLI reports.
-CDK melt remains disabled until an independent Lightning settlement probe exists. The funded
-cross-library matrix, Lightning regtest lane, and release qualification remain pending. Read
+cashu-ts and CDK lifecycle operations, the semantic mint-fault corpus, lifecycle CLI reports, a
+funded four-lane wallet/mint matrix, and an opt-in real Lightning-regtest melt lane. CDK melt remains
+disabled until a native independent Lightning settlement authority is integrated. Strict lifecycle
+qualification now rejects incomplete or forged evidence, while external release provenance and
+independently maintained wallet evidence remain outside this repository. Read
 [wallet lifecycle](docs/wallet-lifecycle.md) before running or integrating this surface.
 
 Run one scenario and keep the raw seed outside the report:
@@ -83,6 +85,13 @@ pnpm lab lifecycle run mint-response-lost \
   --adapter cashu-ts \
   --mint nutshell-local \
   --seed local-seed
+```
+
+Run the funded and Lightning-backed end-to-end lanes with:
+
+```bash
+pnpm test:lifecycle:funded
+pnpm test:lifecycle:regtest
 ```
 
 The command writes a redacted JSON report under `artifacts/lifecycle/`. Use `--format junit` or
@@ -262,16 +271,16 @@ a final `spent` state alone cannot prove at-most-once redemption.
 
 ## Current coverage
 
-| Area                                       | Developer-preview evidence                                                                                                                                | Release gap                                        |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| HTTP retry, response loss, and duplication | Real-mint T1 lane with cashu-ts/CDK senders plus the reference receiver; cashu-ts also has its own receiver path                                          | Independent wallet receiver                        |
-| Funded NIP-17 Nostr delivery               | cashu-ts sender/receiver E2E over the repo's real WebSocket relay                                                                                         | Public relay hardening and broader wallet coverage |
-| Durable receiver evidence                  | cashu-ts receiver can use PostgreSQL T3 credit/proof evidence and recover through six funded receiver crash boundaries                                    | Independent wallet receiver evidence               |
-| NIP-17 and cross-transport convergence     | Packaged synthetic T0 lanes                                                                                                                               | Funded wallets and real relay                      |
-| Receiver persistence and recovery          | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, concurrent-worker leasing, and all six funded receiver crash boundaries | Independent receiver implementations               |
-| Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                                                              | Packaged end-to-end lanes with injected clock      |
-| Wallet lifecycle recovery                  | Oracle/runner, restart-safe cashu-ts and CDK operations, semantic faults, CLI, replay, and redacted reports                                               | Funded cross-library matrix and Lightning regtest  |
-| Sender restart                             | Encrypted PostgreSQL reservation/session state and exact-payload replay pass all four funded sender crash boundaries                                      | Independent sender implementations                 |
+| Area                                       | Developer-preview evidence                                                                                                                                                | Release gap                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| HTTP retry, response loss, and duplication | Real-mint T1 lane with cashu-ts/CDK senders plus the reference receiver; cashu-ts also has its own receiver path                                                          | Independent wallet receiver                                       |
+| Funded NIP-17 Nostr delivery               | cashu-ts sender/receiver E2E over the repo's real WebSocket relay                                                                                                         | Public relay hardening and broader wallet coverage                |
+| Durable receiver evidence                  | cashu-ts receiver can use PostgreSQL T3 credit/proof evidence and recover through six funded receiver crash boundaries                                                    | Independent wallet receiver evidence                              |
+| NIP-17 and cross-transport convergence     | Packaged synthetic T0 lanes                                                                                                                                               | Funded wallets and real relay                                     |
+| Receiver persistence and recovery          | PostgreSQL tests cover prepared recovery, ambiguous mint response, atomic credit, concurrent-worker leasing, and all six funded receiver crash boundaries                 | Independent receiver implementations                              |
+| Delay and reorder                          | HTTP gateway and Nostr relay component tests                                                                                                                              | Packaged end-to-end lanes with injected clock                     |
+| Wallet lifecycle recovery                  | Oracle/runner, restart-safe cashu-ts and CDK operations, semantic faults, CLI/replay/reports, four funded wallet/mint lanes, and cashu-ts Lightning regtest melt recovery | Native CDK melt corroboration and external qualification evidence |
+| Sender restart                             | Encrypted PostgreSQL reservation/session state and exact-payload replay pass all four funded sender crash boundaries                                                      | Independent sender implementations                                |
 
 The packaged `mint-response-lost` scenario exercises recovery orchestration with in-memory fakes. Durable restart claims come only from PostgreSQL integration tests. Scenario artifacts carry versioned capability and invariant evidence, but only `spec/release-policy.json` decides whether that evidence is release-qualifying.
 

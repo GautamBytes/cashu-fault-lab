@@ -5,6 +5,7 @@ import {
   type InvariantId,
 } from '@cashu-fault-lab/oracle';
 import type { MatrixCaseResult } from './matrix.js';
+import { createHash } from 'node:crypto';
 
 export interface ReleasePolicy {
   readonly schemaVersion: 3;
@@ -430,4 +431,433 @@ export function evaluateReleasePolicy(
       .sort(),
     reasons: sorted,
   };
+}
+
+export interface LifecycleReleaseSuite {
+  readonly schemaVersion: 1;
+  readonly profile: 'wallet-lifecycle-v1';
+  readonly releaseSuiteDigest: string;
+  readonly minimumWalletImplementations: number;
+  readonly minimumMintImplementations: number;
+  readonly requireCrossLanguage: true;
+  readonly requireDistinctBuilds: true;
+  readonly requireReplayEvidence: true;
+  readonly allowSkippedRequired: false;
+  readonly requiredOperations: readonly string[];
+  readonly requiredScenarios: readonly string[];
+  readonly requiredInvariants: readonly string[];
+}
+
+export interface LifecycleReleaseEvidence {
+  readonly wallet: {
+    readonly id: string;
+    readonly language: string;
+    readonly sourceDigest: string;
+    readonly buildDigest: string;
+  };
+  readonly mint: {
+    readonly id: string;
+    readonly implementation: string;
+    readonly version?: string;
+  };
+  readonly operations: readonly string[];
+  readonly releaseSuiteDigest: string;
+  readonly secretScanPassed: boolean;
+  readonly scenarios: readonly {
+    readonly id: string;
+    readonly status: 'passed' | 'failed' | 'not_applicable' | 'skipped';
+    readonly replayDigest?: string;
+    readonly invariants: readonly {
+      readonly id: string;
+      readonly status: 'passed' | 'failed' | 'not_applicable' | 'skipped';
+    }[];
+  }[];
+}
+
+export type LifecycleReleaseReasonCode =
+  | 'LIFECYCLE_EVIDENCE_INVALID'
+  | 'LIFECYCLE_POLICY_MISMATCH'
+  | 'LIFECYCLE_MINIMUM_WALLETS'
+  | 'LIFECYCLE_MINIMUM_MINTS'
+  | 'LIFECYCLE_CROSS_LANGUAGE'
+  | 'LIFECYCLE_DISTINCT_BUILD'
+  | 'LIFECYCLE_OPERATION_MISSING'
+  | 'LIFECYCLE_REQUIRED_SCENARIO'
+  | 'LIFECYCLE_REQUIRED_INVARIANT'
+  | 'LIFECYCLE_REPLAY_REQUIRED'
+  | 'LIFECYCLE_SECRET_SCAN';
+
+export interface LifecycleReleaseResult {
+  readonly passed: boolean;
+  readonly reasons: readonly {
+    readonly code: LifecycleReleaseReasonCode;
+    readonly message: string;
+    readonly participant?: string;
+    readonly scenario?: string;
+  }[];
+}
+
+const LIFECYCLE_SUITE_KEYS = new Set([
+  'schemaVersion',
+  'profile',
+  'releaseSuiteDigest',
+  'minimumWalletImplementations',
+  'minimumMintImplementations',
+  'requireCrossLanguage',
+  'requireDistinctBuilds',
+  'requireReplayEvidence',
+  'allowSkippedRequired',
+  'requiredOperations',
+  'requiredScenarios',
+  'requiredInvariants',
+]);
+const LIFECYCLE_OPERATIONS = new Set([
+  'mint',
+  'swap',
+  'send',
+  'receive',
+  'melt',
+  'restore',
+  'reconcile',
+]);
+const LIFECYCLE_STATUSES = new Set(['passed', 'failed', 'not_applicable', 'skipped']);
+
+function lifecycleIdentifierArray(
+  value: unknown,
+  name: string,
+  allowed?: ReadonlySet<string>,
+): readonly string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some(
+      (item) =>
+        typeof item !== 'string' || !INVARIANT_ID.test(item) || (allowed && !allowed.has(item)),
+    ) ||
+    new Set(value).size !== value.length
+  ) {
+    throw new Error(`Lifecycle release suite ${name} is invalid`);
+  }
+  return value as readonly string[];
+}
+
+export function validateLifecycleReleaseSuite(value: unknown): LifecycleReleaseSuite {
+  const input = record(value, 'Lifecycle release suite must be an object');
+  exactKeys(input, LIFECYCLE_SUITE_KEYS, 'Lifecycle release suite contains an unknown field');
+  if (input.schemaVersion !== 1) throw new Error('Lifecycle release suite schemaVersion must be 1');
+  if (input.profile !== 'wallet-lifecycle-v1') {
+    throw new Error('Lifecycle release suite profile is invalid');
+  }
+  if (typeof input.releaseSuiteDigest !== 'string' || !DIGEST.test(input.releaseSuiteDigest)) {
+    throw new Error('Lifecycle release suite digest is invalid');
+  }
+  const minimumWalletImplementations = nonnegativeInteger(
+    input.minimumWalletImplementations,
+    'minimumWalletImplementations',
+  );
+  const minimumMintImplementations = nonnegativeInteger(
+    input.minimumMintImplementations,
+    'minimumMintImplementations',
+  );
+  if (minimumWalletImplementations < 2 || minimumMintImplementations < 2) {
+    throw new Error('Lifecycle release suite requires two wallet and mint implementations');
+  }
+  if (input.requireCrossLanguage !== true) {
+    throw new Error('Lifecycle release suite requireCrossLanguage must be true');
+  }
+  if (input.requireDistinctBuilds !== true) {
+    throw new Error('Lifecycle release suite requireDistinctBuilds must be true');
+  }
+  if (input.requireReplayEvidence !== true) {
+    throw new Error('Lifecycle release suite requireReplayEvidence must be true');
+  }
+  if (input.allowSkippedRequired !== false) {
+    throw new Error('Lifecycle release suite allowSkippedRequired must be false');
+  }
+  const requiredOperations = lifecycleIdentifierArray(
+    input.requiredOperations,
+    'requiredOperations',
+    LIFECYCLE_OPERATIONS,
+  );
+  if (requiredOperations.length !== LIFECYCLE_OPERATIONS.size) {
+    throw new Error('Lifecycle release suite must require every lifecycle operation');
+  }
+  const requiredScenarios = lifecycleIdentifierArray(input.requiredScenarios, 'requiredScenarios');
+  const requiredInvariants = lifecycleIdentifierArray(
+    input.requiredInvariants,
+    'requiredInvariants',
+  );
+  const digestInput = JSON.stringify({
+    schemaVersion: 1,
+    profile: 'wallet-lifecycle-v1',
+    minimumWalletImplementations,
+    minimumMintImplementations,
+    requireCrossLanguage: true,
+    requireDistinctBuilds: true,
+    requireReplayEvidence: true,
+    allowSkippedRequired: false,
+    requiredOperations,
+    requiredScenarios,
+    requiredInvariants,
+  });
+  const expectedDigest = `sha256:${createHash('sha256')
+    .update('cashu-fault-lab/wallet-lifecycle-release-suite/v1\0')
+    .update(digestInput)
+    .digest('hex')}`;
+  if (input.releaseSuiteDigest !== expectedDigest) {
+    throw new Error('Lifecycle release suite digest does not bind its exact requirements');
+  }
+  return {
+    schemaVersion: 1,
+    profile: 'wallet-lifecycle-v1',
+    releaseSuiteDigest: input.releaseSuiteDigest,
+    minimumWalletImplementations,
+    minimumMintImplementations,
+    requireCrossLanguage: true,
+    requireDistinctBuilds: true,
+    requireReplayEvidence: true,
+    allowSkippedRequired: false,
+    requiredOperations,
+    requiredScenarios,
+    requiredInvariants,
+  };
+}
+
+function lifecycleExactKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]) {
+  return (
+    Object.keys(value).length === keys.length &&
+    Object.keys(value).every((key) => keys.includes(key))
+  );
+}
+
+function validLifecycleEvidence(value: unknown): value is LifecycleReleaseEvidence {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const input = value as Readonly<Record<string, unknown>>;
+  if (
+    !lifecycleExactKeys(input, [
+      'wallet',
+      'mint',
+      'operations',
+      'releaseSuiteDigest',
+      'secretScanPassed',
+      'scenarios',
+    ]) ||
+    typeof input.wallet !== 'object' ||
+    input.wallet === null ||
+    Array.isArray(input.wallet) ||
+    typeof input.mint !== 'object' ||
+    input.mint === null ||
+    Array.isArray(input.mint)
+  ) {
+    return false;
+  }
+  const wallet = input.wallet as Readonly<Record<string, unknown>>;
+  const mint = input.mint as Readonly<Record<string, unknown>>;
+  if (
+    !lifecycleExactKeys(wallet, ['id', 'language', 'sourceDigest', 'buildDigest']) ||
+    !lifecycleExactKeys(
+      mint,
+      Reflect.has(mint, 'version') ? ['id', 'implementation', 'version'] : ['id', 'implementation'],
+    ) ||
+    typeof wallet.id !== 'string' ||
+    !INVARIANT_ID.test(wallet.id) ||
+    typeof wallet.language !== 'string' ||
+    !INVARIANT_ID.test(wallet.language) ||
+    typeof wallet.sourceDigest !== 'string' ||
+    !DIGEST.test(wallet.sourceDigest) ||
+    typeof wallet.buildDigest !== 'string' ||
+    !DIGEST.test(wallet.buildDigest) ||
+    typeof mint.id !== 'string' ||
+    !INVARIANT_ID.test(mint.id) ||
+    typeof mint.implementation !== 'string' ||
+    !INVARIANT_ID.test(mint.implementation) ||
+    (mint.version !== undefined &&
+      (typeof mint.version !== 'string' || mint.version.length < 1 || mint.version.length > 128)) ||
+    typeof input.releaseSuiteDigest !== 'string' ||
+    !DIGEST.test(input.releaseSuiteDigest) ||
+    typeof input.secretScanPassed !== 'boolean' ||
+    !Array.isArray(input.operations) ||
+    input.operations.length === 0 ||
+    input.operations.some(
+      (operation) => typeof operation !== 'string' || !LIFECYCLE_OPERATIONS.has(operation),
+    ) ||
+    new Set(input.operations).size !== input.operations.length ||
+    !Array.isArray(input.scenarios)
+  ) {
+    return false;
+  }
+  return input.scenarios.every((scenario) => {
+    if (typeof scenario !== 'object' || scenario === null || Array.isArray(scenario)) return false;
+    const selected = scenario as Readonly<Record<string, unknown>>;
+    const scenarioKeys = Reflect.has(selected, 'replayDigest')
+      ? ['id', 'status', 'replayDigest', 'invariants']
+      : ['id', 'status', 'invariants'];
+    if (
+      !lifecycleExactKeys(selected, scenarioKeys) ||
+      typeof selected.id !== 'string' ||
+      !INVARIANT_ID.test(selected.id) ||
+      typeof selected.status !== 'string' ||
+      !LIFECYCLE_STATUSES.has(selected.status) ||
+      (selected.replayDigest !== undefined &&
+        (typeof selected.replayDigest !== 'string' || !DIGEST.test(selected.replayDigest))) ||
+      !Array.isArray(selected.invariants)
+    ) {
+      return false;
+    }
+    return selected.invariants.every((invariant) => {
+      if (typeof invariant !== 'object' || invariant === null || Array.isArray(invariant)) {
+        return false;
+      }
+      const result = invariant as Readonly<Record<string, unknown>>;
+      return (
+        lifecycleExactKeys(result, ['id', 'status']) &&
+        typeof result.id === 'string' &&
+        INVARIANT_ID.test(result.id) &&
+        typeof result.status === 'string' &&
+        LIFECYCLE_STATUSES.has(result.status)
+      );
+    });
+  });
+}
+
+export function evaluateLifecycleReleaseSuite(
+  suiteInput: LifecycleReleaseSuite,
+  evidence: readonly LifecycleReleaseEvidence[],
+): LifecycleReleaseResult {
+  const suite = validateLifecycleReleaseSuite(suiteInput);
+  const reasons: Array<LifecycleReleaseResult['reasons'][number]> = [];
+  const acceptedEvidence: LifecycleReleaseEvidence[] = [];
+  const participantKeys = new Set<string>();
+  const walletIdentities = new Map<string, string>();
+  const mintIdentities = new Map<string, string>();
+  for (const [index, participant] of evidence.entries()) {
+    if (!validLifecycleEvidence(participant)) {
+      reasons.push({
+        code: 'LIFECYCLE_EVIDENCE_INVALID',
+        message: 'Lifecycle evidence is malformed or contains unrecognized fields.',
+        participant: `evidence-${index + 1}`,
+      });
+      continue;
+    }
+    const participantId = `${participant.wallet.id}@${participant.mint.id}`;
+    const walletIdentity = `${participant.wallet.language}:${participant.wallet.sourceDigest}:${participant.wallet.buildDigest}`;
+    const mintIdentity = `${participant.mint.implementation}:${participant.mint.version ?? ''}`;
+    if (
+      participantKeys.has(participantId) ||
+      (walletIdentities.has(participant.wallet.id) &&
+        walletIdentities.get(participant.wallet.id) !== walletIdentity) ||
+      (mintIdentities.has(participant.mint.id) &&
+        mintIdentities.get(participant.mint.id) !== mintIdentity)
+    ) {
+      reasons.push({
+        code: 'LIFECYCLE_EVIDENCE_INVALID',
+        message: 'Lifecycle participant identity aliases or contradicts existing provenance.',
+        participant: participantId,
+      });
+      continue;
+    }
+    participantKeys.add(participantId);
+    walletIdentities.set(participant.wallet.id, walletIdentity);
+    mintIdentities.set(participant.mint.id, mintIdentity);
+    acceptedEvidence.push(participant);
+  }
+  const wallets = new Set(acceptedEvidence.map(({ wallet }) => wallet.id));
+  const mints = new Set(acceptedEvidence.map(({ mint }) => mint.implementation));
+  const languages = new Set(acceptedEvidence.map(({ wallet }) => wallet.language));
+  const builds = new Set(
+    acceptedEvidence.map(({ wallet }) => `${wallet.sourceDigest}:${wallet.buildDigest}`),
+  );
+  if (wallets.size < suite.minimumWalletImplementations) {
+    reasons.push({
+      code: 'LIFECYCLE_MINIMUM_WALLETS',
+      message: 'Two independent wallet implementations are required.',
+    });
+  }
+  if (mints.size < suite.minimumMintImplementations) {
+    reasons.push({
+      code: 'LIFECYCLE_MINIMUM_MINTS',
+      message: 'Two independent mint implementations are required.',
+    });
+  }
+  if (languages.size < 2) {
+    reasons.push({
+      code: 'LIFECYCLE_CROSS_LANGUAGE',
+      message: 'Cross-language wallet evidence is required.',
+    });
+  }
+  if (builds.size < wallets.size) {
+    reasons.push({
+      code: 'LIFECYCLE_DISTINCT_BUILD',
+      message: 'Each wallet must have distinct source and build provenance.',
+    });
+  }
+
+  for (const participant of acceptedEvidence) {
+    const participantId = `${participant.wallet.id}@${participant.mint.id}`;
+    if (participant.releaseSuiteDigest !== suite.releaseSuiteDigest) {
+      reasons.push({
+        code: 'LIFECYCLE_POLICY_MISMATCH',
+        message: 'Evidence was produced by another lifecycle suite.',
+        participant: participantId,
+      });
+    }
+    if (!participant.secretScanPassed) {
+      reasons.push({
+        code: 'LIFECYCLE_SECRET_SCAN',
+        message: 'Lifecycle artifact secret scan did not pass.',
+        participant: participantId,
+      });
+    }
+    for (const operation of suite.requiredOperations) {
+      if (!participant.operations.includes(operation)) {
+        reasons.push({
+          code: 'LIFECYCLE_OPERATION_MISSING',
+          message: `Required operation ${operation} is missing.`,
+          participant: participantId,
+        });
+      }
+    }
+    for (const scenarioId of suite.requiredScenarios) {
+      const matches = participant.scenarios.filter(({ id }) => id === scenarioId);
+      const scenario = matches[0];
+      if (matches.length !== 1 || scenario?.status !== 'passed') {
+        reasons.push({
+          code: 'LIFECYCLE_REQUIRED_SCENARIO',
+          message: `Required scenario ${scenarioId} did not uniquely pass.`,
+          participant: participantId,
+          scenario: scenarioId,
+        });
+      }
+      if (
+        scenario === undefined ||
+        scenario.replayDigest === undefined ||
+        !DIGEST.test(scenario.replayDigest)
+      ) {
+        reasons.push({
+          code: 'LIFECYCLE_REPLAY_REQUIRED',
+          message: `Required scenario ${scenarioId} has no exact replay digest.`,
+          participant: participantId,
+          scenario: scenarioId,
+        });
+      }
+      for (const invariantId of suite.requiredInvariants) {
+        const invariants = scenario?.invariants.filter(({ id }) => id === invariantId) ?? [];
+        if (invariants.length !== 1 || invariants[0]?.status !== 'passed') {
+          reasons.push({
+            code: 'LIFECYCLE_REQUIRED_INVARIANT',
+            message: `Required invariant ${invariantId} did not uniquely pass.`,
+            participant: participantId,
+            scenario: scenarioId,
+          });
+        }
+      }
+    }
+  }
+
+  reasons.sort((left, right) =>
+    `${left.participant ?? ''}:${left.scenario ?? ''}:${left.code}`.localeCompare(
+      `${right.participant ?? ''}:${right.scenario ?? ''}:${right.code}`,
+    ),
+  );
+  return { passed: reasons.length === 0, reasons };
 }

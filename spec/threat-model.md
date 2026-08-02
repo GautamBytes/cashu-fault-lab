@@ -75,6 +75,13 @@ Inputs may include:
 - Lifecycle mint and Lightning calls are destination-pinned, redirect-free, timed out, and
   response-size bounded.
 - Melt is capability-gated unless an authenticated independent settlement probe is configured.
+- The regtest probe refuses any LND chain other than Bitcoin regtest, follows no redirects, bounds
+  request and response bodies, and returns only settlement state plus caller-supplied hashes.
+- LND RPC/REST ports are not published to the host. The probe receives a copied read-only macaroon;
+  the adapter and fault gateway are reachable only through explicit loopback port bindings.
+- Lifecycle release evidence is strict-field validated. Duplicate participants, contradictory
+  wallet or mint provenance, malformed digests, skipped requirements, and missing exact replay
+  evidence fail closed.
 
 ## Out of scope
 
@@ -97,3 +104,7 @@ Inputs may include:
   request material; deployment must separate the key from database backups and logs.
 - A malicious or compromised Lightning probe can falsely corroborate settlement. Release evidence
   therefore needs an independently operated and authenticated probe, not the wallet process itself.
+- The local Compose network permits container egress because Docker suppresses host port publication
+  on an internal-only network. Runtime destinations remain URL-pinned and redirect-free, but a
+  compromised container is outside the isolation claim; use a disposable host or add an external
+  firewall for hostile-image research.

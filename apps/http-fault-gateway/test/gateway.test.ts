@@ -124,11 +124,7 @@ describe('HttpFaultGateway', () => {
       match: { endpointFamily: 'quote', operationId: 'AAAAAAAAAAAAAAAAAAAAAA' },
     });
 
-    const response = await post(
-      '{}',
-      '/v1/mint/quote/bolt11/quote-id',
-      'AAAAAAAAAAAAAAAAAAAAAA',
-    );
+    const response = await post('{}', '/v1/mint/quote/bolt11/quote-id', 'AAAAAAAAAAAAAAAAAAAAAA');
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ code: 'GATEWAY_FAILURE' });
   });

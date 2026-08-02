@@ -14,5 +14,10 @@ socat "TCP-LISTEN:${CFL_LIFECYCLE_MINT_PORT},bind=127.0.0.1,fork,reuseaddr" \
 socat 'TCP-LISTEN:14101,bind=0.0.0.0,fork,reuseaddr' 'TCP:127.0.0.1:4101' &
 socat 'TCP-LISTEN:14102,bind=0.0.0.0,fork,reuseaddr' 'TCP:127.0.0.1:4102' &
 socat 'TCP-LISTEN:14300,bind=0.0.0.0,fork,reuseaddr' 'TCP:127.0.0.1:4300' &
+if [ -n "${CFL_LIFECYCLE_LIGHTNING_PROBE_HOST:-}" ]; then
+  : "${CFL_LIFECYCLE_LIGHTNING_PROBE_PORT:=4400}"
+  socat "TCP-LISTEN:${CFL_LIFECYCLE_LIGHTNING_PROBE_PORT},bind=127.0.0.1,fork,reuseaddr" \
+    "TCP:${CFL_LIFECYCLE_LIGHTNING_PROBE_HOST}:${CFL_LIFECYCLE_LIGHTNING_PROBE_PORT}" &
+fi
 
 wait

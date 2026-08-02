@@ -14,6 +14,12 @@ const LIFECYCLE_ENV = {
   CFL_LIFECYCLE_CASHU_TS_TOKEN: 'lifecycle-cashu-ts-token',
   CFL_LIFECYCLE_CDK_TOKEN: 'lifecycle-cdk-token',
 };
+const LIFECYCLE_REGTEST_COMPOSE = 'infra/compose/lightning-regtest.compose.yml';
+const LIFECYCLE_REGTEST_ENV = {
+  CFL_LIGHTNING_PROBE_TOKEN: 'lifecycle-regtest-probe-token',
+  CFL_HTTP_FAULT_GATEWAY_TOKEN: 'lifecycle-regtest-fault-token',
+  CFL_LIFECYCLE_CASHU_TS_TOKEN: 'lifecycle-regtest-cashu-ts-token',
+};
 
 function fail(message) {
   process.stderr.write(`${message}\n`);
@@ -23,14 +29,19 @@ function fail(message) {
 const separator = process.argv.indexOf('--');
 if (separator < 3 || separator === process.argv.length - 1) {
   fail(
-    'usage: node scripts/test-environment.mjs <docker|funded|lifecycle-funded> [--skip-unavailable] -- <command> [args...]',
+    'usage: node scripts/test-environment.mjs <docker|funded|lifecycle-funded|lifecycle-regtest> [--skip-unavailable] -- <command> [args...]',
   );
 } else {
   const mode = process.argv[2];
   const options = new Set(process.argv.slice(3, separator));
   const command = process.argv[separator + 1];
   const args = process.argv.slice(separator + 2);
-  if (mode !== 'docker' && mode !== 'funded' && mode !== 'lifecycle-funded') {
+  if (
+    mode !== 'docker' &&
+    mode !== 'funded' &&
+    mode !== 'lifecycle-funded' &&
+    mode !== 'lifecycle-regtest'
+  ) {
     fail(`unknown test environment mode: ${mode}`);
   } else if (options.size > 1 || [...options].some((value) => value !== '--skip-unavailable')) {
     fail(`unknown test environment option: ${[...options].join(', ')}`);
@@ -47,6 +58,54 @@ if (separator < 3 || separator === process.argv.length - 1) {
       } else {
         fail('test:funded blocked: Docker daemon unavailable');
       }
+    } else if (mode === 'lifecycle-regtest') {
+      const environment = { ...process.env, ...LIFECYCLE_REGTEST_ENV };
+      let failed = false;
+      const clean = spawnSync(
+        'docker',
+        ['compose', '-f', LIFECYCLE_REGTEST_COMPOSE, 'down', '--volumes', '--remove-orphans'],
+        { stdio: 'inherit', env: environment, timeout: 120_000 },
+      );
+      if (clean.status !== 0) {
+        fail('test:lifecycle:regtest could not clean the Compose stack');
+        failed = true;
+      }
+      if (!failed) {
+        const up = spawnSync(
+          'docker',
+          [
+            'compose',
+            '-f',
+            LIFECYCLE_REGTEST_COMPOSE,
+            'up',
+            '--build',
+            '--quiet-build',
+            '-d',
+            '--wait',
+          ],
+          { stdio: 'inherit', env: environment, timeout: 900_000 },
+        );
+        if (up.status !== 0) {
+          fail('test:lifecycle:regtest could not start the Compose stack');
+          failed = true;
+        }
+      }
+      if (!failed) {
+        const result = spawnSync(command, args, {
+          stdio: 'inherit',
+          env: { ...environment, CFL_WALLET_LIFECYCLE_REGTEST: '1' },
+        });
+        if (result.status !== 0) {
+          process.exitCode = result.status ?? 1;
+          failed = true;
+        }
+      }
+      const down = spawnSync(
+        'docker',
+        ['compose', '-f', LIFECYCLE_REGTEST_COMPOSE, 'down', '--volumes', '--remove-orphans'],
+        { stdio: 'inherit', env: environment, timeout: 120_000 },
+      );
+      if (down.status !== 0 && !failed) fail('test:lifecycle:regtest could not clean up Compose');
     } else if (mode === 'lifecycle-funded') {
       const environment = { ...process.env, ...LIFECYCLE_ENV };
       let failed = false;
