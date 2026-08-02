@@ -38,7 +38,12 @@ function sameFailureIdentity(
   left: LifecycleFailureArtifact,
   right: LifecycleFailureArtifact,
 ): boolean {
-  return left.failure.code === right.failure.code && left.failure.message === right.failure.message;
+  return (
+    left.failure.code === right.failure.code &&
+    (left.failure.detailHash !== undefined && right.failure.detailHash !== undefined
+      ? left.failure.detailHash === right.failure.detailHash
+      : left.failure.message === right.failure.message)
+  );
 }
 
 export async function minimizeLifecycleFailure(

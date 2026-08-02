@@ -129,10 +129,12 @@ describe('lifecycle scenario runner', () => {
     expect(result.artifact.failure).toMatchObject({
       commandIndex: 3,
       code: 'LIFECYCLE_INVARIANT',
+      message: 'Lifecycle safety invariant failed.',
     });
-    expect(result.artifact.failure.message).toContain('request digest changed');
+    expect(result.artifact.failure.detailHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(JSON.stringify(result.artifact)).not.toContain('"body"');
     expect(JSON.stringify(result.artifact)).not.toContain('quoteId');
+    expect(JSON.stringify(result.artifact)).not.toContain('request digest changed');
   });
 
   test('executes an explicit adapter restart boundary', async () => {

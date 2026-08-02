@@ -1,5 +1,8 @@
 import {
+  lifecycleFailurePublicMessage,
   lifecycleSeedHash,
+  redactLifecycleFailureArtifact,
+  type LifecycleFailureArtifact,
   type LifecycleHistoryEntry,
   type LifecycleScenarioCommand,
   type LifecycleScenarioRunResult,
@@ -39,7 +42,9 @@ export interface LifecycleReportDocument {
     readonly code: 'LIFECYCLE_DRIVER' | 'LIFECYCLE_INVARIANT';
     readonly commandIndex: number;
     readonly message: string;
+    readonly detailHash?: string;
   };
+  readonly replayArtifact?: LifecycleFailureArtifact;
 }
 
 function commandView(
@@ -221,11 +226,12 @@ export function createLifecycleReport(input: LifecycleReportInput): LifecycleRep
           failure: {
             code: input.result.artifact.failure.code,
             commandIndex: input.result.artifact.failure.commandIndex,
-            message:
-              input.result.artifact.failure.code === 'LIFECYCLE_INVARIANT'
-                ? 'Lifecycle safety invariant failed.'
-                : 'Lifecycle driver execution failed.',
+            message: lifecycleFailurePublicMessage(input.result.artifact.failure.code),
+            ...(input.result.artifact.failure.detailHash === undefined
+              ? {}
+              : { detailHash: input.result.artifact.failure.detailHash }),
           },
+          replayArtifact: redactLifecycleFailureArtifact(input.result.artifact),
         }
       : {}),
   };

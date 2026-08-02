@@ -66,6 +66,7 @@ export interface LifecycleLabRuntime {
 }
 
 const SCENARIO_ID = /^[a-z0-9][a-z0-9-]{0,63}$/u;
+const DIGEST = /^sha256:[a-f0-9]{64}$/u;
 const MAX_SCENARIO_BYTES = 512 * 1_024;
 const MAX_REPLAY_ARTIFACT_BYTES = 4 * 1_024 * 1_024;
 
@@ -123,7 +124,14 @@ async function readScenario(
 }
 
 function failureArtifact(value: unknown): LifecycleFailureArtifact {
-  const input = record(value);
+  const wrapper = record(value);
+  const candidate =
+    wrapper.schemaVersion === 1 &&
+    wrapper.suite === 'wallet-lifecycle-v1' &&
+    wrapper.status === 'failed'
+      ? wrapper.replayArtifact
+      : value;
+  const input = record(candidate);
   if (
     input.schemaVersion !== 2 ||
     typeof input.redacted !== 'boolean' ||
@@ -150,7 +158,9 @@ function failureArtifact(value: unknown): LifecycleFailureArtifact {
     input.observations.length > 20_000 ||
     !Number.isSafeInteger(failure.commandIndex) ||
     (failure.code !== 'LIFECYCLE_DRIVER' && failure.code !== 'LIFECYCLE_INVARIANT') ||
-    typeof failure.message !== 'string'
+    typeof failure.message !== 'string' ||
+    (failure.detailHash !== undefined &&
+      (typeof failure.detailHash !== 'string' || !DIGEST.test(failure.detailHash)))
   ) {
     throw new Error('Lifecycle replay artifact is invalid');
   }
@@ -173,7 +183,7 @@ function failureArtifact(value: unknown): LifecycleFailureArtifact {
     commands: scenario.commands,
   });
   if (!validation.ok) throw new Error('Lifecycle replay artifact commands are invalid');
-  return value as unknown as LifecycleFailureArtifact;
+  return candidate as unknown as LifecycleFailureArtifact;
 }
 
 function runtime(context: LifecycleCommandContext): LifecycleLabRuntime {
@@ -424,7 +434,10 @@ export function registerLifecycleCommands(
             )}\nmatrix ${options.profile}: ${passed} passed, ${failed} failed, ${notApplicable} N/A\n`;
       if (options.output === undefined) io.stdout(rendered);
       else await io.writeText(options.output, rendered);
-      if (failed > 0) setExitCode(1);
+      if (results.length === 0) {
+        io.stderr('lifecycle matrix produced no runnable lanes\n');
+        setExitCode(1);
+      } else if (failed > 0) setExitCode(1);
     });
 
   lifecycle

@@ -6,7 +6,8 @@ is not certification and does not replace independent provenance or maintainer r
 ## Required local evidence
 
 - [ ] `pnpm test:lifecycle:funded` passes twice from clean volumes for cashu-ts/CDK ×
-      Nutshell/mintd.
+      Nutshell/mintd across the funded non-melt operations, with one adapter restart preservation
+      check per lane.
 - [ ] `pnpm test:lifecycle:regtest` proves one real Lightning settlement after committed-response
       loss, duplicate resume, and adapter restart, with NUT-08 change conservation.
 - [ ] `pnpm test:all`, `pnpm typecheck`, `pnpm format:check`, `pnpm openapi:validate`,
@@ -25,6 +26,8 @@ is not certification and does not replace independent provenance or maintainer r
 - [ ] Source and build digests come from produced artifacts, not development identities.
 - [ ] All seven lifecycle operations and all required scenarios uniquely pass.
 - [ ] Every required invariant passes; no required result is skipped or `N/A`.
+- [ ] Every required invariant uses `observed` or `derived` confidence; `adapter_claimed` evidence
+      is diagnostic only.
 - [ ] Every scenario has an exact replay digest and a successful secret scan.
 - [ ] No participant alias, contradictory provenance, or evidence-only self-assertion is accepted.
 

@@ -342,11 +342,23 @@ describe('wallet lifecycle report rendering', () => {
       adapterId: 'cashu-ts',
       mintId: 'nutshell-local',
     };
-    for (const output of [
-      renderLifecycleJson(input),
-      renderLifecycleJunit(input),
-      renderLifecycleHtml(input),
-    ]) {
+    const json = renderLifecycleJson(input);
+    const report = JSON.parse(json) as { replayArtifact?: LifecycleFailureArtifact };
+    expect(report.replayArtifact).toMatchObject({
+      schemaVersion: 2,
+      scenario: {
+        id: lifecycleScenario.id,
+        seedHash: lifecycleSeedHash(lifecycleScenario.seed),
+      },
+      failure: {
+        commandIndex: 0,
+        code: 'LIFECYCLE_DRIVER',
+        message: 'Lifecycle driver execution failed.',
+      },
+    });
+    expect(JSON.stringify(report.replayArtifact)).not.toContain('control-token');
+    expect(JSON.stringify(report.replayArtifact)).not.toContain('preimage');
+    for (const output of [json, renderLifecycleJunit(input), renderLifecycleHtml(input)]) {
       expect(output).toContain('security-quote-redaction');
       expect(output).toContain(lifecycleSeedHash(lifecycleScenario.seed));
       expect(output).not.toContain('raw-replay-seed');

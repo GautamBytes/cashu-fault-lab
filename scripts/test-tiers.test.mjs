@@ -82,3 +82,7 @@ test('environment preflight enables every opt-in lane it owns', () => {
   assert.match(environmentHelper, /CFL_WALLET_LIFECYCLE_REGTEST:\s*'1'/);
   assert.match(environmentHelper, /pass <= 2/);
 });
+
+test('lifecycle compose wrappers use flags supported by GitHub hosted runners', () => {
+  assert.doesNotMatch(environmentHelper, /--quiet-build/);
+});

@@ -4,9 +4,10 @@ import {
   type LifecycleHistoryEntry,
   type LifecycleScenarioSpec,
 } from '@cashu-fault-lab/wallet-lifecycle-runner';
+import { renderLifecycleJson } from '@cashu-fault-lab/report';
 import { relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { LifecycleLabRuntime } from '../src/commands/lifecycle.js';
+import type { LifecycleLabRuntime, LifecycleMatrixCliResult } from '../src/commands/lifecycle.js';
 import { runCli, type CliIo } from '../src/index.js';
 
 const operationId = 'AAAAAAAAAAAAAAAAAAAAAA';
@@ -79,7 +80,7 @@ class FakeLifecycleRuntime implements LifecycleLabRuntime {
     return { result: { ok: true, model: { observations: [] }, history: [] } };
   }
 
-  async matrix() {
+  async matrix(): Promise<readonly LifecycleMatrixCliResult[]> {
     return [
       {
         id: 'cdk-nutshell',
@@ -94,6 +95,12 @@ class FakeLifecycleRuntime implements LifecycleLabRuntime {
   async replay(input: { readonly artifact: LifecycleFailureArtifact }) {
     this.replayed.push(input.artifact);
     return { matched: true as const };
+  }
+}
+
+class EmptyMatrixRuntime extends FakeLifecycleRuntime {
+  override async matrix(): Promise<readonly []> {
+    return [];
   }
 }
 
@@ -143,6 +150,26 @@ describe('wallet lifecycle CLI', () => {
     expect(setup.stdout()).toContain('0 passed');
   });
 
+  it('fails closed when a lifecycle matrix provider returns no runnable lanes', async () => {
+    const setup = fixture();
+    const outcome = await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        'lifecycle',
+        'matrix',
+        '--profile',
+        'wallet-lifecycle-v1',
+        '--json',
+      ],
+      { io: setup.io, lifecycleRuntime: new EmptyMatrixRuntime() },
+    );
+
+    expect(outcome.exitCode).toBe(1);
+    expect(setup.stdout()).toContain('"results": []');
+    expect(setup.stderr()).toContain('no runnable lanes');
+  });
+
   it('replays a lifecycle failure with an out-of-band seed', async () => {
     const seed = 'replay-seed';
     const artifact: LifecycleFailureArtifact = {
@@ -179,6 +206,53 @@ describe('wallet lifecycle CLI', () => {
 
     expect(outcome.exitCode).toBe(0);
     expect(runtime.replayed).toEqual([artifact]);
+    expect(setup.stdout()).toContain('matched mint-response-lost');
+  });
+
+  it('replays a rendered lifecycle JSON report when it embeds a replay artifact', async () => {
+    const seed = 'replay-seed';
+    const artifact: LifecycleFailureArtifact = {
+      schemaVersion: 2,
+      scenario: {
+        id: scenario.id,
+        seedHash: lifecycleSeedHash(seed),
+        requireQuiescence: true,
+        commands: scenario.commands,
+      },
+      redacted: false,
+      history: [],
+      observations: [],
+      failure: { commandIndex: 0, code: 'LIFECYCLE_INVARIANT', message: 'invariant failed' },
+    };
+    const report = renderLifecycleJson({
+      scenario: { ...scenario, seed },
+      result: { ok: false, artifact },
+      adapterId: 'cashu-ts',
+      mintId: 'nutshell-local',
+    });
+    const embedded = (JSON.parse(report) as { replayArtifact: LifecycleFailureArtifact })
+      .replayArtifact;
+    const setup = fixture({ 'artifacts/lifecycle-report.json': report });
+    const runtime = new FakeLifecycleRuntime();
+    const outcome = await runCli(
+      [
+        'node',
+        'cashu-fault-lab',
+        'lifecycle',
+        'replay',
+        'artifacts/lifecycle-report.json',
+        '--seed',
+        seed,
+        '--adapter',
+        'cashu-ts',
+        '--mint',
+        'nutshell-local',
+      ],
+      { io: setup.io, lifecycleRuntime: runtime },
+    );
+
+    expect(outcome.exitCode).toBe(0);
+    expect(runtime.replayed).toEqual([embedded]);
     expect(setup.stdout()).toContain('matched mint-response-lost');
   });
 

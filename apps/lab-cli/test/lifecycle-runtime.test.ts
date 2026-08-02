@@ -5,7 +5,10 @@ import type {
   LifecycleOperationView,
 } from '@cashu-fault-lab/wallet-lifecycle-contract';
 import { describe, expect, it } from 'vitest';
-import { HttpLifecycleLabRuntime } from '../src/lifecycle-runtime.js';
+import {
+  createEnvironmentLifecycleRuntime,
+  HttpLifecycleLabRuntime,
+} from '../src/lifecycle-runtime.js';
 import type {
   LifecycleFaultRule,
   LifecycleScenarioSpec,
@@ -89,6 +92,12 @@ class FakeClient implements LifecycleAdapterClient {
 }
 
 describe('HTTP lifecycle lab runtime', () => {
+  it('configures packaged restart scenarios with a compose restart controller', () => {
+    const runtime = createEnvironmentLifecycleRuntime({});
+
+    expect(runtime.options.restartController).toEqual(expect.any(Function));
+  });
+
   it('maps semantic faults and normalizes an ambiguous recovery into oracle observations', async () => {
     const client = new FakeClient();
     const faults: Array<LifecycleFaultRule | undefined> = [];

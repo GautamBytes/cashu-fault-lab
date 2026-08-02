@@ -73,16 +73,7 @@ if (separator < 3 || separator === process.argv.length - 1) {
       if (!failed) {
         const up = spawnSync(
           'docker',
-          [
-            'compose',
-            '-f',
-            LIFECYCLE_REGTEST_COMPOSE,
-            'up',
-            '--build',
-            '--quiet-build',
-            '-d',
-            '--wait',
-          ],
+          ['compose', '-f', LIFECYCLE_REGTEST_COMPOSE, 'up', '--build', '-d', '--wait'],
           { stdio: 'inherit', env: environment, timeout: 900_000 },
         );
         if (up.status !== 0) {
@@ -122,7 +113,7 @@ if (separator < 3 || separator === process.argv.length - 1) {
         }
         const up = spawnSync(
           'docker',
-          ['compose', '-f', LIFECYCLE_COMPOSE, 'up', '--build', '--quiet-build', '-d', '--wait'],
+          ['compose', '-f', LIFECYCLE_COMPOSE, 'up', '--build', '-d', '--wait'],
           { stdio: 'inherit', env: environment, timeout: 900_000 },
         );
         if (up.status !== 0) {

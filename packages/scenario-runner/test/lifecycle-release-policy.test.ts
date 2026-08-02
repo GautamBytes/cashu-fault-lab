@@ -35,6 +35,7 @@ function evidence(walletId: string, language: string, mintId: string): Lifecycle
       invariants: suite.requiredInvariants.map((invariant) => ({
         id: invariant,
         status: 'passed',
+        confidence: 'observed',
       })),
     })),
   };
@@ -91,6 +92,45 @@ describe('wallet lifecycle release policy', () => {
         'LIFECYCLE_SECRET_SCAN',
       ]),
     );
+  });
+
+  it('rejects status-only lifecycle invariant evidence', () => {
+    const first = evidence('cashu-ts', 'typescript', 'nutshell-local');
+    const statusOnly = {
+      ...first,
+      scenarios: first.scenarios.map((scenario) => ({
+        ...scenario,
+        invariants: scenario.invariants.map(({ id, status }) => ({ id, status })),
+      })),
+    };
+    const result = evaluateLifecycleReleaseSuite(suite, [
+      statusOnly,
+      evidence('cdk', 'rust', 'mintd-local'),
+    ] as readonly LifecycleReleaseEvidence[]);
+
+    expect(result.passed).toBe(false);
+    expect(result.reasons.map(({ code }) => code)).toContain('LIFECYCLE_EVIDENCE_INVALID');
+  });
+
+  it('does not qualify adapter-claimed lifecycle invariant evidence', () => {
+    const first = evidence('cashu-ts', 'typescript', 'nutshell-local');
+    const claimed = {
+      ...first,
+      scenarios: first.scenarios.map((scenario) => ({
+        ...scenario,
+        invariants: scenario.invariants.map((invariant) => ({
+          ...invariant,
+          confidence: 'adapter_claimed' as const,
+        })),
+      })),
+    };
+    const result = evaluateLifecycleReleaseSuite(suite, [
+      claimed,
+      evidence('cdk', 'rust', 'mintd-local'),
+    ]);
+
+    expect(result.passed).toBe(false);
+    expect(result.reasons.map(({ code }) => code)).toContain('LIFECYCLE_REQUIRED_INVARIANT');
   });
 
   it('rejects unknown fields and a policy that permits skipped required scenarios', () => {

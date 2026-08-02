@@ -12,12 +12,16 @@ import {
   type LifecycleDriverStep,
   type LifecycleFaultRule,
 } from '@cashu-fault-lab/wallet-lifecycle-runner';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type {
   LifecycleLabRuntime,
   LifecycleMatrixCliResult,
   LifecycleRunExecution,
   LifecycleRunOptions,
 } from './commands/lifecycle.js';
+
+const execFileAsync = promisify(execFile);
 
 export interface LifecycleFaultController {
   configure(rule: LifecycleFaultRule | undefined): Promise<void>;
@@ -27,6 +31,15 @@ export interface LifecycleRestartController {
   restart(component: 'adapter' | 'mint'): Promise<void>;
 }
 
+export interface LifecycleRestartControllerInput {
+  readonly adapterId: string;
+  readonly mintId: string;
+}
+
+export type LifecycleRestartControllerFactory = (
+  input: LifecycleRestartControllerInput,
+) => LifecycleRestartController;
+
 export interface LifecycleAdapterResolution {
   readonly client: LifecycleAdapterClient;
   readonly componentVersion: string;
@@ -35,7 +48,7 @@ export interface LifecycleAdapterResolution {
 export interface HttpLifecycleLabRuntimeOptions {
   readonly adapter: (adapterId: string) => Promise<LifecycleAdapterResolution>;
   readonly faultController: LifecycleFaultController;
-  readonly restartController?: LifecycleRestartController;
+  readonly restartController?: LifecycleRestartControllerFactory;
   readonly matrix?: (input: {
     readonly profile: string;
     readonly seed: string;
@@ -221,7 +234,7 @@ export class HttpLifecycleLabRuntime implements LifecycleLabRuntime {
     const driver = new HttpLifecycleDriver(
       adapter.client,
       this.options.faultController,
-      this.options.restartController,
+      this.options.restartController?.({ adapterId: input.adapterId, mintId: input.mintId }),
     );
     return {
       result: await new LifecycleScenarioRunner(driver).run(input.scenario),
@@ -244,7 +257,7 @@ export class HttpLifecycleLabRuntime implements LifecycleLabRuntime {
     const driver = new HttpLifecycleDriver(
       adapter.client,
       this.options.faultController,
-      this.options.restartController,
+      this.options.restartController?.({ adapterId: input.adapterId, mintId: input.mintId }),
     );
     return replayLifecycleFailure(input.artifact, driver, input.seed);
   }
@@ -354,6 +367,69 @@ class HttpLifecycleFaultController implements LifecycleFaultController {
   }
 }
 
+const SERVICE_ID = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
+
+function mintFamily(mintId: string): 'nutshell' | 'mintd' {
+  if (!SERVICE_ID.test(mintId)) throw new Error('Lifecycle mint identity is invalid');
+  if (mintId.includes('nutshell')) return 'nutshell';
+  if (mintId.includes('mintd')) return 'mintd';
+  throw new Error(`Lifecycle mint service is unknown: ${mintId}`);
+}
+
+function mintService(mintId: string): string {
+  if (mintId.includes('regtest')) return 'nutshell-regtest';
+  return mintFamily(mintId);
+}
+
+function adapterService(adapterId: string, mintId: string): string {
+  if (!SERVICE_ID.test(adapterId)) throw new Error('Lifecycle adapter identity is invalid');
+  if (mintId.includes('regtest')) {
+    if (adapterId !== 'cashu-ts') {
+      throw new Error(`Lifecycle regtest adapter service is unknown: ${adapterId}`);
+    }
+    return 'cashu-ts-regtest';
+  }
+  if (adapterId !== 'cashu-ts' && adapterId !== 'cdk') {
+    throw new Error(`Lifecycle adapter service is unknown: ${adapterId}`);
+  }
+  return `${adapterId}-${mintFamily(mintId)}`;
+}
+
+function lifecycleComposeFile(env: Readonly<Record<string, string | undefined>>): string {
+  const configured = env.CFL_LIFECYCLE_COMPOSE_FILE;
+  if (configured !== undefined && configured.length > 0 && !/[\r\n]/u.test(configured)) {
+    return configured;
+  }
+  return env.CFL_WALLET_LIFECYCLE_REGTEST === '1'
+    ? 'infra/compose/lightning-regtest.compose.yml'
+    : 'infra/compose/wallet-lifecycle.compose.yml';
+}
+
+class DockerComposeLifecycleRestartController implements LifecycleRestartController {
+  constructor(
+    readonly env: Readonly<Record<string, string | undefined>>,
+    readonly lane: LifecycleRestartControllerInput,
+  ) {}
+
+  async restart(component: 'adapter' | 'mint'): Promise<void> {
+    const service =
+      component === 'mint'
+        ? mintService(this.lane.mintId)
+        : adapterService(this.lane.adapterId, this.lane.mintId);
+    const docker = this.env.CFL_DOCKER_BIN ?? 'docker';
+    const composeFile = lifecycleComposeFile(this.env);
+    const environment = { ...process.env, ...this.env };
+    await execFileAsync(docker, ['compose', '-f', composeFile, 'restart', service], {
+      env: environment,
+      timeout: 120_000,
+    });
+    await execFileAsync(docker, ['compose', '-f', composeFile, 'up', '-d', '--wait', service], {
+      env: environment,
+      timeout: 120_000,
+    });
+  }
+}
+
 export function createEnvironmentLifecycleRuntime(
   env: Readonly<Record<string, string | undefined>>,
 ): HttpLifecycleLabRuntime {
@@ -366,5 +442,6 @@ export function createEnvironmentLifecycleRuntime(
       return { client, componentVersion: capabilities.implementation.version };
     },
     faultController: new HttpLifecycleFaultController(env),
+    restartController: (input) => new DockerComposeLifecycleRestartController(env, input),
   });
 }

@@ -448,6 +448,8 @@ export interface LifecycleReleaseSuite {
   readonly requiredInvariants: readonly string[];
 }
 
+export type LifecycleInvariantEvidenceConfidence = 'observed' | 'derived' | 'adapter_claimed';
+
 export interface LifecycleReleaseEvidence {
   readonly wallet: {
     readonly id: string;
@@ -470,6 +472,7 @@ export interface LifecycleReleaseEvidence {
     readonly invariants: readonly {
       readonly id: string;
       readonly status: 'passed' | 'failed' | 'not_applicable' | 'skipped';
+      readonly confidence: LifecycleInvariantEvidenceConfidence;
     }[];
   }[];
 }
@@ -521,6 +524,7 @@ const LIFECYCLE_OPERATIONS = new Set([
   'reconcile',
 ]);
 const LIFECYCLE_STATUSES = new Set(['passed', 'failed', 'not_applicable', 'skipped']);
+const LIFECYCLE_INVARIANT_CONFIDENCES = new Set(['observed', 'derived', 'adapter_claimed']);
 
 function lifecycleIdentifierArray(
   value: unknown,
@@ -710,14 +714,25 @@ function validLifecycleEvidence(value: unknown): value is LifecycleReleaseEviden
       }
       const result = invariant as Readonly<Record<string, unknown>>;
       return (
-        lifecycleExactKeys(result, ['id', 'status']) &&
+        lifecycleExactKeys(result, ['id', 'status', 'confidence']) &&
         typeof result.id === 'string' &&
         INVARIANT_ID.test(result.id) &&
         typeof result.status === 'string' &&
-        LIFECYCLE_STATUSES.has(result.status)
+        LIFECYCLE_STATUSES.has(result.status) &&
+        typeof result.confidence === 'string' &&
+        LIFECYCLE_INVARIANT_CONFIDENCES.has(result.confidence)
       );
     });
   });
+}
+
+function lifecycleInvariantQualifies(
+  invariant: LifecycleReleaseEvidence['scenarios'][number]['invariants'][number],
+): boolean {
+  return (
+    invariant.status === 'passed' &&
+    (invariant.confidence === 'observed' || invariant.confidence === 'derived')
+  );
 }
 
 export function evaluateLifecycleReleaseSuite(
@@ -842,7 +857,7 @@ export function evaluateLifecycleReleaseSuite(
       }
       for (const invariantId of suite.requiredInvariants) {
         const invariants = scenario?.invariants.filter(({ id }) => id === invariantId) ?? [];
-        if (invariants.length !== 1 || invariants[0]?.status !== 'passed') {
+        if (invariants.length !== 1 || !lifecycleInvariantQualifies(invariants[0]!)) {
           reasons.push({
             code: 'LIFECYCLE_REQUIRED_INVARIANT',
             message: `Required invariant ${invariantId} did not uniquely pass.`,

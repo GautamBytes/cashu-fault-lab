@@ -32,10 +32,13 @@ pnpm test:lifecycle:funded
 pnpm test:lifecycle:regtest
 ```
 
-Both commands remove their named Compose volumes before and after the run. The funded suite runs all
-four wallet/mint combinations twice from clean state. The regtest suite opens a balanced local
-channel, loses the committed melt response, restarts the adapter, resumes concurrently, and checks
-the sink and payer independently for exactly one settlement and conserved NUT-08 change.
+Both commands remove their named Compose volumes before and after the run. The funded suite runs
+`mint`, `swap`, `send`, `receive`, `restore`, and `reconcile` across all four wallet/mint
+combinations twice from clean state, with one adapter restart preservation check per lane. It does
+not claim funded `melt` coverage or a full mint/adapter crash-boundary matrix. The regtest suite
+opens a balanced local channel, loses the committed melt response, restarts the adapter, resumes
+concurrently, and checks the sink and payer independently for exactly one settlement and conserved
+NUT-08 change.
 
 ## Run a lifecycle scenario
 
@@ -157,9 +160,10 @@ recovery-blocked. An unverified PAID quote is never treated as independent Light
 digest binds the complete required operation, scenario, invariant, and provenance requirements.
 The evaluator rejects malformed or contradictory evidence, duplicate participants, skipped
 required scenarios, missing replay digests, failed artifact secret scans, fewer than two independent
-wallet languages, or fewer than two mint implementations. Repository fixtures use development
-identities, so passing local tests is strong implementation evidence but is not an external
-certification claim. See the [maintainer checklist](maintainers/release-checklist.md).
+wallet languages, fewer than two mint implementations, or adapter-claimed invariant evidence.
+Repository fixtures use development identities, so passing local tests is strong implementation
+evidence but is not an external certification claim. See the
+[maintainer checklist](maintainers/release-checklist.md).
 
 The normative contract is [the lifecycle OpenAPI document](../spec/lifecycle-openapi.yaml). The
 approved architecture and implementation history are recorded in the
