@@ -118,6 +118,9 @@ importers:
       '@cashu-fault-lab/wallet-lifecycle-runner':
         specifier: workspace:*
         version: link:../../packages/wallet-lifecycle-runner
+      '@cashu/cashu-ts':
+        specifier: 4.7.2
+        version: 4.7.2
       commander:
         specifier: 15.0.0
         version: 15.0.0

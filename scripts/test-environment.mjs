@@ -13,12 +13,23 @@ const LIFECYCLE_ENV = {
   CFL_HTTP_FAULT_GATEWAY_TOKEN: 'lifecycle-fault-token',
   CFL_LIFECYCLE_CASHU_TS_TOKEN: 'lifecycle-cashu-ts-token',
   CFL_LIFECYCLE_CDK_TOKEN: 'lifecycle-cdk-token',
+  CFL_LIFECYCLE_CASHU_TS_NUTSHELL_URL: 'http://127.0.0.1:4111',
+  CFL_LIFECYCLE_CASHU_TS_MINTD_URL: 'http://127.0.0.1:4112',
+  CFL_LIFECYCLE_CDK_NUTSHELL_URL: 'http://127.0.0.1:4121',
+  CFL_LIFECYCLE_CDK_MINTD_URL: 'http://127.0.0.1:4122',
+  CFL_LIFECYCLE_NUTSHELL_GATEWAY_URL: 'http://127.0.0.1:4311',
+  CFL_LIFECYCLE_MINTD_GATEWAY_URL: 'http://127.0.0.1:4312',
+  CFL_LIFECYCLE_NUTSHELL_MINT_URL: 'http://127.0.0.1:4300',
+  CFL_LIFECYCLE_MINTD_MINT_URL: 'http://127.0.0.1:4300',
+  CFL_LIFECYCLE_NUTSHELL_PUBLIC_MINT_URL: 'http://127.0.0.1:3338',
+  CFL_LIFECYCLE_MINTD_PUBLIC_MINT_URL: 'http://127.0.0.1:8085',
 };
 const LIFECYCLE_REGTEST_COMPOSE = 'infra/compose/lightning-regtest.compose.yml';
 const LIFECYCLE_REGTEST_ENV = {
   CFL_LIGHTNING_PROBE_TOKEN: 'lifecycle-regtest-probe-token',
   CFL_HTTP_FAULT_GATEWAY_TOKEN: 'lifecycle-regtest-fault-token',
   CFL_LIFECYCLE_CASHU_TS_TOKEN: 'lifecycle-regtest-cashu-ts-token',
+  CFL_LIFECYCLE_CDK_TOKEN: 'lifecycle-regtest-cdk-token',
 };
 
 function fail(message) {

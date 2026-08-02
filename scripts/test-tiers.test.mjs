@@ -8,6 +8,11 @@ const environmentHelper = await readFile(
   new URL('./test-environment.mjs', import.meta.url),
   'utf8',
 );
+const lifecycleComposeFiles = await Promise.all(
+  ['wallet-lifecycle.compose.yml', 'lightning-regtest.compose.yml'].map((file) =>
+    readFile(new URL(`../infra/compose/${file}`, import.meta.url), 'utf8'),
+  ),
+);
 
 test('default tests are Docker-free and explicit tiers are available', () => {
   assert.equal(root.scripts.test, 'pnpm test:unit');
@@ -87,6 +92,26 @@ test('lifecycle compose wrappers use flags supported by GitHub hosted runners', 
   assert.doesNotMatch(environmentHelper, /--quiet-build/);
 });
 
+test('lifecycle CDK state keys are valid 32-byte base64url values', () => {
+  const keys = lifecycleComposeFiles.flatMap((compose) =>
+    [...compose.matchAll(/CASHU_FAULT_LAB_CDK_LIFECYCLE_STATE_KEY:\s+([A-Za-z0-9_-]+)/g)].map(
+      (match) => match[1],
+    ),
+  );
+  assert.ok(keys.length > 0);
+  for (const key of keys) {
+    const decoded = Buffer.from(key, 'base64url');
+    assert.equal(decoded.length, 32);
+    assert.equal(decoded.toString('base64url'), key);
+  }
+});
+
+test('lifecycle CDK healthchecks do not require a wallet before reset', () => {
+  for (const compose of lifecycleComposeFiles) {
+    assert.doesNotMatch(compose, /curl[^\n]*\/v1\/lifecycle\/capabilities/);
+  }
+});
+
 test('lifecycle suites build the runner dependency graph before executing specs', () => {
   for (const scriptName of ['test:lifecycle:funded:run', 'test:lifecycle:regtest:run']) {
     const command = root.scripts[scriptName];
@@ -94,6 +119,17 @@ test('lifecycle suites build the runner dependency graph before executing specs'
       command,
       /^pnpm exec turbo run build --filter=@cashu-fault-lab\/wallet-lifecycle-runner\.\.\. && /,
     );
-    assert.match(command, /vitest run test\/(?:funded-lifecycle|regtest-melt)\.test\.ts$/);
+    assert.match(command, /vitest run test\/(?:funded-lifecycle|regtest-melt)\.test\.ts/);
   }
+
+  const funded = root.scripts['test:lifecycle:funded:run'];
+  assert.match(funded, /turbo run build --filter=@cashu-fault-lab\/lab-cli\.\.\./);
+  assert.match(
+    funded,
+    /node apps\/lab-cli\/dist\/bin\.js lifecycle matrix --profile wallet-lifecycle-v1 --seed wallet-lifecycle-funded --json$/,
+  );
+  assert.match(
+    root.scripts['test:lifecycle:regtest:run'],
+    /vitest run test\/regtest-melt\.test\.ts$/,
+  );
 });

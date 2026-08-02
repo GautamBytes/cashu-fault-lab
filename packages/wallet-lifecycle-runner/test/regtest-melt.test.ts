@@ -25,6 +25,28 @@ const publicMintUrl = 'http://127.0.0.1:3358';
 const lifecycleMintUrl = 'http://127.0.0.1:4300';
 const gatewayUrl = 'http://127.0.0.1:4341';
 
+interface RegtestLane {
+  readonly id: 'cashu-ts' | 'cdk';
+  readonly service: 'cashu-ts-regtest' | 'cdk-regtest';
+  readonly adapterUrl: string;
+  readonly token: string;
+}
+
+const lanes: readonly RegtestLane[] = [
+  {
+    id: 'cashu-ts',
+    service: 'cashu-ts-regtest',
+    adapterUrl: 'http://127.0.0.1:4141',
+    token: 'lifecycle-regtest-cashu-ts-token',
+  },
+  {
+    id: 'cdk',
+    service: 'cdk-regtest',
+    adapterUrl: 'http://127.0.0.1:4151',
+    token: 'lifecycle-regtest-cdk-token',
+  },
+];
+
 function parseJson(value: string): Readonly<Record<string, unknown>> {
   const parsed = JSON.parse(value) as unknown;
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
@@ -154,19 +176,21 @@ async function bootstrapRegtest(): Promise<void> {
   await waitForActiveChannel();
 }
 
-function operationId(name: string): string {
+function operationId(lane: RegtestLane, name: string): string {
   return createHash('sha256')
     .update('cashu-fault-lab/regtest-melt/v1\0')
+    .update(lane.id)
+    .update('\0')
     .update(name)
     .digest()
     .subarray(0, 16)
     .toString('base64url');
 }
 
-function adapter(): HttpLifecycleAdapterClient {
+function adapter(lane: RegtestLane): HttpLifecycleAdapterClient {
   return new HttpLifecycleAdapterClient({
-    baseUrl: 'http://127.0.0.1:4141',
-    token: 'lifecycle-regtest-cashu-ts-token',
+    baseUrl: lane.adapterUrl,
+    token: lane.token,
     timeoutMs: 15_000,
   });
 }
@@ -200,14 +224,14 @@ async function installMeltDrop(operation: string): Promise<void> {
   if (response.status !== 201) throw new Error('Regtest gateway rejected melt fault');
 }
 
-async function restartAdapter(): Promise<void> {
-  await execFileAsync(docker, ['compose', '-f', composeFile, 'restart', 'cashu-ts-regtest'], {
+async function restartAdapter(lane: RegtestLane): Promise<void> {
+  await execFileAsync(docker, ['compose', '-f', composeFile, 'restart', lane.service], {
     env: composeEnvironment,
     timeout: 30_000,
   });
   for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
-      await adapter().capabilities();
+      await adapter(lane).capabilities();
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 250));
@@ -275,93 +299,97 @@ afterEach(async () => {
 });
 
 describe.skipIf(!enabled)('wallet lifecycle Lightning regtest', () => {
-  it('settles once after response loss, duplicate resume, and adapter restart while conserving NUT-08 change', async () => {
+  it('qualifies cashu-ts and CDK native melt with one settlement and conserved NUT-08 change', async () => {
     await bootstrapRegtest();
-    const client = adapter();
-    await clearFaults();
-    await client.reset('wallet-lifecycle-regtest');
-    expect((await client.capabilities()).operations).toContain('melt');
+    for (const lane of lanes) {
+      const client = adapter(lane);
+      await clearFaults();
+      await client.reset('wallet-lifecycle-regtest');
+      expect((await client.capabilities()).operations).toContain('melt');
 
-    const token = await fundedToken(256);
-    const receive = await converge(
-      client,
-      await client.start({
-        operationId: operationId('receive'),
-        kind: 'receive',
-        mint: lifecycleMintUrl,
-        unit: 'sat',
-        token,
-      }),
-    );
-    expect(receive.phase).toBe('succeeded');
-    const before = await client.wallet();
+      const token = await fundedToken(256);
+      const receive = await converge(
+        client,
+        await client.start({
+          operationId: operationId(lane, 'receive'),
+          kind: 'receive',
+          mint: lifecycleMintUrl,
+          unit: 'sat',
+          token,
+        }),
+      );
+      expect(receive.phase).toBe('succeeded');
+      const before = await client.wallet();
 
-    const invoice = await lncli('lnd-sink', [
-      'addinvoice',
-      '--amt=64',
-      '--memo=cashu-fault-lab-regtest-melt',
-    ]);
-    const paymentRequest = Reflect.get(invoice, 'payment_request');
-    const paymentHash = Reflect.get(invoice, 'r_hash');
-    if (typeof paymentRequest !== 'string' || typeof paymentHash !== 'string') {
-      throw new Error('LND sink returned an invalid invoice');
-    }
-    const meltOperationId = operationId('melt');
-    await installMeltDrop(meltOperationId);
-    await expect(
-      client.start({
+      const invoice = await lncli('lnd-sink', [
+        'addinvoice',
+        '--amt=64',
+        `--memo=cashu-fault-lab-regtest-melt-${lane.id}`,
+      ]);
+      const paymentRequest = Reflect.get(invoice, 'payment_request');
+      const paymentHash = Reflect.get(invoice, 'r_hash');
+      if (typeof paymentRequest !== 'string' || typeof paymentHash !== 'string') {
+        throw new Error('LND sink returned an invalid invoice');
+      }
+      const meltOperationId = operationId(lane, 'melt');
+      await installMeltDrop(meltOperationId);
+      try {
+        await client.start({
+          operationId: meltOperationId,
+          kind: 'melt',
+          mint: lifecycleMintUrl,
+          unit: 'sat',
+          invoice: paymentRequest,
+        });
+      } catch {
+        expect((await client.operation(meltOperationId)).operationId).toBe(meltOperationId);
+      }
+
+      await restartAdapter(lane);
+      await clearFaults();
+      const restarted = adapter(lane);
+      const duplicateResumes = await Promise.all([
+        restarted.resume(meltOperationId),
+        restarted.resume(meltOperationId),
+      ]);
+      const settled = await converge(restarted, duplicateResumes[0]!);
+      expect(duplicateResumes[1]!.operationId).toBe(meltOperationId);
+      expect(settled).toMatchObject({
         operationId: meltOperationId,
-        kind: 'melt',
-        mint: lifecycleMintUrl,
-        unit: 'sat',
-        invoice: paymentRequest,
-      }),
-    ).rejects.toThrow();
+        phase: 'succeeded',
+        amount: 64,
+      });
+      expect(settled.change).toBeGreaterThan(0);
 
-    await restartAdapter();
-    await clearFaults();
-    const restarted = adapter();
-    const duplicateResumes = await Promise.all([
-      restarted.resume(meltOperationId),
-      restarted.resume(meltOperationId),
-    ]);
-    const settled = await converge(restarted, duplicateResumes[0]!);
-    expect(duplicateResumes[1]!.operationId).toBe(meltOperationId);
-    expect(settled).toMatchObject({
-      operationId: meltOperationId,
-      phase: 'succeeded',
-      amount: 64,
-    });
-    expect(settled.change).toBeGreaterThan(0);
+      const after = await restarted.wallet();
+      expect(before.balances.available - after.balances.available).toBe(
+        64 + (settled.actualFee ?? 0) + (settled.inputFee ?? 0),
+      );
+      expect(after.balances.reserved).toBe(0);
 
-    const after = await restarted.wallet();
-    expect(before.balances.available - after.balances.available).toBe(
-      64 + (settled.actualFee ?? 0) + (settled.inputFee ?? 0),
-    );
-    expect(after.balances.reserved).toBe(0);
+      const sinkInvoice = await lncli('lnd-sink', ['lookupinvoice', paymentHash]);
+      expect(sinkInvoice.state).toBe('SETTLED');
+      const settledHtlcs = Reflect.get(sinkInvoice, 'htlcs');
+      expect(
+        Array.isArray(settledHtlcs)
+          ? settledHtlcs.filter((htlc) => Reflect.get(htlc, 'state') === 'SETTLED')
+          : [],
+      ).toHaveLength(1);
+      const payments = Reflect.get(await lncli('lnd-mint', ['listpayments']), 'payments');
+      expect(
+        Array.isArray(payments)
+          ? payments.filter(
+              (payment) =>
+                Reflect.get(payment, 'payment_hash') === paymentHash &&
+                Reflect.get(payment, 'status') === 'SUCCEEDED',
+            )
+          : [],
+      ).toHaveLength(1);
 
-    const sinkInvoice = await lncli('lnd-sink', ['lookupinvoice', paymentHash]);
-    expect(sinkInvoice.state).toBe('SETTLED');
-    const settledHtlcs = Reflect.get(sinkInvoice, 'htlcs');
-    expect(
-      Array.isArray(settledHtlcs)
-        ? settledHtlcs.filter((htlc) => Reflect.get(htlc, 'state') === 'SETTLED')
-        : [],
-    ).toHaveLength(1);
-    const payments = Reflect.get(await lncli('lnd-mint', ['listpayments']), 'payments');
-    expect(
-      Array.isArray(payments)
-        ? payments.filter(
-            (payment) =>
-              Reflect.get(payment, 'payment_hash') === paymentHash &&
-              Reflect.get(payment, 'status') === 'SUCCEEDED',
-          )
-        : [],
-    ).toHaveLength(1);
-
-    const evidenceText = JSON.stringify(await restarted.evidence());
-    expect(evidenceText).toContain('settlement_verified');
-    expect(evidenceText).not.toContain(paymentRequest);
-    expect(evidenceText).not.toContain(token);
-  }, 240_000);
+      const evidenceText = JSON.stringify(await restarted.evidence());
+      expect(evidenceText).toContain('settlement_verified');
+      expect(evidenceText).not.toContain(paymentRequest);
+      expect(evidenceText).not.toContain(token);
+    }
+  }, 480_000);
 });

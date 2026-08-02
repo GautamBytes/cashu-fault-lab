@@ -283,6 +283,13 @@ export class PostgresCashuTsLifecycleStore implements CashuTsLifecycleStore {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
         `${this.#tenantId}:${this.#runId}:lifecycle`,
       ]);
+      // Proof rows deliberately use ON DELETE RESTRICT so an operation cannot be removed while
+      // value remains attached to it. A whole-run reset is the one authorized deletion path and
+      // must remove those child rows explicitly before cascading the rest of the run state.
+      await client.query(`DELETE FROM cashu_lifecycle_proofs WHERE tenant_id = $1 AND run_id = $2`, [
+        this.#tenantId,
+        this.#runId,
+      ]);
       await client.query(`DELETE FROM cashu_lifecycle_runs WHERE tenant_id = $1 AND run_id = $2`, [
         this.#tenantId,
         this.#runId,

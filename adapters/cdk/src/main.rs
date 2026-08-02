@@ -8,6 +8,7 @@ use cashu_fault_lab_cdk_adapter::{
     http_transport::CdkHttpTransport,
     lifecycle::{LifecycleEngine, NativeCdkLifecycleWallet},
     lifecycle_store::LifecycleStore,
+    lightning_probe::HttpCdkLightningSettlementProbe,
     server::router_with_lifecycle,
 };
 
@@ -73,12 +74,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let wallet_database_path = env::var("CASHU_FAULT_LAB_CDK_LIFECYCLE_WALLET_PATH")
                 .unwrap_or_else(|_| format!("{database_path}.wallet"));
             let store = Arc::new(LifecycleStore::open(&database_path, state_key)?);
-            let wallet = Arc::new(NativeCdkLifecycleWallet::new(
+            let settlement_probe = match (
+                env::var("CASHU_FAULT_LAB_CDK_LIFECYCLE_LIGHTNING_PROBE_URL"),
+                env::var("CASHU_FAULT_LAB_CDK_LIFECYCLE_LIGHTNING_PROBE_TOKEN"),
+            ) {
+                (Ok(url), Ok(token)) => Some(Arc::new(HttpCdkLightningSettlementProbe::new(
+                    &url,
+                    token,
+                    Duration::from_secs(positive_env(
+                        "CASHU_FAULT_LAB_CDK_LIFECYCLE_LIGHTNING_PROBE_TIMEOUT_SECONDS",
+                        5,
+                    )?),
+                    env::var("CASHU_FAULT_LAB_CDK_LIFECYCLE_ALLOW_UNSAFE_LIGHTNING_PROBE")
+                        .is_ok_and(|value| value == "true"),
+                )?)),
+                (Err(env::VarError::NotPresent), Err(env::VarError::NotPresent)) => None,
+                _ => {
+                    return Err(
+                        "CDK lifecycle Lightning probe URL and token must be configured together"
+                            .into(),
+                    );
+                }
+            };
+            let mut native_wallet = NativeCdkLifecycleWallet::new(
                 mint_url,
                 "sat",
                 wallet_database_path.into(),
                 hex::encode(state_key),
-            )?);
+            )?;
+            if let Some(probe) = settlement_probe {
+                native_wallet = native_wallet.with_settlement_probe(probe);
+            }
+            let wallet = Arc::new(native_wallet);
             if store.seed_hash()?.is_some() {
                 let seed = env::var("CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED").map_err(
                     |_| "CASHU_FAULT_LAB_CDK_LIFECYCLE_SEED is required to reopen lifecycle state",

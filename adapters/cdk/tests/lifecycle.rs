@@ -26,6 +26,7 @@ use cashu_fault_lab_cdk_adapter::{
         swap_recovery_report_is_complete,
     },
     lifecycle_store::{LifecycleClock, LifecycleStore},
+    lightning_probe::CdkLightningSettlementProbe,
     server::router_with_lifecycle,
 };
 use cdk::nuts::nut19::{CachedEndpoint, Method as Nut19Method, Path as Nut19Path};
@@ -112,6 +113,28 @@ struct DeferredGcFailWallet;
 struct UnsafeNumericWallet;
 
 struct UnspentSendRecoveryWallet;
+
+struct MintQuoteMaterialWallet;
+
+#[async_trait]
+impl LifecycleWalletPort for MintQuoteMaterialWallet {
+    async fn reset(&self, _seed: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    async fn execute(&self, request: &LifecycleInput) -> LifecycleExecution {
+        LifecycleExecution::succeeded(request.amount, "mint_observed")
+            .with_private_material(b"raw-mint-quote-id-canary".to_vec())
+    }
+
+    async fn recover(
+        &self,
+        request: &LifecycleInput,
+        _private_material: Option<&[u8]>,
+    ) -> LifecycleExecution {
+        self.execute(request).await
+    }
+}
 
 #[async_trait]
 impl LifecycleWalletPort for UnspentSendRecoveryWallet {
@@ -333,6 +356,15 @@ struct RecordingNativeFacade {
     recoveries: AtomicUsize,
 }
 
+struct AlwaysSettledProbe;
+
+#[async_trait]
+impl CdkLightningSettlementProbe for AlwaysSettledProbe {
+    async fn settled(&self, _invoice: &str, _quote_hash: &str) -> Result<bool, String> {
+        Ok(true)
+    }
+}
+
 #[async_trait]
 impl NativeCdkFacade for RecordingNativeFacade {
     async fn reset(&self, _seed: &str) -> Result<(), String> {
@@ -389,8 +421,8 @@ impl NativeCdkFacade for RecordingNativeFacade {
 
     async fn capabilities(&self) -> Result<LifecycleRuntimeCapabilities, String> {
         Ok(LifecycleRuntimeCapabilities {
-            operations: vec!["mint", "swap", "send", "reconcile"],
-            nuts: vec![3, 4, 7],
+            operations: vec!["mint", "swap", "send", "melt", "reconcile"],
+            nuts: vec![3, 4, 5, 7, 8],
             recovery: vec!["quote_state", "proof_state"],
         })
     }
@@ -570,6 +602,24 @@ async fn identity_and_secret_material_survive_restart_encrypted() {
             .windows(b"secret-request-material-canary".len())
             .any(|value| value == b"secret-request-material-canary")
     );
+}
+
+#[tokio::test]
+async fn mint_exposes_a_stable_quote_digest_without_exposing_the_quote_id() {
+    let path = database_path("mint-quote-digest");
+    let store = Arc::new(LifecycleStore::open(path, [6_u8; 32]).expect("open lifecycle store"));
+    let engine = LifecycleEngine::new(store, Arc::new(MintQuoteMaterialWallet));
+
+    let operation = engine
+        .start(input("MMMMMMMMMMMMMMMMMMMMMA", LifecycleKind::Mint))
+        .await
+        .expect("start mint");
+
+    let quote_hash = operation.quote_hash.as_ref().expect("mint quote digest");
+    assert_eq!(quote_hash.len(), 64);
+    assert!(quote_hash.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    let serialized = serde_json::to_string(&operation).expect("serialize mint operation");
+    assert!(!serialized.contains("raw-mint-quote-id-canary"));
 }
 
 #[test]
@@ -1292,20 +1342,52 @@ async fn start_rejects_operations_not_advertised_by_the_wallet() {
 }
 
 #[test]
-fn native_cdk_policy_includes_adapter_bound_swap_send_and_reconcile() {
+fn native_cdk_policy_binds_melt_but_capabilities_require_a_settlement_probe() {
     for kind in [
         LifecycleKind::Mint,
         LifecycleKind::Swap,
         LifecycleKind::Send,
         LifecycleKind::Receive,
+        LifecycleKind::Melt,
         LifecycleKind::Restore,
         LifecycleKind::Reconcile,
     ] {
         assert!(NativeCdkLifecycleWallet::operation_bound(kind));
     }
+}
+
+#[tokio::test]
+async fn native_cdk_melt_capability_is_advertised_only_with_a_settlement_probe() {
+    let facade = || {
+        Arc::new(RecordingNativeFacade {
+            observed: std::sync::Mutex::new(Vec::new()),
+            fail_execute: std::sync::atomic::AtomicBool::new(false),
+            recoveries: AtomicUsize::new(0),
+        })
+    };
+    let without_probe =
+        NativeCdkLifecycleWallet::with_facade("http://127.0.0.1:3338", "sat", facade())
+            .expect("native wallet");
     assert!(
-        !NativeCdkLifecycleWallet::operation_bound(LifecycleKind::Melt),
-        "CDK lifecycle melt needs an independent Lightning settlement probe before it is executable"
+        !without_probe
+            .capabilities()
+            .await
+            .expect("capabilities")
+            .operations
+            .contains(&"melt")
+    );
+
+    let with_probe =
+        NativeCdkLifecycleWallet::with_facade("http://127.0.0.1:3338", "sat", facade())
+            .expect("native wallet")
+            .with_settlement_probe(Arc::new(AlwaysSettledProbe));
+    assert!(
+        with_probe
+            .capabilities()
+            .await
+            .expect("capabilities")
+            .operations
+            .contains(&"melt")
     );
 }
 
@@ -1637,6 +1719,22 @@ fn native_cdk_never_attributes_aggregate_saga_counts_to_receive() {
     assert_eq!(
         NativeCdkLifecycleWallet::aggregate_recovery_phase(LifecycleKind::Receive),
         LifecyclePhase::RecoveryBlocked
+    );
+}
+
+#[test]
+fn native_receive_recovery_requires_an_operation_bound_balance_increase() {
+    assert_eq!(
+        NativeCdkLifecycleWallet::receive_recovery_amount(40, 55),
+        Ok(15)
+    );
+    assert_eq!(
+        NativeCdkLifecycleWallet::receive_recovery_amount(40, 40),
+        Err("receive_value_unverified")
+    );
+    assert_eq!(
+        NativeCdkLifecycleWallet::receive_recovery_amount(40, 39),
+        Err("receive_value_mismatch")
     );
 }
 
@@ -2108,12 +2206,28 @@ async fn lifecycle_identity_digests_do_not_reuse_the_contract_digest() {
 }
 
 #[test]
-fn melt_recovery_keeps_unverified_amount_fee_and_change_absent() {
-    let recovered = LifecycleExecution::melt_recovered(12);
-    assert_eq!(recovered.amount(), None);
+fn melt_recovery_records_verified_amount_fee_and_nut08_change() {
+    let recovered = LifecycleExecution::melt_recovered(64, 12, 3, 9);
+    assert_eq!(recovered.amount(), Some(64));
     assert_eq!(recovered.fee_reserve(), Some(12));
-    assert_eq!(recovered.actual_fee(), None);
-    assert_eq!(recovered.change(), None);
+    assert_eq!(recovered.actual_fee(), Some(3));
+    assert_eq!(recovered.change(), Some(9));
+}
+
+#[test]
+fn native_melt_recovery_separates_cashu_input_and_lightning_fees() {
+    assert_eq!(
+        NativeCdkLifecycleWallet::melt_recovery_fees(255, 189, 64, 1, 2),
+        Ok((1, 1))
+    );
+    assert_eq!(
+        NativeCdkLifecycleWallet::melt_recovery_fees(255, 256, 64, 1, 2),
+        Err("melt_balance_increased")
+    );
+    assert_eq!(
+        NativeCdkLifecycleWallet::melt_recovery_fees(255, 187, 64, 1, 2),
+        Err("melt_fee_exceeds_reserve")
+    );
 }
 
 #[tokio::test]

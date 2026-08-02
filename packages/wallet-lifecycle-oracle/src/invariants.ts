@@ -373,5 +373,47 @@ export function assertLifecycleQuiescence(model: LifecycleModel): void {
     ) {
       fail(`operation ${operation.operationId} has no Lightning settlement`);
     }
+    if (operation.phase !== 'succeeded') continue;
+
+    const requestKind =
+      operation.kind === 'mint'
+        ? 'mint'
+        : operation.kind === 'melt'
+          ? 'melt'
+          : ['swap', 'send', 'receive'].includes(operation.kind)
+            ? 'swap'
+            : undefined;
+    if (
+      requestKind !== undefined &&
+      !evaluation.requests.has(`${operation.operationId}\0${requestKind}`)
+    ) {
+      fail(`operation ${operation.operationId} has no request evidence`);
+    }
+    if (
+      operation.kind === 'mint' &&
+      ![...evaluation.quotes.values()].some(
+        (quote) => quote.operationId === operation.operationId,
+      )
+    ) {
+      fail(`operation ${operation.operationId} has no quote evidence`);
+    }
+    if (
+      ['swap', 'send', 'receive', 'melt'].includes(operation.kind) &&
+      !model.observations.some(
+        (observation) =>
+          observation.type === 'proof_state_observed' &&
+          observation.operationId === operation.operationId,
+      )
+    ) {
+      fail(`operation ${operation.operationId} has no proof evidence`);
+    }
+    if (
+      operation.kind !== 'reconcile' &&
+      ![...evaluation.effects.values()].some(
+        (effect) => effect.operationId === operation.operationId,
+      )
+    ) {
+      fail(`operation ${operation.operationId} has no value movement evidence`);
+    }
   }
 }
