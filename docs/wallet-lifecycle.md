@@ -12,12 +12,11 @@ The repository provides the lifecycle identity/state model, language-neutral sch
 client, an implementation-independent value-conservation oracle, a seeded runner with redacted
 failure artifacts, and restart-safe cashu-ts and CDK adapters.
 
-The cashu-ts adapter implements `mint`, `swap`, `send`, `receive`, `restore`, and `reconcile`.
-`melt` is advertised only when an independent Lightning settlement probe is configured. The CDK
-preview adapter exposes restart-safe `mint`, `swap`, `send`, `receive`, `restore`, and `reconcile`
-when durable encrypted SQLite state is configured; CDK `melt` remains disabled until the same
-independent settlement authority exists. Runtime capability discovery also removes operations whose
-required NUTs are absent at the configured mint.
+The cashu-ts adapter implements `mint`, `swap`, `send`, `receive`, `restore`, `reconcile`, and
+`melt` when an independent Lightning settlement probe is configured. The CDK preview adapter exposes
+restart-safe `mint`, `swap`, `send`, `receive`, `restore`, `reconcile`, and native `melt` recovery
+when durable encrypted SQLite state and the same settlement probe authority are configured. Runtime
+capability discovery removes operations whose required NUTs are absent at the configured mint.
 
 The developer-preview workflow includes the semantic mint-fault corpus, `lifecycle run`,
 `lifecycle matrix`, and `lifecycle replay`. The funded matrix runs cashu-ts and CDK against pinned
@@ -163,7 +162,7 @@ required scenarios, missing replay digests, failed artifact secret scans, fewer 
 wallet languages, fewer than two mint implementations, or adapter-claimed invariant evidence.
 Repository fixtures use development identities, so passing local tests is strong implementation
 evidence but is not an external certification claim. See the
-[maintainer checklist](maintainers/release-checklist.md).
+[v0.1.3 maintainer-preview checklist](releases/v0.1.3-checklist.md).
 
 The normative contract is [the lifecycle OpenAPI document](../spec/lifecycle-openapi.yaml). The
 approved architecture and implementation history are recorded in the
