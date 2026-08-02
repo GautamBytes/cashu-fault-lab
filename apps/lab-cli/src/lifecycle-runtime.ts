@@ -941,15 +941,20 @@ async function rehydrateCdkLifecycleMatrixLane(
     ...env,
     CFL_LIFECYCLE_CDK_SEED: seed,
   };
+  let restartError: unknown;
   try {
     await execLifecycleComposeCommands(
       lifecycleComposeServicesRestartPlan(docker, composeFile, services, { wait: false }),
       environment,
     );
   } catch (error) {
-    throw new LifecycleMatrixLanePreparationError(error);
+    restartError = error;
   }
-  await waitForLifecycleMatrixAdapter(client);
+  try {
+    await waitForLifecycleMatrixAdapter(client);
+  } catch (error) {
+    throw new LifecycleMatrixLanePreparationError(restartError ?? error);
+  }
 }
 
 export async function waitForLifecycleMatrixAdapter(
