@@ -58,13 +58,90 @@ describe('HttpFaultGateway', () => {
     }
   });
 
-  async function post(body = '{"delivery":{"id":"EBESExQVFhcYGRobHB0eHw"}}') {
-    return fetch(`${gatewayUrl}/pay`, {
+  async function post(
+    body = '{"delivery":{"id":"EBESExQVFhcYGRobHB0eHw"}}',
+    path = '/pay',
+    operationId?: string,
+  ) {
+    return fetch(`${gatewayUrl}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(operationId === undefined ? {} : { 'x-cashu-fault-operation-id': operationId }),
+      },
       body,
     });
   }
+
+  it('matches a Cashu endpoint family and operation without persisting either secret', async () => {
+    gateway!.control.setRule({
+      phase: 'after_downstream_response',
+      action: 'drop',
+      count: 1,
+      match: { endpointFamily: 'mint', operationId: 'AAAAAAAAAAAAAAAAAAAAAA' },
+    });
+
+    await expect(
+      post('{"quote":"credential","outputs":[]}', '/v1/mint/bolt11', 'AAAAAAAAAAAAAAAAAAAAAA'),
+    ).rejects.toThrowError(/fetch|socket|terminated/i);
+    expect(bodies).toHaveLength(1);
+
+    const evidence = gateway!.control.snapshot();
+    expect(evidence.rules[0]).toMatchObject({ endpointFamily: 'mint', applied: 1 });
+    expect(evidence.requests[0]).toMatchObject({
+      method: 'POST',
+      path: '/v1/mint/bolt11',
+      endpointFamily: 'mint',
+      attemptOrdinal: 1,
+      bodyDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    expect(JSON.stringify(evidence)).not.toContain('AAAAAAAAAAAAAAAAAAAAAA');
+    expect(JSON.stringify(evidence)).not.toContain('credential');
+  });
+
+  it('returns a bounded stale quote response after forwarding the fresh poll', async () => {
+    const first = await post('{}', '/v1/mint/quote/bolt11/quote-id', 'AAAAAAAAAAAAAAAAAAAAAA');
+    expect(await first.json()).toMatchObject({ ordinal: 1 });
+    gateway!.control.setRule({
+      phase: 'after_downstream_response',
+      action: 'stale_response',
+      count: 1,
+      match: { endpointFamily: 'quote', operationId: 'AAAAAAAAAAAAAAAAAAAAAA' },
+    });
+
+    const stale = await post('{}', '/v1/mint/quote/bolt11/quote-id', 'AAAAAAAAAAAAAAAAAAAAAA');
+    expect(await stale.json()).toMatchObject({ ordinal: 1 });
+    expect(bodies).toHaveLength(2);
+  });
+
+  it('does not reuse stale responses across a control reset', async () => {
+    await post('{}', '/v1/mint/quote/bolt11/quote-id', 'AAAAAAAAAAAAAAAAAAAAAA');
+    gateway!.control.reset();
+    gateway!.control.setRule({
+      phase: 'after_downstream_response',
+      action: 'stale_response',
+      count: 1,
+      match: { endpointFamily: 'quote', operationId: 'AAAAAAAAAAAAAAAAAAAAAA' },
+    });
+
+    const response = await post('{}', '/v1/mint/quote/bolt11/quote-id', 'AAAAAAAAAAAAAAAAAAAAAA');
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ code: 'GATEWAY_FAILURE' });
+  });
+
+  it('truncates a downstream response to the configured byte boundary', async () => {
+    gateway!.control.setRule({
+      phase: 'after_downstream_response',
+      action: 'truncate',
+      count: 1,
+      truncateBytes: 7,
+      match: { endpointFamily: 'restore' },
+    });
+
+    const truncated = await post('{}', '/v1/restore');
+    expect(Buffer.byteLength(await truncated.text())).toBe(7);
+    expect(gateway!.control.snapshot().truncated).toBe(1);
+  });
 
   it('drops a request before forwarding, then permits the exact retry', async () => {
     gateway!.control.setRule({
@@ -228,5 +305,22 @@ describe('HttpFaultGateway', () => {
       },
     ]);
     expect(JSON.stringify(gateway!.control.snapshot())).not.toContain('aaaa');
+  });
+
+  it('rejects unknown secret-bearing rule and match fields', () => {
+    expect(() =>
+      gateway!.control.setRule({
+        phase: 'before_forward',
+        action: 'drop',
+        quoteId: 'quote-credential',
+      } as never),
+    ).toThrow('unknown field');
+    expect(() =>
+      gateway!.control.setRule({
+        phase: 'before_forward',
+        action: 'drop',
+        match: { path: '/v1/swap', requestBody: 'proof-secret' },
+      } as never),
+    ).toThrow('unknown field');
   });
 });

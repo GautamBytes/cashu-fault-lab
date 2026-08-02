@@ -20,6 +20,9 @@ pnpm lab demo --seed cashu-fault-lab-v0.1.0-demo --artifact docs/examples/v0.1.0
 | `ls`                 | List all available scenarios                 |
 | `inspect <scenario>` | Pretty-print a scenario file                 |
 | `gen-id`             | Generate a random 128-bit ProtocolId         |
+| `lifecycle run`      | Run one wallet lifecycle fault scenario      |
+| `lifecycle matrix`   | Run the wallet lifecycle compatibility grid  |
+| `lifecycle replay`   | Replay a wallet lifecycle failure            |
 
 ## Examples
 
@@ -37,7 +40,20 @@ pnpm lab matrix --profile delivery-v1 \
 
 # Generate JUnit report
 pnpm lab report artifacts/latest.json --format junit --output result.xml
+
+# Run a wallet lifecycle fault and write a redacted HTML report
+pnpm lab lifecycle run mint-response-lost \
+  --adapter cashu-ts --mint nutshell-local --seed local-seed \
+  --format html --output artifacts/lifecycle/mint.html
+
+# Check lifecycle adapter and gateway prerequisites
+pnpm lab doctor --suite lifecycle
 ```
+
+Lifecycle commands read adapter endpoints and bearer tokens from
+`CFL_LIFECYCLE_<ADAPTER>_URL`/`CFL_LIFECYCLE_<ADAPTER>_TOKEN`. They read the fault gateway from
+`CFL_HTTP_FAULT_GATEWAY_URL`/`CFL_HTTP_FAULT_GATEWAY_TOKEN`. The CLI requires loopback HTTP origins,
+does not follow control-plane redirects, and omits raw seeds and wallet secrets from reports.
 
 `--min-passes` remains a developer convenience. `--release-policy` validates the policy before
 starting adapters. It implicitly loads `spec/release-suite.json` unless `--release-suite` selects

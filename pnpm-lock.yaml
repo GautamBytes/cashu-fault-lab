@@ -109,9 +109,20 @@ importers:
       '@cashu-fault-lab/scenario-runner':
         specifier: workspace:*
         version: link:../../packages/scenario-runner
+      '@cashu-fault-lab/wallet-lifecycle-contract':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-contract
+      '@cashu-fault-lab/wallet-lifecycle-oracle':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-oracle
+      '@cashu-fault-lab/wallet-lifecycle-runner':
+        specifier: workspace:*
+        version: link:../../packages/wallet-lifecycle-runner
       commander:
         specifier: 15.0.0
         version: 15.0.0
+
+  apps/lightning-regtest-probe: {}
 
   apps/nostr-fault-relay:
     dependencies:
@@ -315,6 +326,12 @@ importers:
       '@cashu-fault-lab/scenario-runner':
         specifier: workspace:*
         version: link:../scenario-runner
+      '@cashu-fault-lab/wallet-lifecycle-oracle':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-oracle
+      '@cashu-fault-lab/wallet-lifecycle-runner':
+        specifier: workspace:*
+        version: link:../wallet-lifecycle-runner
 
   packages/scenario-runner:
     dependencies:
@@ -346,6 +363,9 @@ importers:
       '@cashu-fault-lab/adapter-cashu-ts':
         specifier: workspace:*
         version: link:../../adapters/cashu-ts
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
       fast-check:
         specifier: 4.9.0
         version: 4.9.0
@@ -382,6 +402,13 @@ importers:
       '@cashu-fault-lab/wallet-lifecycle-oracle':
         specifier: workspace:*
         version: link:../wallet-lifecycle-oracle
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
+    devDependencies:
+      '@cashu/cashu-ts':
+        specifier: 4.7.2
+        version: 4.7.2
 
 packages:
 

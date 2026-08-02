@@ -41,6 +41,61 @@ function healthyExec(
 }
 
 describe('runDoctor', () => {
+  it('checks the authenticated loopback lifecycle adapter endpoints when requested', async () => {
+    const report = await runDoctor(
+      {
+        env: {
+          CFL_LIFECYCLE_CASHU_TS_URL: 'http://127.0.0.1:4101',
+          CFL_LIFECYCLE_CASHU_TS_TOKEN: 'cashu-ts-lifecycle-token',
+          CFL_LIFECYCLE_CDK_URL: 'http://127.0.0.1:4102',
+          CFL_LIFECYCLE_CDK_TOKEN: 'cdk-lifecycle-token',
+          CFL_HTTP_FAULT_GATEWAY_URL: 'http://127.0.0.1:4300',
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: 'fault-gateway-token',
+        },
+        execFile: healthyExec(),
+        isPortFree: async () => true,
+      },
+      {
+        lifecycle: true,
+        senderDurability: false,
+        testTiers: false,
+        testcontainers: false,
+      },
+    );
+
+    expect(report.ok).toBe(true);
+    expect(report.checks).toContainEqual({
+      name: 'CFL_LIFECYCLE_CDK_URL',
+      status: 'ok',
+      detail: 'loopback HTTP endpoint',
+    });
+  });
+
+  it('rejects non-loopback lifecycle service URLs', async () => {
+    const report = await runDoctor(
+      {
+        env: {
+          CFL_LIFECYCLE_CASHU_TS_URL: 'https://wallet.example.com',
+          CFL_LIFECYCLE_CASHU_TS_TOKEN: 'cashu-ts-lifecycle-token',
+          CFL_LIFECYCLE_CDK_URL: 'http://127.0.0.1:4102',
+          CFL_LIFECYCLE_CDK_TOKEN: 'cdk-lifecycle-token',
+          CFL_HTTP_FAULT_GATEWAY_URL: 'http://127.0.0.1:4300',
+          CFL_HTTP_FAULT_GATEWAY_TOKEN: 'fault-gateway-token',
+        },
+        execFile: healthyExec(),
+        isPortFree: async () => true,
+      },
+      { lifecycle: true, senderDurability: false, testTiers: false, testcontainers: false },
+    );
+
+    expect(report.ok).toBe(false);
+    expect(report.checks).toContainEqual({
+      name: 'CFL_LIFECYCLE_CASHU_TS_URL',
+      status: 'fail',
+      detail: 'must be a loopback HTTP origin',
+    });
+  });
+
   it('reports ok when env, tools, and ports are all healthy', async () => {
     const report = await runDoctor({
       env: healthyEnv,

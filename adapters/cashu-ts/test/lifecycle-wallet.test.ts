@@ -10,6 +10,7 @@ import {
   assertCashuTsRestoreResponsePair,
   CashuTsLifecycleWallet,
   createCashuTsNoRedirectRequest,
+  withCashuTsLifecycleOperation,
   type CashuTsLifecycleClient,
 } from '../src/lifecycle/wallet.js';
 
@@ -419,6 +420,21 @@ describe('CashuTsLifecycleWallet origin guard', () => {
     await expect(
       request({ endpoint: 'https://attacker.example/v1/mint/bolt11', requestBody: {} }),
     ).rejects.toThrow('Cashu lifecycle mint request changed origin');
+    fetchMock.mockRestore();
+  });
+
+  test('adds the lifecycle operation identity only to the configured fault gateway request', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+    const request = createCashuTsNoRedirectRequest('http://127.0.0.1:3338');
+
+    await withCashuTsLifecycleOperation('AAAAAAAAAAAAAAAAAAAAAA', async () =>
+      request({ endpoint: 'http://127.0.0.1:3338/v1/mint/bolt11', requestBody: {} }),
+    );
+
+    const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
+    expect(headers.get('x-cashu-fault-operation-id')).toBe('AAAAAAAAAAAAAAAAAAAAAA');
     fetchMock.mockRestore();
   });
 
@@ -858,7 +874,7 @@ describe('CashuTsLifecycleWallet melt', () => {
 });
 
 describe('CashuTsLifecycleWallet restore', () => {
-  test('rejects a NUT-09 signature whose keyset or amount does not match its output', () => {
+  test('binds NUT-09 signatures to their keyset while accepting the protocol amount placeholder', () => {
     expect(() =>
       assertCashuTsRestoreResponsePair(
         { id: '00aa', amount: 8 },
@@ -869,10 +885,17 @@ describe('CashuTsLifecycleWallet restore', () => {
     expect(() =>
       assertCashuTsRestoreResponsePair(
         { id: '00aa', amount: 8 },
-        { id: '00aa', amount: 8 },
         { id: '00aa', amount: 4 },
+        { id: '00aa', amount: 8 },
       ),
     ).toThrow('Cashu lifecycle restore response identity is invalid');
+    expect(() =>
+      assertCashuTsRestoreResponsePair(
+        { id: '00aa', amount: 0 },
+        { id: '00aa', amount: 0 },
+        { id: '00aa', amount: 8 },
+      ),
+    ).not.toThrow();
   });
 
   test('persists the deterministic NUT-13 range before requesting restore signatures', async () => {

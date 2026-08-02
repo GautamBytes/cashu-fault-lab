@@ -26,6 +26,9 @@ describe('CLI command registry', () => {
       'validate',
       'gen-id',
       'doctor',
+      'lifecycle run',
+      'lifecycle matrix',
+      'lifecycle replay',
     ]);
 
     expect(byName.get('run')).toMatchObject({
@@ -98,6 +101,22 @@ describe('CLI command registry', () => {
       env: expect.arrayContaining(['CFL_REAL_MINT_URL']),
       modes: expect.arrayContaining(['text', 'json']),
     });
+
+    expect(byName.get('lifecycle run')).toMatchObject({
+      arguments: [{ value: '<scenario>' }],
+      options: expect.arrayContaining([
+        expect.objectContaining({ flags: '--adapter <id>' }),
+        expect.objectContaining({ flags: '--mint <id>' }),
+        expect.objectContaining({ flags: '--format <format>' }),
+      ]),
+      artifacts: expect.arrayContaining(['artifacts/lifecycle/<scenario>.json']),
+    });
+    expect(byName.get('lifecycle matrix')).toMatchObject({
+      modes: expect.arrayContaining(['text', 'json']),
+    });
+    expect(byName.get('lifecycle replay')).toMatchObject({
+      options: expect.arrayContaining([expect.objectContaining({ flags: '--seed <seed>' })]),
+    });
   });
 
   it('keeps the generated CLI reference in sync with the registry', async () => {
@@ -112,5 +131,8 @@ describe('CLI command registry', () => {
     expect(docs).toContain('## `cashu-fault-lab demo`');
     expect(docs).toContain('## `cashu-fault-lab doctor`');
     expect(docs).toContain('Environment: `CFL_REAL_MINT_URL`');
+    expect(docs).toContain('## `cashu-fault-lab lifecycle run <scenario>`');
+    expect(docs).toContain('## `cashu-fault-lab lifecycle matrix`');
+    expect(docs).toContain('## `cashu-fault-lab lifecycle replay <artifact>`');
   });
 });

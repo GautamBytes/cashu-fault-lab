@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "receive-crash-before-save",
+  "description": "A receive-side swap commits before the wallet saves outputs; restart and resume must converge once.",
+  "seed": "wallet-lifecycle-v1:receive-crash-before-save",
+  "requireQuiescence": true,
+  "requiredOperations": ["receive"],
+  "commands": [
+    { "type": "fault", "rule": { "action": "drop_response", "endpoint": "swap", "occurrence": 1 } },
+    {
+      "type": "start",
+      "input": {
+        "operationId": "AAAAAAAAAAAAAAAAAAAAAA",
+        "kind": "receive",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat",
+        "token": "cashuAfixture"
+      }
+    },
+    { "type": "restart", "component": "adapter" },
+    { "type": "clear_faults" },
+    { "type": "resume", "operationId": "AAAAAAAAAAAAAAAAAAAAAA" }
+  ]
+}

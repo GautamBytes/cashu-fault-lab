@@ -8,9 +8,12 @@ import {
 } from 'node:http';
 import { GatewayControl, handleControlRequest } from './control.js';
 import type { FaultRule, RequestMetadata } from './rules.js';
+import { operationIdHash, type CashuEndpointFamily } from './rules.js';
 
 const DEFAULT_BODY_LIMIT = 65_536;
 const MAX_RESPONSE_BYTES = 65_536;
+const MAX_STALE_RESPONSES = 128;
+const OPERATION_HEADER = 'x-cashu-fault-operation-id';
 
 export interface HttpFaultGatewayOptions {
   readonly downstream: string;
@@ -97,6 +100,20 @@ function deliveryIdHash(body: Buffer): string | undefined {
   return undefined;
 }
 
+function cashuEndpointFamily(path: string): CashuEndpointFamily | undefined {
+  if (/^\/v1\/(mint|melt)\/quote(?:\/|$)/u.test(path)) return 'quote';
+  if (/^\/v1\/mint(?:\/|$)/u.test(path)) return 'mint';
+  if (/^\/v1\/swap(?:\/|$)/u.test(path)) return 'swap';
+  if (/^\/v1\/melt(?:\/|$)/u.test(path)) return 'melt';
+  if (/^\/v1\/checkstate(?:\/|$)/u.test(path)) return 'proof_state';
+  if (/^\/v1\/restore(?:\/|$)/u.test(path)) return 'restore';
+  return undefined;
+}
+
+function evidencePath(path: string): string {
+  return path.replace(/^(\/v1\/(?:mint|melt)\/quote\/[^/]+)\/[^/]+$/u, '$1/:quote_id');
+}
+
 function downstreamUrl(base: URL, requestUrl: string): URL {
   const incoming = new URL(requestUrl, 'http://gateway.invalid');
   const target = new URL(base.href);
@@ -148,6 +165,8 @@ export class HttpFaultGateway {
   readonly #controlToken: string | undefined;
   readonly #server: Server;
   readonly #reorder = new Map<string, ReorderWaiter>();
+  readonly #responseCache = new Map<string, DownstreamResult>();
+  #controlGeneration = 0;
 
   constructor(options: HttpFaultGatewayOptions) {
     this.#downstream = new URL(options.downstream);
@@ -188,6 +207,7 @@ export class HttpFaultGateway {
       waiter.release();
     }
     this.#reorder.clear();
+    this.#responseCache.clear();
     if (!this.#server.listening) return;
     await new Promise<void>((resolve, reject) =>
       this.#server.close((error) => (error ? reject(error) : resolve())),
@@ -269,7 +289,7 @@ export class HttpFaultGateway {
     return { copies: 1 };
   }
 
-  async #applyAfter(rule: FaultRule | undefined, response: ServerResponse): Promise<boolean> {
+  async #applyAfterCommit(rule: FaultRule | undefined, response: ServerResponse): Promise<boolean> {
     if (!rule) return true;
     this.control.recordAction(rule.action);
     if (rule.action === 'drop') {
@@ -285,10 +305,51 @@ export class HttpFaultGateway {
     return true;
   }
 
+  async #applyAfterResponse(
+    rule: FaultRule | undefined,
+    response: ServerResponse,
+    downstream: DownstreamResult,
+    stale: DownstreamResult | undefined,
+  ): Promise<DownstreamResult | undefined> {
+    if (!rule) return downstream;
+    this.control.recordAction(rule.action);
+    if (rule.action === 'drop') {
+      destroyUpstream(response);
+      return undefined;
+    }
+    if (rule.action === 'delay') await delay(rule.delayMs ?? 0);
+    if (rule.action === 'status') {
+      response.writeHead(rule.statusCode!, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ code: `INJECTED_${rule.statusCode}`, rule_id: rule.id }));
+      return undefined;
+    }
+    if (rule.action === 'stale_response') {
+      if (!stale) throw new Error('STALE_RESPONSE_UNAVAILABLE');
+      return stale;
+    }
+    if (rule.action === 'truncate') {
+      return { ...downstream, body: downstream.body.subarray(0, rule.truncateBytes) };
+    }
+    return downstream;
+  }
+
+  #rememberResponse(key: string, response: DownstreamResult): void {
+    if (!this.#responseCache.has(key) && this.#responseCache.size === MAX_STALE_RESPONSES) {
+      const oldest = this.#responseCache.keys().next().value as string | undefined;
+      if (oldest !== undefined) this.#responseCache.delete(oldest);
+    }
+    this.#responseCache.set(key, response);
+  }
+
   async #handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (this.#controlGeneration !== this.control.generation) {
+      this.#responseCache.clear();
+      this.#controlGeneration = this.control.generation;
+    }
     const body = await readRequest(request, this.#bodyLimit);
     const method = (request.method ?? 'GET').toUpperCase();
-    const path = new URL(request.url ?? '/', 'http://gateway.invalid').pathname;
+    const rawPath = new URL(request.url ?? '/', 'http://gateway.invalid').pathname;
+    const path = evidencePath(rawPath);
     if (
       handleControlRequest(this.control, {
         method,
@@ -302,11 +363,20 @@ export class HttpFaultGateway {
       return;
     }
     const hashedDeliveryId = deliveryIdHash(body);
-    const metadata = this.control.begin(
-      hashedDeliveryId === undefined
-        ? { method, path }
-        : { method, path, deliveryIdHash: hashedDeliveryId },
-    );
+    const operationId = request.headers[OPERATION_HEADER];
+    const lifecycleOperationId =
+      typeof operationId === 'string' && operationId.length > 0 ? operationId : undefined;
+    const endpointFamily = cashuEndpointFamily(rawPath);
+    const metadata = this.control.begin({
+      method,
+      path,
+      bodyDigest: createHash('sha256').update(body).digest('hex'),
+      ...(hashedDeliveryId === undefined ? {} : { deliveryIdHash: hashedDeliveryId }),
+      ...(lifecycleOperationId === undefined
+        ? {}
+        : { operationIdHash: operationIdHash(lifecycleOperationId) }),
+      ...(endpointFamily === undefined ? {} : { endpointFamily }),
+    });
     const before = await this.#applyBefore(
       this.control.take('before_forward', metadata),
       metadata,
@@ -316,7 +386,10 @@ export class HttpFaultGateway {
 
     const responses = await this.#dispatch(request, body, before.copies);
     if (
-      !(await this.#applyAfter(this.control.take('after_downstream_commit', metadata), response))
+      !(await this.#applyAfterCommit(
+        this.control.take('after_downstream_commit', metadata),
+        response,
+      ))
     ) {
       void this.#cancel(responses);
       if (before.secondReorder) {
@@ -330,13 +403,18 @@ export class HttpFaultGateway {
       clearTimeout(before.secondReorder.timeout);
       before.secondReorder.release();
     }
-    if (
-      !(await this.#applyAfter(this.control.take('after_downstream_response', metadata), response))
-    ) {
-      return;
-    }
-    response.writeHead(downstream.status, responseHeaders(downstream.headers));
-    response.end(downstream.body);
+    const cacheKey = `${method}\0${rawPath}\0${metadata.operationIdHash ?? '-'}`;
+    const stale = this.#responseCache.get(cacheKey);
+    this.#rememberResponse(cacheKey, downstream);
+    const selected = await this.#applyAfterResponse(
+      this.control.take('after_downstream_response', metadata),
+      response,
+      downstream,
+      stale,
+    );
+    if (!selected) return;
+    response.writeHead(selected.status, responseHeaders(selected.headers));
+    response.end(selected.body);
     this.control.recordResponse();
   }
 }

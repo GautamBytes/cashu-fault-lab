@@ -23,6 +23,7 @@ import type {
   CashuTsLifecycleWalletPort,
   CashuTsStoredLifecycleOperation,
 } from './types.js';
+import { withCashuTsLifecycleOperation } from './network.js';
 
 export type {
   CashuTsLifecyclePreparedRequest,
@@ -679,73 +680,77 @@ export class CashuTsLifecycleOperations {
       attemptCount: 0,
     };
     await this.#store.create(initial);
-    return this.#store.claim(input.operationId, async () => {
-      const stored = await this.#required(input.operationId);
-      if (stored.view.intentHash !== initial.view.intentHash) {
-        throw new Error('Lifecycle operation identity conflicts');
-      }
-      if (stored.view.phase !== 'created') return stored.view;
-      return this.#prepareAndSubmit(stored);
-    });
+    return withCashuTsLifecycleOperation(input.operationId, () =>
+      this.#store.claim(input.operationId, async () => {
+        const stored = await this.#required(input.operationId);
+        if (stored.view.intentHash !== initial.view.intentHash) {
+          throw new Error('Lifecycle operation identity conflicts');
+        }
+        if (stored.view.phase !== 'created') return stored.view;
+        return this.#prepareAndSubmit(stored);
+      }),
+    );
   }
 
   async resume(operationId: string): Promise<LifecycleOperationView> {
-    return this.#store.claim(operationId, async () => {
-      let stored = await this.#required(operationId);
-      if (
-        stored.view.phase === 'succeeded' ||
-        stored.view.phase === 'failed_definitive' ||
-        stored.view.phase === 'recovery_blocked'
-      ) {
-        return stored.view;
-      }
-      if (stored.view.phase === 'created') return this.#prepareAndSubmit(stored);
-      if (stored.view.phase === 'prepared') return this.#submit(stored);
-      if (stored.view.phase === 'submitted') {
-        stored = { ...stored, view: withPhase(stored.view, 'ambiguous') };
+    return withCashuTsLifecycleOperation(operationId, () =>
+      this.#store.claim(operationId, async () => {
+        let stored = await this.#required(operationId);
+        if (
+          stored.view.phase === 'succeeded' ||
+          stored.view.phase === 'failed_definitive' ||
+          stored.view.phase === 'recovery_blocked'
+        ) {
+          return stored.view;
+        }
+        if (stored.view.phase === 'created') return this.#prepareAndSubmit(stored);
+        if (stored.view.phase === 'prepared') return this.#submit(stored);
+        if (stored.view.phase === 'submitted') {
+          stored = { ...stored, view: withPhase(stored.view, 'ambiguous') };
+          await this.#store.put(stored);
+        }
+        if (stored.view.phase === 'ambiguous') {
+          stored = { ...stored, view: withPhase(stored.view, 'reconciling') };
+        }
+        if (stored.view.phase !== 'reconciling') {
+          throw new Error('Lifecycle operation cannot be resumed');
+        }
+        stored = { ...stored, attemptCount: (stored.attemptCount ?? 0) + 1 };
         await this.#store.put(stored);
-      }
-      if (stored.view.phase === 'ambiguous') {
-        stored = { ...stored, view: withPhase(stored.view, 'reconciling') };
-      }
-      if (stored.view.phase !== 'reconciling') {
-        throw new Error('Lifecycle operation cannot be resumed');
-      }
-      stored = { ...stored, attemptCount: (stored.attemptCount ?? 0) + 1 };
-      await this.#store.put(stored);
-      let result = await this.#wallet.recover(stored.input, stored.view, stored.prepared);
-      let quoteObservations: readonly CashuTsLifecycleQuoteObservation[];
-      try {
-        quoteObservations = appendQuoteObservations(
-          stored.quoteObservations,
-          result.quoteObservations,
-        );
-      } catch (error) {
-        result = {
-          status: 'recovery_blocked',
-          evidenceCode:
-            error instanceof Error && error.message === 'Lifecycle quote state regressed'
-              ? 'quote_state_regressed'
-              : 'quote_observation_invalid',
-          recoveryMechanism: 'quote_state',
+        let result = await this.#wallet.recover(stored.input, stored.view, stored.prepared);
+        let quoteObservations: readonly CashuTsLifecycleQuoteObservation[];
+        try {
+          quoteObservations = appendQuoteObservations(
+            stored.quoteObservations,
+            result.quoteObservations,
+          );
+        } catch (error) {
+          result = {
+            status: 'recovery_blocked',
+            evidenceCode:
+              error instanceof Error && error.message === 'Lifecycle quote state regressed'
+                ? 'quote_state_regressed'
+                : 'quote_observation_invalid',
+            recoveryMechanism: 'quote_state',
+          };
+          quoteObservations = stored.quoteObservations ?? [];
+        }
+        const recovered = {
+          ...stored,
+          ...(result.recoveryMechanism === undefined
+            ? {}
+            : { recoveryMechanism: result.recoveryMechanism }),
+          ...(quoteObservations.length === 0 ? {} : { quoteObservations }),
+          ...(result.resultMaterial === undefined ? {} : { resultMaterial: result.resultMaterial }),
+          view: withResult(stored.view, result),
         };
-        quoteObservations = stored.quoteObservations ?? [];
-      }
-      const recovered = {
-        ...stored,
-        ...(result.recoveryMechanism === undefined
-          ? {}
-          : { recoveryMechanism: result.recoveryMechanism }),
-        ...(quoteObservations.length === 0 ? {} : { quoteObservations }),
-        ...(result.resultMaterial === undefined ? {} : { resultMaterial: result.resultMaterial }),
-        view: withResult(stored.view, result),
-      };
-      await this.#store.commit(recovered, result.proofChanges, [
-        ...(result.evidence ?? []),
-        operationEvidence('recovery', stored, result),
-      ]);
-      return recovered.view;
-    });
+        await this.#store.commit(recovered, result.proofChanges, [
+          ...(result.evidence ?? []),
+          operationEvidence('recovery', stored, result),
+        ]);
+        return recovered.view;
+      }),
+    );
   }
 
   async operation(operationId: string): Promise<LifecycleOperationView> {

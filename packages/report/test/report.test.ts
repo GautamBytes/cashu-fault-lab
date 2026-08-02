@@ -19,7 +19,15 @@ import {
   renderMatrixHtml,
   renderMatrixJson,
   renderMatrixJunit,
+  renderLifecycleHtml,
+  renderLifecycleJson,
+  renderLifecycleJunit,
 } from '../src/index.js';
+import type {
+  LifecycleFailureArtifact,
+  LifecycleScenarioSpec,
+} from '@cashu-fault-lab/wallet-lifecycle-runner';
+import { lifecycleSeedHash } from '@cashu-fault-lab/wallet-lifecycle-runner';
 
 const result: ScenarioRunResult = {
   status: 'failed',
@@ -278,6 +286,89 @@ describe('allowlist report rendering', () => {
     expect(() => createReport({ result, imageDigests: { mint: 'latest' } })).toThrowError(
       /digest/i,
     );
+  });
+});
+
+describe('wallet lifecycle report rendering', () => {
+  const lifecycleScenario: LifecycleScenarioSpec = {
+    id: 'security-quote-redaction',
+    seed: 'raw-replay-seed-must-not-leak',
+    requireQuiescence: true,
+    commands: [
+      {
+        type: 'start',
+        input: {
+          operationId: 'AAAAAAAAAAAAAAAAAAAAAA',
+          kind: 'receive',
+          mint: 'http://127.0.0.1:3338',
+          unit: 'sat',
+          token: 'cashuA-proof-secret-must-not-leak',
+        },
+      },
+      {
+        type: 'start',
+        input: {
+          operationId: 'AAAAAAAAAAAAAAAAAAAAAQ',
+          kind: 'melt',
+          mint: 'http://127.0.0.1:3338',
+          unit: 'sat',
+          invoice: 'lnbcrt1-preimage-signature-quote-id-must-not-leak',
+        },
+      },
+    ],
+  };
+  const lifecycleArtifact: LifecycleFailureArtifact = {
+    schemaVersion: 2,
+    scenario: {
+      id: lifecycleScenario.id,
+      seedHash: lifecycleSeedHash(lifecycleScenario.seed),
+      requireQuiescence: true,
+      commands: lifecycleScenario.commands,
+    },
+    redacted: true,
+    history: [{ commandIndex: 0, commandType: 'start', outcome: 'failed', observationCount: 0 }],
+    observations: [],
+    failure: {
+      commandIndex: 0,
+      code: 'LIFECYCLE_DRIVER',
+      message: 'Bearer control-token preimage signature quote-id must-not-leak',
+    },
+  };
+
+  it('renders deterministic JSON, JUnit, and HTML without lifecycle credentials', () => {
+    const input = {
+      scenario: lifecycleScenario,
+      result: { ok: false as const, artifact: lifecycleArtifact },
+      adapterId: 'cashu-ts',
+      mintId: 'nutshell-local',
+    };
+    const json = renderLifecycleJson(input);
+    const report = JSON.parse(json) as { replayArtifact?: LifecycleFailureArtifact };
+    expect(report.replayArtifact).toMatchObject({
+      schemaVersion: 2,
+      scenario: {
+        id: lifecycleScenario.id,
+        seedHash: lifecycleSeedHash(lifecycleScenario.seed),
+      },
+      failure: {
+        commandIndex: 0,
+        code: 'LIFECYCLE_DRIVER',
+        message: 'Lifecycle driver execution failed.',
+      },
+    });
+    expect(JSON.stringify(report.replayArtifact)).not.toContain('control-token');
+    expect(JSON.stringify(report.replayArtifact)).not.toContain('preimage');
+    for (const output of [json, renderLifecycleJunit(input), renderLifecycleHtml(input)]) {
+      expect(output).toContain('security-quote-redaction');
+      expect(output).toContain(lifecycleSeedHash(lifecycleScenario.seed));
+      expect(output).not.toContain('raw-replay-seed');
+      expect(output).not.toContain('proof-secret');
+      expect(output).not.toContain('preimage');
+      expect(output).not.toContain('signature');
+      expect(output).not.toContain('quote-id');
+      expect(output).not.toContain('control-token');
+      expect(output).not.toContain('must-not-leak');
+    }
   });
 });
 

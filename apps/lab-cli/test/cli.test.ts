@@ -567,7 +567,7 @@ describe('lab CLI', () => {
           return report;
         },
       });
-      expect(outcome.exitCode).toBe(0);
+      expect(outcome.exitCode, setup.stderr()).toBe(0);
     }
     expect(preflightRequests).toEqual([
       {

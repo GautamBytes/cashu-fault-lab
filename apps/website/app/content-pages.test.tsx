@@ -17,7 +17,7 @@ describe('generated content pages', () => {
   it('renders every repository scenario with an exact run command and source link', async () => {
     render(await ScenariosPage());
 
-    expect(screen.getAllByRole('article')).toHaveLength(32);
+    expect(screen.getAllByRole('article')).toHaveLength(41);
     const responseLost = screen.getByRole('article', { name: 'http-response-lost' });
     expect(
       within(responseLost).getByText('pnpm lab run retry/response-lost --seed demo'),
@@ -26,6 +26,12 @@ describe('generated content pages', () => {
       'href',
       'https://github.com/GautamBytes/cashu-fault-lab/blob/main/scenarios/retry/response-lost.json',
     );
+    const concurrentResume = screen.getByRole('article', { name: 'Concurrent resume' });
+    expect(
+      within(concurrentResume).getByText(
+        'pnpm lab run wallet-lifecycle/concurrent-resume --seed demo',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('renders Architecture as a compact dashboard with explicit trust and qualification boundaries', async () => {

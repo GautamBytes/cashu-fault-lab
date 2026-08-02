@@ -252,6 +252,7 @@ Arguments:
 Options:
 
 - `--json`: Emit machine-readable JSON instead of text.
+- `--suite <suite>`: Limit checks to a lab suite. Default: `all`. Choices: `all`, `lifecycle`.
 
 Modes: `text`, `json`
 Environment: None
@@ -431,3 +432,88 @@ Examples:
 
 - `cashu-fault-lab doctor`
 - `cashu-fault-lab doctor --json`
+
+## `cashu-fault-lab lifecycle run <scenario>`
+
+Run one wallet lifecycle fault scenario
+
+Arguments:
+
+- `<scenario>`: Lifecycle scenario ID or JSON path.
+
+Options:
+
+- `--adapter <id>`: Lifecycle adapter ID.
+- `--mint <id>`: Test mint identity.
+- `--mint-url <url>`: Override the scenario mint URL.
+- `--seed <seed>`: Deterministic seed supplied out of band for replay. Default: `cashu-fault-lab-lifecycle`.
+- `--format <format>`: Redacted lifecycle report format. Default: `json`. Choices: `json`, `junit`, `html`.
+- `--output <path>`: Write the lifecycle report.
+- `--artifact <path>`: Legacy JSON output alias.
+
+Modes: `json`, `junit`, `html`
+Environment: `CFL_LIFECYCLE_<ADAPTER>_URL`, `CFL_LIFECYCLE_<ADAPTER>_TOKEN`, `CFL_HTTP_FAULT_GATEWAY_URL`, `CFL_HTTP_FAULT_GATEWAY_TOKEN`
+Artifacts: `artifacts/lifecycle/<scenario>.json`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab lifecycle run mint-response-lost --adapter cashu-ts --mint nutshell-local --seed demo`
+
+## `cashu-fault-lab lifecycle matrix`
+
+Run the wallet lifecycle compatibility matrix
+
+Options:
+
+- `--profile <profile>`: Lifecycle matrix profile. Default: `wallet-lifecycle-v1`.
+- `--seed <seed>`: Deterministic seed. Default: `cashu-fault-lab-lifecycle`.
+- `--json`: Emit machine-readable matrix results.
+- `--output <path>`: Write matrix output.
+
+Modes: `text`, `json`
+Environment: `CFL_LIFECYCLE_MATRIX_FILE`
+Artifacts: None
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab lifecycle matrix --profile wallet-lifecycle-v1 --json`
+
+## `cashu-fault-lab lifecycle replay <artifact>`
+
+Replay an exact wallet lifecycle failure
+
+Arguments:
+
+- `<artifact>`: Redacted failure artifact JSON.
+
+Options:
+
+- `--seed <seed>`: Original seed supplied out of band.
+- `--adapter <id>`: Lifecycle adapter ID.
+- `--mint <id>`: Test mint identity.
+
+Modes: `text`
+Environment: `CFL_LIFECYCLE_<ADAPTER>_URL`, `CFL_LIFECYCLE_<ADAPTER>_TOKEN`
+Artifacts: None
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab lifecycle replay artifacts/failure.json --seed demo --adapter cashu-ts --mint nutshell-local`

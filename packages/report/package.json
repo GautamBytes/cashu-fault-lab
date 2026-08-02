@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "@cashu-fault-lab/adapter-contract": "workspace:*",
-    "@cashu-fault-lab/scenario-runner": "workspace:*"
+    "@cashu-fault-lab/scenario-runner": "workspace:*",
+    "@cashu-fault-lab/wallet-lifecycle-runner": "workspace:*",
+    "@cashu-fault-lab/wallet-lifecycle-oracle": "workspace:*"
   }
 }

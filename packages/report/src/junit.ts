@@ -1,6 +1,8 @@
 import { renderJson } from './json.js';
 import { createReport, type ReportInput } from './redact.js';
 import { createMatrixReport, type MatrixReportInput } from './matrix.js';
+import { createLifecycleReport, type LifecycleReportInput } from './lifecycle.js';
+import { renderLifecycleJson } from './json.js';
 
 function xml(value: string): string {
   return value
@@ -93,4 +95,19 @@ export function renderMatrixJunit(input: MatrixReportInput): string {
   }
   lines.push('</testsuite>', '');
   return lines.join('\n');
+}
+
+export function renderLifecycleJunit(input: LifecycleReportInput): string {
+  const report = createLifecycleReport(input);
+  const failed = report.status === 'failed';
+  const failure = failed
+    ? `<failure type="${xml(report.failure?.code ?? 'LIFECYCLE_FAILED')}" message="${xml(report.failure?.message ?? 'Lifecycle scenario failed.')}"/>`
+    : '';
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<testsuite name="cashu-fault-lab.wallet-lifecycle" tests="1" failures="${failed ? 1 : 0}" errors="0" skipped="0">`,
+    `<testcase classname="cashu-fault-lab.wallet-lifecycle" name="${xml(report.scenarioId)}">${failure}<system-out>${xml(renderLifecycleJson(input))}</system-out></testcase>`,
+    '</testsuite>',
+    '',
+  ].join('\n');
 }

@@ -24,7 +24,7 @@ import type {
 } from './types.js';
 import { createCashuTsNoRedirectRequest, validatedMintOrigin } from './network.js';
 
-export { createCashuTsNoRedirectRequest } from './network.js';
+export { createCashuTsNoRedirectRequest, withCashuTsLifecycleOperation } from './network.js';
 
 export interface CashuTsLifecycleClient {
   readonly keysetId: string;
@@ -89,7 +89,7 @@ export function assertCashuTsRestoreResponsePair(
     String(Reflect.get(originalBlindedMessage, 'amount')) !==
       String(Reflect.get(restoredOutput, 'amount')) ||
     Reflect.get(signature, 'id') !== Reflect.get(restoredOutput, 'id') ||
-    String(Reflect.get(signature, 'amount')) !== String(Reflect.get(restoredOutput, 'amount'))
+    amountNumber(Reflect.get(signature, 'amount')) < 1
   ) {
     throw new Error('Cashu lifecycle restore response identity is invalid');
   }

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "stale-quote",
+  "description": "A stale quote poll cannot regress a monotonic quote state or release ambiguous inputs.",
+  "seed": "wallet-lifecycle-v1:stale-quote",
+  "requireQuiescence": true,
+  "requiredOperations": ["mint", "reconcile"],
+  "commands": [
+    {
+      "type": "start",
+      "input": {
+        "operationId": "AAAAAAAAAAAAAAAAAAAAAA",
+        "kind": "mint",
+        "mint": "http://127.0.0.1:3338",
+        "unit": "sat",
+        "amount": 8,
+        "method": "bolt11"
+      }
+    },
+    {
+      "type": "fault",
+      "rule": { "action": "stale_response", "endpoint": "quote", "occurrence": 2 }
+    },
+    { "type": "resume", "operationId": "AAAAAAAAAAAAAAAAAAAAAA" },
+    { "type": "clear_faults" },
+    { "type": "resume", "operationId": "AAAAAAAAAAAAAAAAAAAAAA" }
+  ]
+}

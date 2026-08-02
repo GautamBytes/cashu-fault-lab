@@ -27,6 +27,9 @@
     "@cashu-fault-lab/http-fault-gateway": "workspace:*",
     "@cashu-fault-lab/report": "workspace:*",
     "@cashu-fault-lab/scenario-runner": "workspace:*",
+    "@cashu-fault-lab/wallet-lifecycle-contract": "workspace:*",
+    "@cashu-fault-lab/wallet-lifecycle-oracle": "workspace:*",
+    "@cashu-fault-lab/wallet-lifecycle-runner": "workspace:*",
     "commander": "15.0.0"
   }
 }

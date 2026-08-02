@@ -1,6 +1,8 @@
 import { renderJson, renderMatrixJson } from './json.js';
 import { createReport, type ReportInput } from './redact.js';
 import { createMatrixReport, type MatrixReportInput } from './matrix.js';
+import { createLifecycleReport, type LifecycleReportInput } from './lifecycle.js';
+import { renderLifecycleJson } from './json.js';
 
 function html(value: string): string {
   return value
@@ -112,6 +114,17 @@ ${rows}
   </table>
   <pre>${html(renderMatrixJson(input))}</pre>
 </body>
+</html>
+`;
+}
+
+export function renderLifecycleHtml(input: LifecycleReportInput): string {
+  const report = createLifecycleReport(input);
+  const statusClass = report.status === 'passed' ? 'passed' : 'failed';
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cashu Fault Lab — ${html(report.scenarioId)}</title></head>
+<body><h1>${html(report.scenarioId)}</h1><p class="${statusClass}">${html(report.status.toUpperCase())}</p><pre>${html(renderLifecycleJson(input))}</pre></body>
 </html>
 `;
 }

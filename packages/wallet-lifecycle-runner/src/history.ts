@@ -13,6 +13,7 @@ export interface LifecycleFailureIdentity {
   readonly commandIndex: number;
   readonly code: 'LIFECYCLE_DRIVER' | 'LIFECYCLE_INVARIANT';
   readonly message: string;
+  readonly detailHash?: string;
 }
 
 export interface LifecycleFailureArtifact {
@@ -37,6 +38,21 @@ export function lifecycleSeedHash(seed: string): string {
     .digest('hex');
 }
 
+export function lifecycleFailurePublicMessage(code: LifecycleFailureIdentity['code']): string {
+  return code === 'LIFECYCLE_INVARIANT'
+    ? 'Lifecycle safety invariant failed.'
+    : 'Lifecycle driver execution failed.';
+}
+
+export function lifecycleFailureDetailHash(failure: LifecycleFailureIdentity): string {
+  return `sha256:${createHash('sha256')
+    .update('cashu-fault-lab/wallet-lifecycle-failure-detail/v1\0')
+    .update(failure.code)
+    .update('\0')
+    .update(failure.message)
+    .digest('hex')}`;
+}
+
 function sanitizeCommand(command: LifecycleScenarioCommand): {
   readonly command: LifecycleScenarioCommand;
   readonly redacted: boolean;
@@ -55,6 +71,34 @@ function sanitizeCommand(command: LifecycleScenarioCommand): {
     };
   }
   return { command: structuredClone(command), redacted: false };
+}
+
+function sanitizeFailureIdentity(failure: LifecycleFailureIdentity): LifecycleFailureIdentity {
+  return {
+    commandIndex: failure.commandIndex,
+    code: failure.code,
+    message: lifecycleFailurePublicMessage(failure.code),
+    detailHash: failure.detailHash ?? lifecycleFailureDetailHash(failure),
+  };
+}
+
+export function redactLifecycleFailureArtifact(
+  artifact: LifecycleFailureArtifact,
+): LifecycleFailureArtifact {
+  const sanitized = artifact.scenario.commands.map(sanitizeCommand);
+  return Object.freeze({
+    schemaVersion: 2,
+    scenario: Object.freeze({
+      id: artifact.scenario.id,
+      seedHash: artifact.scenario.seedHash,
+      requireQuiescence: artifact.scenario.requireQuiescence,
+      commands: Object.freeze(sanitized.map((entry) => entry.command)),
+    }),
+    redacted: artifact.redacted || sanitized.some((entry) => entry.redacted),
+    history: Object.freeze(structuredClone(artifact.history)),
+    observations: Object.freeze(structuredClone(artifact.observations)),
+    failure: Object.freeze(sanitizeFailureIdentity(artifact.failure)),
+  });
 }
 
 export function createFailureArtifact(input: {
@@ -78,6 +122,6 @@ export function createFailureArtifact(input: {
     redacted: sanitized.some((entry) => entry.redacted),
     history: Object.freeze(structuredClone(input.history)),
     observations: Object.freeze(structuredClone(input.observations)),
-    failure: Object.freeze({ ...input.failure }),
+    failure: Object.freeze(sanitizeFailureIdentity(input.failure)),
   });
 }

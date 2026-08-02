@@ -1,0 +1,302 @@
+name: cashu-fault-lab-lightning-regtest
+
+services:
+  bitcoind:
+    image: bitcoin/bitcoin:29.1@sha256:de62c536feb629bed65395f63afd02e3a7a777a3ec82fbed773d50336a739319
+    command:
+      - -regtest=1
+      - -server=1
+      - -txindex=1
+      - -fallbackfee=0.0002
+      - -rpcuser=regtest
+      - -rpcpassword=regtest-local-only
+      - -rpcbind=0.0.0.0
+      - -rpcallowip=172.16.0.0/12
+      - -zmqpubrawblock=tcp://0.0.0.0:28332
+      - -zmqpubrawtx=tcp://0.0.0.0:28333
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bitcoin-cli',
+          '-regtest',
+          '-rpcuser=regtest',
+          '-rpcpassword=regtest-local-only',
+          'getblockchaininfo',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    networks: [lightning-regtest]
+    volumes:
+      - bitcoind-regtest:/home/bitcoin/.bitcoin
+
+  lnd-mint:
+    image: lightninglabs/lnd:v0.20.1-beta@sha256:f0a2bdc4b8bc89cb3b31b6e12d6b16ac5145defd916d8152cf0c1c07d8697cff
+    command:
+      - --bitcoin.active
+      - --bitcoin.regtest
+      - --bitcoin.node=bitcoind
+      - --bitcoind.rpchost=bitcoind:18443
+      - --bitcoind.rpcuser=regtest
+      - --bitcoind.rpcpass=regtest-local-only
+      - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
+      - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
+      - --listen=0.0.0.0:9735
+      - --rpclisten=0.0.0.0:10009
+      - --restlisten=0.0.0.0:8080
+      - --noseedbackup
+      - --tlsextradomain=lnd-mint
+      - --bitcoin.defaultchanconfs=1
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'lncli',
+          '--network=regtest',
+          '--rpcserver=127.0.0.1:10009',
+          '--tlscertpath=/root/.lnd/tls.cert',
+          'getinfo',
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 90
+    networks: [lightning-regtest]
+    volumes:
+      - lnd-mint-regtest:/root/.lnd
+
+  lnd-sink:
+    image: lightninglabs/lnd:v0.20.1-beta@sha256:f0a2bdc4b8bc89cb3b31b6e12d6b16ac5145defd916d8152cf0c1c07d8697cff
+    command:
+      - --bitcoin.active
+      - --bitcoin.regtest
+      - --bitcoin.node=bitcoind
+      - --bitcoind.rpchost=bitcoind:18443
+      - --bitcoind.rpcuser=regtest
+      - --bitcoind.rpcpass=regtest-local-only
+      - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
+      - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
+      - --listen=0.0.0.0:9735
+      - --rpclisten=0.0.0.0:10009
+      - --restlisten=0.0.0.0:8080
+      - --noseedbackup
+      - --tlsextradomain=lnd-sink
+      - --bitcoin.defaultchanconfs=1
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'lncli',
+          '--network=regtest',
+          '--rpcserver=127.0.0.1:10009',
+          '--tlscertpath=/root/.lnd/tls.cert',
+          'getinfo',
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 90
+    networks: [lightning-regtest]
+    volumes:
+      - lnd-sink-regtest:/root/.lnd
+
+  settlement-probe-credentials:
+    image: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+    command:
+      [
+        'sh',
+        '-c',
+        'cp /lnd/data/chain/bitcoin/regtest/readonly.macaroon /credentials/readonly.macaroon && chown 1000:1000 /credentials/readonly.macaroon && chmod 400 /credentials/readonly.macaroon',
+      ]
+    user: '0:0'
+    depends_on:
+      lnd-sink:
+        condition: service_healthy
+    networks: [lightning-regtest]
+    volumes:
+      - lnd-sink-regtest:/lnd:ro
+      - settlement-probe-credentials:/credentials
+
+  settlement-probe:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/lightning-regtest-probe/dist/bin.js']
+    environment:
+      CFL_LIGHTNING_PROBE_HOST: 0.0.0.0
+      CFL_LIGHTNING_PROBE_PORT: 4400
+      CFL_LIGHTNING_PROBE_TOKEN: ${CFL_LIGHTNING_PROBE_TOKEN:?set CFL_LIGHTNING_PROBE_TOKEN}
+      CFL_LIGHTNING_PROBE_LND_URL: https://lnd-sink:8080/
+      CFL_LIGHTNING_PROBE_MACAROON_PATH: /credentials/readonly.macaroon
+      NODE_EXTRA_CA_CERTS: /lnd-sink/tls.cert
+    depends_on:
+      lnd-sink:
+        condition: service_healthy
+      settlement-probe-credentials:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4400/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    init: true
+    networks: [lightning-regtest]
+    volumes:
+      - lnd-sink-regtest:/lnd-sink:ro
+      - settlement-probe-credentials:/credentials:ro
+
+  nutshell-regtest:
+    image: cashubtc/nutshell:0.20.2@sha256:65e9cbe23aaa1aeb27ce7206fa854a80f39ce8db1c9121eaecfc053a22506574
+    command: ['poetry', 'run', 'mint']
+    environment:
+      MINT_BACKEND_BOLT11_SAT: LndRestWallet
+      MINT_LISTEN_HOST: 0.0.0.0
+      MINT_LISTEN_PORT: 3338
+      MINT_PRIVATE_KEY: cashu-fault-lab-lightning-regtest-only
+      MINT_RATE_LIMIT: 'FALSE'
+      MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE: '10000'
+      MINT_URL: http://nutshell-regtest:3338
+      MINT_LND_REST_ENDPOINT: https://lnd-mint:8080
+      MINT_LND_REST_CERT_VERIFY: 'FALSE'
+      MINT_LND_REST_MACAROON: /lnd-mint/data/chain/bitcoin/regtest/admin.macaroon
+    depends_on:
+      lnd-mint:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:3338/v1/info']
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    ports:
+      - '127.0.0.1:${CFL_REGTEST_NUTSHELL_PORT:-3358}:3338'
+    networks: [lightning-regtest]
+    volumes:
+      - nutshell-regtest:/app/data
+      - lnd-mint-regtest:/lnd-mint:ro
+
+  lifecycle-postgres:
+    image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    environment:
+      POSTGRES_DB: cashu_fault_lab
+      POSTGRES_USER: cashu
+      POSTGRES_PASSWORD: cashu-local-development-only
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cashu -d cashu_fault_lab']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    networks: [lightning-regtest]
+    volumes:
+      - lifecycle-postgres:/var/lib/postgresql
+
+  lifecycle-lane:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: lifecycle-netns
+    environment:
+      CFL_LIFECYCLE_MINT_HOST: nutshell-regtest
+      CFL_LIFECYCLE_MINT_PORT: 3338
+      CFL_LIFECYCLE_LIGHTNING_PROBE_HOST: settlement-probe
+      CFL_LIFECYCLE_LIGHTNING_PROBE_PORT: 4400
+    depends_on:
+      nutshell-regtest:
+        condition: service_healthy
+      settlement-probe:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'nc', '-z', '127.0.0.1', '3338']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    ports:
+      - '127.0.0.1:${CFL_REGTEST_ADAPTER_PORT:-4141}:14101'
+      - '127.0.0.1:${CFL_REGTEST_GATEWAY_PORT:-4341}:14300'
+    networks: [lightning-regtest]
+
+  regtest-gateway:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/http-fault-gateway/dist/bin.js']
+    environment:
+      CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN: ${CFL_HTTP_FAULT_GATEWAY_TOKEN:?set CFL_HTTP_FAULT_GATEWAY_TOKEN}
+      CFL_HTTP_FAULT_GATEWAY_DOWNSTREAM: http://127.0.0.1:3338
+      CFL_HTTP_FAULT_GATEWAY_HOST: 127.0.0.1
+      CFL_HTTP_FAULT_GATEWAY_PORT: 4300
+    depends_on:
+      lifecycle-lane:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4300/__faults/v1/evidence',{headers:{authorization:'Bearer '+process.env.CFL_HTTP_FAULT_GATEWAY_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    init: true
+    network_mode: service:lifecycle-lane
+
+  cashu-ts-regtest:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'adapters/cashu-ts/dist/bin.js']
+    environment:
+      CFL_CASHU_TS_CONTROL_TOKEN: ${CFL_LIFECYCLE_CASHU_TS_TOKEN:?set CFL_LIFECYCLE_CASHU_TS_TOKEN}
+      CFL_CASHU_TS_HOST: 127.0.0.1
+      CFL_CASHU_TS_MINT_URL: http://127.0.0.1:4300
+      CFL_CASHU_TS_PORT: 4101
+      CFL_CASHU_TS_LIFECYCLE_DATABASE_URL: postgresql://cashu:cashu-local-development-only@lifecycle-postgres:5432/cashu_fault_lab
+      CFL_CASHU_TS_LIFECYCLE_STATE_KEY: MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM
+      CFL_CASHU_TS_LIFECYCLE_RUN_ID: wallet-lifecycle-regtest
+      CFL_CASHU_TS_LIFECYCLE_TENANT_ID: cashu-ts-regtest
+      CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_URL: http://127.0.0.1:4400/v1/settlement
+      CFL_CASHU_TS_LIFECYCLE_LIGHTNING_PROBE_TOKEN: ${CFL_LIGHTNING_PROBE_TOKEN:?set CFL_LIGHTNING_PROBE_TOKEN}
+    depends_on:
+      regtest-gateway:
+        condition: service_healthy
+      lifecycle-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4101/v1/lifecycle/capabilities',{headers:{authorization:'Bearer '+process.env.CFL_CASHU_TS_CONTROL_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    init: true
+    network_mode: service:lifecycle-lane
+
+networks:
+  lightning-regtest:
+
+volumes:
+  bitcoind-regtest:
+  lnd-mint-regtest:
+  lnd-sink-regtest:
+  nutshell-regtest:
+  lifecycle-postgres:
+  settlement-probe-credentials:

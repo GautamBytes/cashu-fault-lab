@@ -44,6 +44,18 @@ const SENDER_DURABILITY_ENV_VARS = [
   'CFL_CASHU_TS_SENDER_STATE_KEYS',
 ] as const;
 
+const LIFECYCLE_URL_ENV_VARS = [
+  'CFL_LIFECYCLE_CASHU_TS_URL',
+  'CFL_LIFECYCLE_CDK_URL',
+  'CFL_HTTP_FAULT_GATEWAY_URL',
+] as const;
+
+const LIFECYCLE_TOKEN_ENV_VARS = [
+  'CFL_LIFECYCLE_CASHU_TS_TOKEN',
+  'CFL_LIFECYCLE_CDK_TOKEN',
+  'CFL_HTTP_FAULT_GATEWAY_TOKEN',
+] as const;
+
 const DEFAULT_PORTS: readonly { readonly label: string; readonly port: number }[] = [
   { label: 'nutshell-mint', port: 3338 },
   { label: 'cashu-ts-adapter', port: 4101 },
@@ -84,6 +96,46 @@ function envCheck(env: Readonly<Record<string, string | undefined>>): DoctorChec
     const value = env[name];
     if (value === undefined || value.trim().length === 0) {
       checks.push({ name, status: 'warn', detail: 'not set (only needed for funded lanes)' });
+    } else {
+      checks.push({ name, status: 'ok', detail: 'set' });
+    }
+  }
+  return checks;
+}
+
+function lifecycleEnvCheck(env: Readonly<Record<string, string | undefined>>): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
+  for (const name of LIFECYCLE_URL_ENV_VARS) {
+    const value = env[name];
+    if (value === undefined || value.length === 0) {
+      checks.push({ name, status: 'fail', detail: 'missing' });
+      continue;
+    }
+    try {
+      const url = new URL(value);
+      const valid =
+        url.protocol === 'http:' &&
+        ['127.0.0.1', '[::1]'].includes(url.hostname) &&
+        url.pathname === '/' &&
+        url.search === '' &&
+        url.hash === '' &&
+        url.username === '' &&
+        url.password === '';
+      checks.push(
+        valid
+          ? { name, status: 'ok', detail: 'loopback HTTP endpoint' }
+          : { name, status: 'fail', detail: 'must be a loopback HTTP origin' },
+      );
+    } catch {
+      checks.push({ name, status: 'fail', detail: 'must be a loopback HTTP origin' });
+    }
+  }
+  for (const name of LIFECYCLE_TOKEN_ENV_VARS) {
+    const value = env[name];
+    if (value === undefined || value.length === 0) {
+      checks.push({ name, status: 'fail', detail: 'missing' });
+    } else if (/\r|\n/u.test(value) || !ENV_TOKEN_PATTERN.test(value)) {
+      checks.push({ name, status: 'fail', detail: 'invalid control token' });
     } else {
       checks.push({ name, status: 'ok', detail: 'set' });
     }
@@ -390,10 +442,16 @@ export async function runDoctor(
     readonly testcontainers?: boolean;
     readonly testTiers?: boolean;
     readonly portConflict?: 'warn' | 'fail';
+    readonly lifecycle?: boolean;
   } = {},
 ): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
-  const environmentChecks = options.environment === false ? [] : envCheck(probes.env);
+  const environmentChecks =
+    options.environment === false
+      ? []
+      : options.lifecycle === true
+        ? lifecycleEnvCheck(probes.env)
+        : envCheck(probes.env);
   checks.push(...environmentChecks);
   if (options.senderDurability !== false) {
     checks.push(senderDurabilityEnvCheck(probes.env));
