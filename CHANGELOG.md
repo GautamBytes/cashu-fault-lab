@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 — 2026-08-02
+
+- Added the wallet lifecycle lab for restart-safe mint, swap, send, receive, restore, reconcile, and melt recovery experiments.
+- Added funded lifecycle matrix coverage across cashu-ts and CDK against pinned Nutshell and mintd mints.
+- Added real Lightning-regtest melt recovery with bounded authenticated settlement probes.
+- Hardened CDK lifecycle adapter rehydration after restarts so funded matrix lanes recreate and wait for host adapters before probing.
+- Published current lifecycle scope through repository docs and website release docs while keeping certification claims blocked on external evidence.
+
 ## 0.1.2 — 2026-07-30
 
 - Added a loopback-only maintainer preview for integrating external wallet adapters.

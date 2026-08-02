@@ -16,7 +16,7 @@ test('the public npm package exposes only the bundled CLI and runtime assets', a
 
   assert.equal(workspace.name, '@cashu-fault-lab/workspace');
   assert.equal(packageManifest.name, 'cashu-fault-lab');
-  assert.equal(packageManifest.version, '0.1.2');
+  assert.equal(packageManifest.version, '0.1.3');
   assert.equal(packageManifest.private, false);
   assert.deepEqual(packageManifest.bin, { 'cashu-fault-lab': 'dist/bin.js' });
   assert.deepEqual(packageManifest.files, ['dist', 'runtime', 'README.md', 'LICENSE']);
@@ -86,12 +86,12 @@ test('successful npm publication creates one idempotent GitHub Release', async (
 });
 
 test('the maintainer-preview patch has concise release notes', async () => {
-  const notes = await readFile(new URL('docs/releases/v0.1.2.md', root), 'utf8');
+  const notes = await readFile(new URL('docs/releases/v0.1.3.md', root), 'utf8');
   const words = notes.trim().split(/\s+/u);
 
-  assert.ok(words.length <= 220, `v0.1.2 notes should stay under 220 words; found ${words.length}`);
-  assert.match(notes, /adapter preflight/iu);
-  assert.match(notes, /adapter preview/iu);
+  assert.ok(words.length <= 220, `v0.1.3 notes should stay under 220 words; found ${words.length}`);
+  assert.match(notes, /wallet lifecycle/iu);
+  assert.match(notes, /Lightning-regtest/iu);
   assert.match(notes, /loopback/iu);
   assert.match(notes, /not (?:release qualification|certification)/iu);
 });
