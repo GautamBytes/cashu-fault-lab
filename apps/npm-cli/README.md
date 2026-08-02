@@ -36,6 +36,6 @@ writes a redacted feedback bundle. The bundle is diagnostic evidence, not releas
 Cashu Fault Lab 0.1 is an experimental developer preview, not a certification that a wallet is
 production-safe.
 
-Full documentation: <https://cashu-fault-lab.vercel.app/>
+Full documentation: <https://www.cashulabs.online/>
 
 Source and issues: <https://github.com/GautamBytes/cashu-fault-lab>
