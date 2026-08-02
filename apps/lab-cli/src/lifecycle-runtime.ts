@@ -892,13 +892,23 @@ export function lifecycleComposeServiceRestartPlan(
   service: string,
   options: { readonly wait?: boolean } = {},
 ): readonly LifecycleComposeCommand[] {
+  return lifecycleComposeServicesRestartPlan(docker, composeFile, [service], options);
+}
+
+export function lifecycleComposeServicesRestartPlan(
+  docker: string,
+  composeFile: string,
+  services: readonly string[],
+  options: { readonly wait?: boolean } = {},
+): readonly LifecycleComposeCommand[] {
+  if (services.length === 0) throw new Error('Lifecycle compose restart requires a service');
   const commands: LifecycleComposeCommand[] = [
-    { executable: docker, args: ['compose', '-f', composeFile, 'restart', service] },
+    { executable: docker, args: ['compose', '-f', composeFile, 'restart', ...services] },
   ];
   if (options.wait !== false) {
     commands.push({
       executable: docker,
-      args: ['compose', '-f', composeFile, 'up', '-d', '--wait', service],
+      args: ['compose', '-f', composeFile, 'up', '-d', '--wait', ...services],
     });
   }
   return commands;
@@ -925,7 +935,7 @@ async function rehydrateCdkLifecycleMatrixLane(
   if (!lifecycleMatrixNeedsCdkHostRehydration(env, lane.adapterId)) return;
   const docker = env.CFL_DOCKER_BIN ?? 'docker';
   const composeFile = lifecycleComposeFile(env);
-  const service = adapterService(lane.adapterId, lane.mintId);
+  const services = ['cdk-nutshell', 'cdk-mintd'] as const;
   const environment = {
     ...process.env,
     ...env,
@@ -933,7 +943,7 @@ async function rehydrateCdkLifecycleMatrixLane(
   };
   try {
     await execLifecycleComposeCommands(
-      lifecycleComposeServiceRestartPlan(docker, composeFile, service, { wait: false }),
+      lifecycleComposeServicesRestartPlan(docker, composeFile, services, { wait: false }),
       environment,
     );
   } catch (error) {

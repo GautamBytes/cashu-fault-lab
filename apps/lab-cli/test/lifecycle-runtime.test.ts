@@ -13,6 +13,7 @@ import {
   HttpLifecycleLabRuntime,
   initializeLifecycleMatrixLane,
   lifecycleComposeServiceRestartPlan,
+  lifecycleComposeServicesRestartPlan,
   lifecycleMatrixEvidenceSummary,
   lifecycleMatrixRestoreSetupScenario,
   lifecycleMatrixScenarioSeed,
@@ -374,10 +375,10 @@ describe('HTTP lifecycle lab runtime', () => {
 
   it('restarts CDK host adapters without compose wait before endpoint probing', () => {
     expect(
-      lifecycleComposeServiceRestartPlan(
+      lifecycleComposeServicesRestartPlan(
         'docker',
         'infra/compose/wallet-lifecycle.compose.yml',
-        'cdk-nutshell',
+        ['cdk-nutshell', 'cdk-mintd'],
         { wait: false },
       ),
     ).toEqual([
@@ -389,6 +390,7 @@ describe('HTTP lifecycle lab runtime', () => {
           'infra/compose/wallet-lifecycle.compose.yml',
           'restart',
           'cdk-nutshell',
+          'cdk-mintd',
         ],
       },
     ]);
