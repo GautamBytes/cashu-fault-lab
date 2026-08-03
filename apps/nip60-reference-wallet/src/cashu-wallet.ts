@@ -53,7 +53,19 @@ export class CashuTsMintWallet implements FixtureMintWallet {
     amount: number,
     proofs: readonly FixtureProof[],
   ): Promise<{ send: readonly FixtureProof[]; keep: readonly FixtureProof[] }> {
-    const result = await this.#wallet.send(amount, normalizedProofs(proofs as unknown as Proof[]));
+    if (!this.#loaded) {
+      await this.#wallet.loadMint();
+      this.#loaded = true;
+    }
+    // Always take the online swap path. wallet.send() may satisfy an exact
+    // offline match without contacting the mint, which breaks ghost-balance
+    // (live event proofs would stay UNSPENT). includeFees keeps the receiver
+    // amount exact when the mint charges input fees.
+    const normalized = normalizedProofs(proofs as unknown as Proof[]);
+    const preview = await this.#wallet.prepareSwapToSend(amount, normalized, {
+      includeFees: true,
+    });
+    const result = await this.#wallet.completeSwap(preview);
     return {
       send: normalizedProofs(result.send).map(normalizeProof),
       keep: normalizedProofs(result.keep).map(normalizeProof),

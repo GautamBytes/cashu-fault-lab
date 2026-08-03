@@ -230,7 +230,8 @@ describe('DoctorWallet relay behaviors', () => {
       const { tokenEventId } = await wallet.mintTokens(16);
       const publishedBefore = wallet.publishedEvents.length;
       const result = await wallet.spend(4, 'ghost');
-      expect(result.balance).toBe(12);
+      // Ghost drops every local output so only the stale live event remains.
+      expect(result.balance).toBe(0);
       expect(wallet.publishedEvents.length).toBe(publishedBefore);
 
       // The old token is still served as live on both relays (its proofs are
@@ -299,9 +300,9 @@ describe('publishLabEvent', () => {
       );
 
       // Non-ws schemes are still rejected up front.
-      await expect(publishLabEvent('http://example.test:4400', walletEvent as Event)).rejects.toThrow(
-        'fixture relay URL must use ws or wss',
-      );
+      await expect(
+        publishLabEvent('http://example.test:4400', walletEvent as Event),
+      ).rejects.toThrow('fixture relay URL must use ws or wss');
     } finally {
       await relay.close();
     }

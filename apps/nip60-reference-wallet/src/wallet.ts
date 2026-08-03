@@ -227,15 +227,18 @@ export class DoctorWallet {
       throw new Error(`Spend amount ${amount} exceeds fixture balance ${this.balance}`);
     }
     const previousTokenEventId = this.#currentTokenEventId;
-    const { keep } = await this.#options.wallet.send(amount, this.#proofs);
+    // Leave 1 sat of headroom when spending the whole balance so mints that
+    // charge input fees can still complete an online swap (ghost and full spends).
+    const spendAmount = amount >= this.balance && this.balance > 1 ? this.balance - 1 : amount;
+    const { keep } = await this.#options.wallet.send(spendAmount, this.#proofs);
     if (mode === 'ghost') {
-      this.#proofs = [...keep];
-      // Nothing is published: relays keep serving the old token with now-SPENT
-      // proofs, the ghost-balance situation the doctor must flag.
+      // Drop every output: nothing new is published, so relays keep serving the
+      // old token whose proofs the mint now reports SPENT.
+      this.#proofs = [];
       return {
         tokenEventId: previousTokenEventId,
         deletionEventId: null,
-        balance: this.balance,
+        balance: 0,
       };
     }
     const rollover = this.#buildTokenEvent(keep, [previousTokenEventId]);

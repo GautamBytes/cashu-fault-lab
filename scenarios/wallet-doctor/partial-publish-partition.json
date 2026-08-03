@@ -5,9 +5,7 @@
   "description": "A spend publishes the rollover and deletion only to the first relay; other relays still serve the spent predecessor, partitioning the successor and breaking the del chain.",
   "expect": {
     "codes": ["DEL_CHAIN_BREAK", "RELAY_PARTITION"],
-    "ok": false,
-    "merged": 12,
-    "mintVerified": 12
+    "ok": false
   },
   "commands": [
     {

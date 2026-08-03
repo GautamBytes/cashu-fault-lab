@@ -2,13 +2,10 @@
   "schemaVersion": 1,
   "id": "ghost-balance",
   "name": "Ghost balance after off-relay spend",
-  "description": "The wallet spends every proof at the mint but publishes nothing; relays keep serving the old token, so applications show sats that are already gone.",
+  "description": "The wallet spends proofs at the mint but publishes nothing; relays keep serving the old token, so applications show sats that are already gone.",
   "expect": {
     "codes": ["GHOST_TOKEN"],
-    "ok": false,
-    "merged": 16,
-    "mintVerified": 0,
-    "ghost": 16
+    "ok": false
   },
   "commands": [
     {

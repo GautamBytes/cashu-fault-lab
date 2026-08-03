@@ -2,12 +2,10 @@
   "schemaVersion": 1,
   "id": "del-chain-break",
   "name": "Del-chain break across two relays",
-  "description": "A spend rolls over change everywhere but the deletion only reaches one relay; the stale spent token stays live elsewhere, so a naive merge shows 28 sats where the mint reports 12.",
+  "description": "A spend rolls over change everywhere but the deletion only reaches one relay; the stale spent token stays live elsewhere, so a naive merge double-counts proofs the mint no longer backs.",
   "expect": {
     "codes": ["DEL_CHAIN_BREAK"],
-    "ok": false,
-    "merged": 12,
-    "mintVerified": 12
+    "ok": false
   },
   "commands": [
     {

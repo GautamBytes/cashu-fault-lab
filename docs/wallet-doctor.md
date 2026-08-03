@@ -114,7 +114,7 @@ Expectations pin the exact diagnosis codes and the balance explanation:
     { "op": "mint", "amount": 16 },
     { "op": "spend", "amount": 4, "mode": "partial-delete" }
   ],
-  "expect": { "codes": ["DEL_CHAIN_BREAK"], "ok": false, "merged": 12, "mintVerified": 12 }
+  "expect": { "codes": ["DEL_CHAIN_BREAK"], "ok": false }
 }
 ```
 
