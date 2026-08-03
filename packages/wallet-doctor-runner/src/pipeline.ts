@@ -31,6 +31,8 @@ export interface WalletDoctorCheck {
     readonly errorFindings: number;
     readonly warningFindings: number;
     readonly infoFindings: number;
+    /** Relays whose capture failed; any failure blocks `ok`. */
+    readonly failedRelays: number;
     readonly codes: readonly string[];
     readonly mintVerified: number;
     readonly merged: number;
@@ -92,8 +94,9 @@ function hasRepairableFindings(diagnosis: Diagnosis): boolean {
 
 /**
  * The CI-kit entry point: full collect-output evaluation. Exit-code semantics
- * are encoded in `ok`: false when any error-severity finding exists or the
- * repair plan fails its safety invariants.
+ * are encoded in `ok`: false when any error-severity finding exists, when any
+ * relay failed (an unreachable relay means incomplete evidence, which a gate
+ * must not pass over), or when the repair plan fails its safety invariants.
  */
 export function checkCapture(
   capture: Nip60Capture,
@@ -112,15 +115,24 @@ export function checkCapture(
   const infoFindings = diagnosisArtifact.diagnosis.findings.filter(
     (finding) => finding.severity === 'info',
   ).length;
+  const failedRelays = capture.observation.relays.filter(
+    (relay) => relay.status === 'error',
+  ).length;
   return {
-    ok: errorFindings === 0 && (planArtifact === null || planArtifact.safety.ok),
+    ok:
+      errorFindings === 0 &&
+      failedRelays === 0 &&
+      (planArtifact === null || planArtifact.safety.ok),
     diagnosisArtifact,
     planArtifact,
     summary: {
       errorFindings,
       warningFindings,
       infoFindings,
-      codes: [...new Set(diagnosisArtifact.diagnosis.findings.map((finding) => finding.code))],
+      failedRelays,
+      codes: [
+        ...new Set(diagnosisArtifact.diagnosis.findings.map((finding) => finding.code)),
+      ].sort(),
       mintVerified: diagnosisArtifact.diagnosis.balance.mintVerified,
       merged: diagnosisArtifact.diagnosis.balance.merged,
       doubleCounted: diagnosisArtifact.diagnosis.balance.doubleCounted,

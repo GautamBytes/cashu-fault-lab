@@ -59,6 +59,8 @@ function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
 
 export interface FixtureServerOptions {
   readonly mint: string;
+  /** Mint URL published into NIP-60 payloads when it differs from `mint`. */
+  readonly publicMint?: string;
   readonly relays: readonly string[];
   readonly token: string;
   readonly walletFactory: (mint: string) => FixtureMintWallet;
@@ -77,10 +79,12 @@ export interface DoctorWalletFixture {
  */
 export function createFixtureServer(options: FixtureServerOptions): DoctorWalletFixture {
   if (options.token.length < 4) throw new Error('Fixture control token is too short');
+  const publicMint = options.publicMint ?? options.mint;
   const fixture: DoctorWalletFixture = {
     server: undefined as unknown as Server,
     wallet: new DoctorWallet({
       mint: options.mint,
+      publicMint,
       relays: options.relays,
       secretKey: generateSecretKey(),
       wallet: options.walletFactory(options.mint),
@@ -106,6 +110,7 @@ export function createFixtureServer(options: FixtureServerOptions): DoctorWallet
           schemaVersion: 1,
           kind: 'nip60-reference-wallet',
           mint: options.mint,
+          publicMint,
           relays: options.relays.length,
           operations: ['capabilities', 'reset', 'subject', 'mint', 'spend', 'state'],
           spendModes: SPEND_MODES,
@@ -141,6 +146,7 @@ export function createFixtureServer(options: FixtureServerOptions): DoctorWallet
           seed === undefined ? generateSecretKey() : deriveFixtureKey(`fixture-reset\0${seed}`);
         fixture.wallet = new DoctorWallet({
           mint: options.mint,
+          publicMint,
           relays: options.relays,
           secretKey,
           wallet: options.walletFactory(options.mint),

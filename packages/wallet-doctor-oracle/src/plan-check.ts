@@ -92,18 +92,28 @@ export function checkRepairPlan(input: {
   }
 
   // P1: no non-SPENT proof is deleted without rollover cover or restore.
+  // Deletions happen through delete_events steps AND publish_rollover `del`
+  // lists (simulation treats both as removals from the live set). A proof
+  // whose mint state is unknown cannot be proven safe to delete, so unknown
+  // truth on a deleted event is itself a violation.
   const { rolloverYs, restoreYs } = coveredSets(plan.steps);
+  const deletedEventIds: string[] = [];
   for (const step of plan.steps) {
-    if (step.action !== 'delete_events') continue;
-    for (const eventId of step.eventIds) {
-      const token = tokensById.get(eventId);
-      if (!token) continue;
-      for (const proof of token.proofs) {
-        const state = mintByY.get(proof.y)?.state;
-        if (state === 'UNSPENT' || state === 'PENDING') {
-          if (!rolloverYs.has(proof.y) && !restoreYs.has(proof.y)) {
-            violations.push(`P1_UNCOVERED_UNSPENT: ${proof.y} deleted with ${eventId}`);
-          }
+    if (step.action === 'delete_events') deletedEventIds.push(...step.eventIds);
+    if (step.action === 'publish_rollover') deletedEventIds.push(...step.del);
+  }
+  for (const eventId of deletedEventIds) {
+    const token = tokensById.get(eventId);
+    if (!token) continue;
+    for (const proof of token.proofs) {
+      const state = mintByY.get(proof.y)?.state;
+      if (state === undefined) {
+        violations.push(`MISSING_MINT_TRUTH: ${proof.y} deleted with ${eventId} is unchecked`);
+        continue;
+      }
+      if (state === 'UNSPENT' || state === 'PENDING') {
+        if (!rolloverYs.has(proof.y) && !restoreYs.has(proof.y)) {
+          violations.push(`P1_UNCOVERED_UNSPENT: ${proof.y} deleted with ${eventId}`);
         }
       }
     }

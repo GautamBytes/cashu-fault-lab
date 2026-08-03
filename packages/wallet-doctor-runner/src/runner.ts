@@ -162,9 +162,13 @@ function compareExpectations(
     orphanedUnspent: balance.orphanedUnspent,
   };
   const failures: string[] = [];
-  if (actual.codes.join(',') !== [...expect.codes].sort().join(',')) {
+  // Compare canonically: finding order is severity-major, expectations are
+  // alphabetical, so both sides are sorted before comparison.
+  const actualCodes = [...actual.codes].sort();
+  const expectedCodes = [...expect.codes].sort();
+  if (actualCodes.join(',') !== expectedCodes.join(',')) {
     failures.push(
-      `codes: expected ${[...expect.codes].sort().join(',') || '(none)'}, got ${actual.codes.join(',') || '(none)'}`,
+      `codes: expected ${expectedCodes.join(',') || '(none)'}, got ${actualCodes.join(',') || '(none)'}`,
     );
   }
   if (actual.ok !== expect.ok) failures.push(`ok: expected ${expect.ok}, got ${actual.ok}`);

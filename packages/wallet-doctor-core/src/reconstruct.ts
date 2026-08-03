@@ -50,6 +50,8 @@ export interface MergedView {
   /** `naiveBalance` minus the sum over unique proofs in `naiveLiveTokens`. */
   readonly doubleCounted: number;
   readonly duplicateProofs: readonly DuplicateProof[];
+  /** Event ids listed in any seen token event's `del` (superseded somewhere), sorted. */
+  readonly supersededAnywhere: readonly string[];
   /** Proofs that disappeared from every live event; mint truth classifies them. */
   readonly orphanCandidates: readonly OrphanCandidate[];
 }
@@ -204,6 +206,7 @@ export function reconstructMerged(relays: readonly RelayObservation[]): MergedVi
     naiveBalance,
     doubleCounted: naiveBalance - uniqueBalance,
     duplicateProofs,
+    supersededAnywhere: [...supersededAnywhere].sort(),
     orphanCandidates,
   };
 }

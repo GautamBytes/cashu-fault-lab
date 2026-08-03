@@ -115,7 +115,7 @@ export function diagnose(observation: DoctorObservation, options: DiagnoseOption
   findings.push(...delChainBreaks(merged, perRelay));
   findings.push(...walletEventForks(observation, perRelay, merged, okRelayUrls));
   findings.push(...deletionsNotPropagated(observation, merged, perRelay));
-  findings.push(...historyGaps(observation, merged));
+  findings.push(...historyGaps(observation));
   findings.push(...quoteLimbo(observation, options.now ?? 0));
   findings.push(...malformedEvents(observation));
 
@@ -200,9 +200,14 @@ function orphanedProofs(
 
 function delChainBreaks(merged: MergedView, perRelay: readonly RelayView[]): Finding[] {
   const liveEventIds = new Set(merged.liveTokens.map((token) => token.eventId));
+  const superseded = new Set(merged.supersededAnywhere);
   const findings: Finding[] = [];
   for (const token of merged.naiveLiveTokens) {
     if (liveEventIds.has(token.eventId)) continue;
+    // Only a seen `del` reference proves supersession. A plain kind:5 deletion
+    // that reached only some relays produces the same live/not-live pattern and
+    // belongs to DELETION_NOT_PROPAGATED, not here.
+    if (!superseded.has(token.eventId)) continue;
     const stillLiveOn = perRelay
       .filter((view) => view.liveTokens.some((live) => live.eventId === token.eventId))
       .map((view) => view.url)
@@ -278,7 +283,9 @@ function deletionsNotPropagated(
   merged: MergedView,
   perRelay: readonly RelayView[],
 ): Finding[] {
-  const superseded = new Set(merged.naiveLiveTokens.flatMap((token) => token.del));
+  // Any seen successor's `del` owns the case, even when that successor is not
+  // naive-live itself (e.g. it is deleted on the only relay serving it).
+  const superseded = new Set(merged.supersededAnywhere);
   const findings: Finding[] = [];
   for (const relay of observation.relays) {
     if (relay.status !== 'ok') continue;
@@ -315,9 +322,20 @@ function deletionsNotPropagated(
   });
 }
 
-function historyGaps(observation: DoctorObservation, merged: MergedView): Finding[] {
-  const knownIds = new Set(merged.naiveLiveTokens.map((token) => token.eventId));
-  for (const token of merged.liveTokens) knownIds.add(token.eventId);
+function historyGaps(observation: DoctorObservation): Finding[] {
+  // A reference is unknown only when the capture carries no evidence the event
+  // ever existed on these relays: neither a served token event (live or not)
+  // nor a NIP-09 deletion targeting it. Destroyed predecessors are normally
+  // pruned by relays once their deletion lands, so their absence from the
+  // token set must not read as a gap.
+  const knownIds = new Set<string>();
+  for (const relay of observation.relays) {
+    if (relay.status !== 'ok') continue;
+    for (const token of relay.tokens) knownIds.add(token.eventId);
+    for (const deletion of relay.deletions) {
+      for (const target of deletion.targets) knownIds.add(target);
+    }
+  }
   const unknown = new Set<string>();
   for (const relay of observation.relays) {
     if (relay.status !== 'ok') continue;

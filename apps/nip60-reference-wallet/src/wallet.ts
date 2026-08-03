@@ -43,7 +43,14 @@ export const SPEND_MODES: readonly SpendMode[] = [
 ];
 
 export interface DoctorWalletOptions {
+  /** Mint URL the fixture itself talks to (may be a private network alias). */
   readonly mint: string;
+  /**
+   * Mint URL published into NIP-60 payloads when it differs from `mint`
+   * (e.g. a host-reachable alias); readers of the events must be able to
+   * reach this URL. Defaults to `mint`.
+   */
+  readonly publicMint?: string;
   readonly relays: readonly string[];
   readonly secretKey: Uint8Array;
   readonly wallet: FixtureMintWallet;
@@ -85,6 +92,11 @@ export class DoctorWallet {
 
   get mint(): string {
     return this.#options.mint;
+  }
+
+  /** Mint URL published in events; the one readers (and the doctor) can reach. */
+  get publicMint(): string {
+    return this.#options.publicMint ?? this.#options.mint;
   }
 
   get relays(): readonly string[] {
@@ -135,7 +147,7 @@ export class DoctorWallet {
         kind: 17375,
         created_at: this.#now(),
         tags: [],
-        content: this.#encrypt([['mint', this.#options.mint]]),
+        content: this.#encrypt([['mint', this.publicMint]]),
       },
       this.#options.secretKey,
     );
@@ -163,7 +175,7 @@ export class DoctorWallet {
         created_at: this.#now(),
         tags: [],
         content: this.#encrypt({
-          mint: this.#options.mint,
+          mint: this.publicMint,
           proofs: proofs.map((proof) => ({
             id: proof.id,
             amount: proof.amount,

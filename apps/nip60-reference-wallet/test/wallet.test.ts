@@ -143,6 +143,51 @@ describe('DoctorWallet relay behaviors', () => {
     });
   });
 
+  it('publishes the public mint URL in event payloads when it differs from the ops URL', async () => {
+    await withRelays(async (urlA, urlB) => {
+      const key = deriveFixtureKey('public-mint');
+      const publicMint = 'http://127.0.0.1:3348';
+      const wallet = new DoctorWallet({
+        mint: 'http://doctor-mint:3338',
+        publicMint,
+        relays: [urlA, urlB],
+        secretKey: key,
+        wallet: fakeMintWallet(),
+        publish: async (relayUrl, event) => {
+          const socket = new WebSocket(relayUrl);
+          await once(socket, 'open');
+          socket.send(JSON.stringify(['EVENT', event]));
+          await new Promise<void>((resolve, reject) => {
+            socket.on('message', (data) => {
+              const message = JSON.parse(data.toString()) as unknown[];
+              if (message[0] === 'OK' && message[1] === event.id) {
+                socket.close();
+                if (message[2] === true) resolve();
+                else reject(new Error(`rejected: ${String(message[3])}`));
+              }
+            });
+          });
+        },
+        now: () => 1_700_000_000,
+      });
+      expect(wallet.mint).toBe('http://doctor-mint:3338');
+      expect(wallet.publicMint).toBe(publicMint);
+      await wallet.publishWalletEvent();
+      const { tokenEventId } = await wallet.mintTokens(8);
+      const events = await collectEvents(urlA, wallet.pubkey);
+      const walletEvent = events.find((event) => event.kind === 17375);
+      expect(walletEvent).toBeDefined();
+      const conversationKey = nip44.v2.utils.getConversationKey(key, wallet.pubkey);
+      const walletPayload = JSON.parse(
+        nip44.v2.decrypt((walletEvent as Event).content, conversationKey),
+      ) as unknown[];
+      expect(walletPayload).toContainEqual(['mint', publicMint]);
+      const tokenEvent = events.find((event) => event.id === tokenEventId);
+      const tokenPayload = decryptToken(tokenEvent as Event, key, wallet.pubkey);
+      expect(tokenPayload.mint).toBe(publicMint);
+    });
+  });
+
   it('clean spend rolls over change and deletes the old token everywhere', async () => {
     await withRelays(async (urlA, urlB) => {
       const wallet = makeWallet([urlA, urlB], deriveFixtureKey('clean-spend'));

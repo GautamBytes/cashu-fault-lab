@@ -355,7 +355,8 @@ export function registerWalletDoctorCommands(
       io.stdout(renderFindingLines(result.diagnosisArtifact.diagnosis.findings));
       io.stdout(
         `check: ${result.ok ? 'PASS' : 'FAIL'} (${result.summary.errorFindings} error, ` +
-          `${result.summary.warningFindings} warning, ${result.summary.infoFindings} info)\n`,
+          `${result.summary.warningFindings} warning, ${result.summary.infoFindings} info, ` +
+          `${result.summary.failedRelays} relay failed)\n`,
       );
       if (!result.ok) setExitCode(1);
     });

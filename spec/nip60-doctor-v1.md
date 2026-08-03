@@ -14,7 +14,8 @@ A diagnosis consumes one versioned capture bundle (`spec/schemas/nip60-capture.s
 - **Per-relay observations**: for every relay, the `kind:17375` wallet event versions it serves,
   the `kind:7375` token events, the NIP-09 `kind:5` deletions, optional `kind:7376` history and
   `kind:7374` quote events, and malformed entries (decryption failure, invalid payload, wallet
-  without mints). Relay failures are recorded, never hidden.
+  without mints). Relay failures are recorded, never hidden; the `check` CI gate fails when any
+  relay in the capture has `status: error` (incomplete evidence is not a pass).
 - **Mint truth**: every proof discovered in any token event is classified `UNSPENT`, `SPENT`, or
   `PENDING` by its mint via NUT-07 `checkstate`. Proof secrets are dropped at capture; artifacts
   store only the public NUT-00 `Y`.

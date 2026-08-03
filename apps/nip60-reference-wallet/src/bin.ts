@@ -26,6 +26,9 @@ function required(name: string): string {
 }
 
 const mint = required('CFL_NIP60_FIXTURE_MINT');
+const publicMintEnv = process.env.CFL_NIP60_FIXTURE_PUBLIC_MINT;
+const publicMint =
+  publicMintEnv === undefined || publicMintEnv.trim() === '' ? mint : publicMintEnv.trim();
 const relays = required('CFL_NIP60_FIXTURE_RELAYS')
   .split(',')
   .map((relay) => relay.trim())
@@ -34,6 +37,7 @@ if (relays.length === 0) throw new Error('CFL_NIP60_FIXTURE_RELAYS must list at 
 
 const fixture = createFixtureServer({
   mint,
+  publicMint,
   relays,
   token: required('CFL_NIP60_FIXTURE_TOKEN'),
   walletFactory: (mintUrl) => new CashuTsMintWallet(mintUrl),

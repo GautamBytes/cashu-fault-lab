@@ -54,7 +54,8 @@ events are then reported as `decryption_failed` malformed entries).
 
 External wallet teams can produce the documented capture bundle in their own CI and run
 `npx cashu-fault-lab wallet-doctor check <capture>`; the bundle format is the interop contract
-(`spec/schemas/nip60-capture.schema.json`).
+(`spec/schemas/nip60-capture.schema.json`). The gate fails on any error-severity finding, any
+unreachable relay in the capture, or an unsafe repair plan.
 
 ## Run the scenario lane
 
@@ -86,6 +87,11 @@ development host:
 ```bash
 pnpm test:doctor:funded
 ```
+
+Compose sets `CFL_NIP60_FIXTURE_MINT` to the docker-internal mint URL for cashu-ts ops and
+`CFL_NIP60_FIXTURE_PUBLIC_MINT` to the host-published alias (`http://127.0.0.1:3348` by default).
+The fixture publishes the public URL into NIP-60 payloads so host-side captures can reach the mint
+for NUT-07 checkstate.
 
 A Docker-free golden lane runs the same packaged scenarios in-process with a fake mint in the
 unit tier (`packages/wallet-doctor-runner/test/scenario.test.ts`); the funded lane re-proves them

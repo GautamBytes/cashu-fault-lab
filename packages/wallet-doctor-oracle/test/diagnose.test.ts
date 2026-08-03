@@ -191,6 +191,45 @@ describe('diagnose: divergence codes', () => {
     const finding = result.findings.find((entry) => entry.code === 'DELETION_NOT_PROPAGATED');
     expect(finding?.severity).toBe('warning');
     expect(finding?.eventIds).toEqual(['d1', 'e2']);
+    // Plain deletions that did not propagate must not escalate to DEL_CHAIN_BREAK.
+    expect(result.findings.map((entry) => entry.code)).not.toContain('DEL_CHAIN_BREAK');
+    expect(result.ok).toBe(true);
+  });
+
+  it('does not emit HISTORY_GAP for a healthy rollover whose destroyed predecessor is pruned', () => {
+    // e1 spent into e2; relays keep the deletion of e1 and the live e2, plus a
+    // kind:7376 that references both. destroyed predecessors must not read as gaps.
+    const rolled = token('e2', [proof(8, 'y2')], { del: ['e1'], seenOn: [A, B] });
+    const result = diagnose(
+      observe(
+        [
+          relay(A, {
+            tokens: [rolled],
+            deletions: [del('d1', ['e1'], [A])],
+            history: [
+              {
+                eventId: 'h1',
+                createdAt: 1_700_000_200,
+                direction: 'out',
+                amount: 4,
+                unit: 'sat',
+                created: ['e2'],
+                destroyed: ['e1'],
+                redeemed: [],
+                seenOn: [A],
+              },
+            ],
+          }),
+          relay(B, {
+            tokens: [rolled],
+            deletions: [del('d1', ['e1'], [B])],
+          }),
+        ],
+        [{ mint: MINT, y: 'y2', state: 'UNSPENT' }],
+      ),
+    );
+    expect(result.findings.map((entry) => entry.code)).not.toContain('HISTORY_GAP');
+    expect(result.ok).toBe(true);
   });
 
   it('WALLET_EVENT_FORK when relays serve different wallet versions', () => {

@@ -85,6 +85,14 @@ export function buildRepairPlan(input: BuildPlanInput): RepairPlan {
       ]),
     ].sort();
     if (deleteIds.length === 0) continue;
+    // Unknown mint truth is not SPENT: deleting an event whose proofs were
+    // never checked could destroy UNSPENT value, so a mint with incomplete
+    // truth over the events it would delete is left unrepaired instead.
+    const deletesUncheckedProof = deleteIds.some((eventId) => {
+      const token = findToken(merged.liveTokens, merged.naiveLiveTokens, eventId);
+      return token?.proofs.some((proof) => !mintByY.has(proof.y)) ?? false;
+    });
+    if (deletesUncheckedProof) continue;
     const coveredYs = [
       ...new Set(
         liveForMint.flatMap((token) =>

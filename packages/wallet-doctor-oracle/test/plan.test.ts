@@ -203,6 +203,58 @@ describe('buildRepairPlan + checkRepairPlan', () => {
     );
   });
 
+  it('flags a rollover whose del list drops an uncovered UNSPENT proof (P1 via del)', () => {
+    const live = token('e2', [proof(4, 'y2')], { del: ['e1'], seenOn: [A] });
+    const broken = token('e9', [proof(8, 'y8')], { seenOn: [B] });
+    const observation: DoctorObservation = {
+      subject: SUBJECT,
+      relays: [relay(A, { tokens: [live] }), relay(B, { tokens: [broken] })],
+      mint: [
+        { mint: MINT, y: 'y2', state: 'UNSPENT' },
+        { mint: MINT, y: 'y8', state: 'UNSPENT' },
+      ],
+    };
+    const badPlan = {
+      schemaVersion: 1 as const,
+      subject: SUBJECT,
+      captureDigest: DIGEST,
+      steps: [
+        {
+          action: 'publish_rollover' as const,
+          rolloverId: 'planned:rollover:0',
+          mint: MINT,
+          unit: 'sat',
+          coveredYs: ['y2'],
+          del: ['e9', 'e2'],
+          toRelays: [A, B],
+        },
+      ],
+    };
+    const check = checkRepairPlan({ observation, plan: badPlan });
+    expect(check.ok).toBe(false);
+    expect(check.violations.some((violation) => violation.includes('y8'))).toBe(true);
+    expect(check.violations.some((violation) => violation.startsWith('P1_UNCOVERED_UNSPENT'))).toBe(
+      true,
+    );
+  });
+
+  it('refuses consolidation when mint truth is incomplete for a proof it would delete', () => {
+    const old = token('e1', [proof(4, 'y1'), proof(8, 'y2')], { seenOn: [B] });
+    const rolled = token('e2', [proof(8, 'y2')], { del: ['e1'], seenOn: [A] });
+    const observation: DoctorObservation = {
+      subject: SUBJECT,
+      relays: [
+        relay(A, { tokens: [rolled], deletions: [del('d1', ['e1'], [A])] }),
+        relay(B, { tokens: [old] }),
+      ],
+      // y1 deliberately unchecked — incomplete truth over the broken predecessor.
+      mint: [{ mint: MINT, y: 'y2', state: 'UNSPENT' }],
+    };
+    const { plan, check } = runPipeline(observation);
+    expect(plan.steps).toEqual([]);
+    expect(check.ok).toBe(true);
+  });
+
   it('flags unknown references (P3)', () => {
     const observation: DoctorObservation = {
       subject: SUBJECT,

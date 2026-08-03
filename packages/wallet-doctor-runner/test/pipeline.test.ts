@@ -68,6 +68,84 @@ describe('checkCapture', () => {
     expect(result.summary.errorFindings).toBe(0);
   });
 
+  it('fails when every relay is unreachable (incomplete evidence is not a pass)', () => {
+    const capture = captureWith(
+      [
+        {
+          url: A,
+          status: 'error',
+          error: 'connection failed',
+          wallet: [],
+          tokens: [],
+          deletions: [],
+          history: [],
+          quotes: [],
+          malformed: [],
+        },
+        {
+          url: B,
+          status: 'error',
+          error: 'connection failed',
+          wallet: [],
+          tokens: [],
+          deletions: [],
+          history: [],
+          quotes: [],
+          malformed: [],
+        },
+      ],
+      [],
+    );
+    const result = checkCapture(capture);
+    expect(result.ok).toBe(false);
+    expect(result.summary.failedRelays).toBe(2);
+    expect(result.summary.errorFindings).toBe(0);
+    expect(result.summary.codes).toEqual([]);
+  });
+
+  it('emits diagnosis codes in sorted order for stable CI comparisons', () => {
+    const tokenA = {
+      eventId: HEX('a'),
+      createdAt: 1_700_000_000,
+      mint: MINT,
+      unit: 'sat',
+      proofs: [{ keysetId: 'k', amount: 2, y: Y('a') }],
+      del: [],
+      seenOn: [A],
+    };
+    const capture = captureWith(
+      [
+        relay(A, {
+          tokens: [tokenA],
+          wallet: [
+            {
+              eventId: HEX('f'),
+              createdAt: 1_700_000_500,
+              mints: [MINT],
+              hasP2pkKey: true,
+              seenOn: [A],
+            },
+          ],
+        }),
+        relay(B, {
+          wallet: [
+            {
+              eventId: HEX('e'),
+              createdAt: 1_700_000_000,
+              mints: [MINT],
+              hasP2pkKey: true,
+              seenOn: [B],
+            },
+          ],
+        }),
+      ],
+      [{ mint: MINT, y: Y('a'), state: 'UNSPENT' }],
+    );
+    const result = checkCapture(capture);
+    // RELAY_PARTITION (warning) + WALLET_EVENT_FORK (error) — alphabetical codes.
+    expect(result.summary.codes).toEqual(['RELAY_PARTITION', 'WALLET_EVENT_FORK']);
+  });
+
   it('fails on a del-chain break and attaches a safe repair plan', () => {
     const oldToken = {
       eventId: HEX('2'),
