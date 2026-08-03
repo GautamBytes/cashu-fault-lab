@@ -445,22 +445,12 @@
         "buildDigest": "sha256:7c3263be90100bbc66bdcd1d687915e1cce8b0e045fc3801cf4a528c474c53ef"
       },
       "role": {
-        "transports": [
-          "http",
-          "nostr"
-        ],
-        "profiles": [
-          "delivery-v1"
-        ],
+        "transports": ["http", "nostr"],
+        "profiles": ["delivery-v1"],
         "durability": "restart_safe",
         "evidence": {
           "tier": "T1",
-          "sources": [
-            "adapter",
-            "runner",
-            "transport",
-            "durable_state"
-          ]
+          "sources": ["adapter", "runner", "transport", "durable_state"]
         }
       }
     },
@@ -474,21 +464,12 @@
         "buildDigest": "sha256:ff5befa0b846dbe733271ad2d5171f494da2c347e1c5a5748940474d2904e90f"
       },
       "role": {
-        "transports": [
-          "http"
-        ],
-        "profiles": [
-          "delivery-v1"
-        ],
+        "transports": ["http"],
+        "profiles": ["delivery-v1"],
         "durability": "process",
         "evidence": {
           "tier": "T1",
-          "sources": [
-            "adapter",
-            "runner",
-            "transport",
-            "mint"
-          ]
+          "sources": ["adapter", "runner", "transport", "mint"]
         }
       }
     }
