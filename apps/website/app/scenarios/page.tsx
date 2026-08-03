@@ -76,7 +76,7 @@ export default async function ScenariosPage() {
                     <p>{scenario.description}</p>
                     <div className={styles.runCommand}>
                       <span aria-hidden="true">$</span>
-                      <code>pnpm lab run {scenario.slug} --seed demo</code>
+                      <code>{scenario.runCommand}</code>
                     </div>
                     <a
                       className={styles.sourceLink}

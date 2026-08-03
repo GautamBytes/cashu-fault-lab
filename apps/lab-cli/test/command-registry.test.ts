@@ -29,6 +29,13 @@ describe('CLI command registry', () => {
       'lifecycle run',
       'lifecycle matrix',
       'lifecycle replay',
+      'wallet-doctor collect',
+      'wallet-doctor diagnose',
+      'wallet-doctor plan',
+      'wallet-doctor check',
+      'wallet-doctor run',
+      'wallet-doctor matrix',
+      'wallet-doctor replay',
     ]);
 
     expect(byName.get('run')).toMatchObject({

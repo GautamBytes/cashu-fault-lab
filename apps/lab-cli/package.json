@@ -31,6 +31,9 @@
     "@cashu-fault-lab/wallet-lifecycle-contract": "workspace:*",
     "@cashu-fault-lab/wallet-lifecycle-oracle": "workspace:*",
     "@cashu-fault-lab/wallet-lifecycle-runner": "workspace:*",
-    "commander": "15.0.0"
+    "@cashu-fault-lab/wallet-doctor-contract": "workspace:*",
+    "@cashu-fault-lab/wallet-doctor-runner": "workspace:*",
+    "commander": "15.0.0",
+    "nostr-tools": "2.23.12"
   }
 }

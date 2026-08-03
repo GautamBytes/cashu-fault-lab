@@ -27,6 +27,7 @@ import { preflightLocalAdapters, type AdapterPreflightReport } from './adapter-p
 import { createAdapterPreviewArtifacts, validateLocalFaultGateway } from './adapter-preview.js';
 import { registerAdapterCommands } from './commands/adapter.js';
 import { registerLifecycleCommands } from './commands/lifecycle.js';
+import { registerWalletDoctorCommands } from './commands/wallet-doctor.js';
 import { createEnvironmentLifecycleRuntime } from './lifecycle-runtime.js';
 import {
   LabDiagnosticError,
@@ -306,6 +307,14 @@ export async function runCli(
     distribution: dependencies.distribution ?? 'workspace',
     lifecycleRuntime: dependencies.lifecycleRuntime ?? createEnvironmentLifecycleRuntime(env),
     ...(doctorProbes === undefined ? {} : { doctorProbes }),
+    setExitCode: (code) => {
+      exitCode = code;
+    },
+  });
+  registerWalletDoctorCommands(program, {
+    io,
+    env,
+    distribution: dependencies.distribution ?? 'workspace',
     setExitCode: (code) => {
       exitCode = code;
     },

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "orphaned-proofs",
+  "name": "Orphaned proofs after delete without rollover",
+  "description": "A deletion reaches every relay but no successor token event exists; the proofs are still unspent at the mint and recoverable, yet no application can see them.",
+  "expect": {
+    "codes": ["ORPHANED_PROOFS"],
+    "ok": false,
+    "merged": 0,
+    "mintVerified": 16,
+    "orphanedUnspent": 16
+  },
+  "commands": [
+    {
+      "op": "mint",
+      "amount": 16
+    },
+    {
+      "op": "spend",
+      "amount": 1,
+      "mode": "delete-only"
+    }
+  ]
+}

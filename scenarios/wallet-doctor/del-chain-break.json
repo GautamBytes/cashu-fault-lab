@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "del-chain-break",
+  "name": "Del-chain break across two relays",
+  "description": "A spend rolls over change everywhere but the deletion only reaches one relay; the stale spent token stays live elsewhere, so a naive merge shows 28 sats where the mint reports 12.",
+  "expect": {
+    "codes": ["DEL_CHAIN_BREAK"],
+    "ok": false,
+    "merged": 12,
+    "mintVerified": 12
+  },
+  "commands": [
+    {
+      "op": "mint",
+      "amount": 16
+    },
+    {
+      "op": "spend",
+      "amount": 4,
+      "mode": "partial-delete"
+    }
+  ]
+}

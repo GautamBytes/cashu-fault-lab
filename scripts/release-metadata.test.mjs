@@ -18,6 +18,10 @@ const workspacePackages = [
   'packages/oracle/package.json',
   'packages/report/package.json',
   'packages/scenario-runner/package.json',
+  'packages/wallet-doctor-contract/package.json',
+  'packages/wallet-doctor-core/package.json',
+  'packages/wallet-doctor-oracle/package.json',
+  'packages/wallet-doctor-runner/package.json',
 ];
 const releaseVersion = '0.1.0';
 const demoSeed = 'cashu-fault-lab-v0.1.0-demo';

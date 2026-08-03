@@ -1,0 +1,33 @@
+{
+  "name": "@cashu-fault-lab/wallet-doctor-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@cashu-fault-lab/wallet-doctor-contract": "workspace:*",
+    "@cashu-fault-lab/wallet-doctor-core": "workspace:*",
+    "@cashu-fault-lab/wallet-doctor-oracle": "workspace:*"
+  },
+  "devDependencies": {
+    "@cashu-fault-lab/nip60-reference-wallet": "workspace:*",
+    "@cashu-fault-lab/nostr-fault-relay": "workspace:*",
+    "@types/ws": "8.18.1",
+    "nostr-tools": "2.23.12",
+    "ws": "8.21.1"
+  }
+}

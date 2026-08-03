@@ -56,6 +56,8 @@ test('unit package tests exclude every container-backed suite', () => {
     'cross-language-docker.test.ts',
     'funded-lifecycle.test.ts',
     'regtest-melt.test.ts',
+    'wallet-doctor-cli-e2e.test.ts',
+    'funded-doctor.test.ts',
   ]) {
     assert.match(command, new RegExp(suite.replaceAll('.', '\\.')));
   }

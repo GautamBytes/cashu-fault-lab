@@ -59,6 +59,16 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
     order: 35,
   },
   {
+    kind: 'markdown',
+    slug: 'wallet-doctor',
+    href: '/docs/wallet-doctor',
+    sourcePath: 'docs/wallet-doctor.md',
+    title: 'NIP-60 wallet doctor',
+    description: 'Multi-relay wallet-state diagnosis, mint verification, and dry-run repair plans.',
+    group: 'Integrate',
+    order: 36,
+  },
+  {
     kind: 'generated',
     slug: 'architecture',
     href: '/architecture',

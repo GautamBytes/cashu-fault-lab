@@ -17,7 +17,7 @@ describe('generated content pages', () => {
   it('renders every repository scenario with an exact run command and source link', async () => {
     render(await ScenariosPage());
 
-    expect(screen.getAllByRole('article')).toHaveLength(41);
+    expect(screen.getAllByRole('article')).toHaveLength(48);
     const responseLost = screen.getByRole('article', { name: 'http-response-lost' });
     expect(
       within(responseLost).getByText('pnpm lab run retry/response-lost --seed demo'),
@@ -118,10 +118,12 @@ describe('generated content pages', () => {
     const links = within(documentationNavigation).getAllByRole('link');
     const adaptersIndex = links.findIndex((link) => link.textContent === 'Adapter guide');
     const lifecycleIndex = links.findIndex((link) => link.textContent === 'Wallet lifecycle');
+    const doctorIndex = links.findIndex((link) => link.textContent === 'NIP-60 wallet doctor');
     const architectureIndex = links.findIndex((link) => link.textContent === 'Architecture');
 
     expect(lifecycleIndex).toBe(adaptersIndex + 1);
-    expect(architectureIndex).toBe(lifecycleIndex + 1);
+    expect(doctorIndex).toBe(lifecycleIndex + 1);
+    expect(architectureIndex).toBe(doctorIndex + 1);
     const architectureLink = links[architectureIndex];
     if (!architectureLink) throw new Error('Expected Architecture navigation link');
     expect(architectureLink).toHaveAttribute('href', '/architecture');

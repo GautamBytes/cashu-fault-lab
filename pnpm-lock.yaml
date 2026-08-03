@@ -109,6 +109,12 @@ importers:
       '@cashu-fault-lab/scenario-runner':
         specifier: workspace:*
         version: link:../../packages/scenario-runner
+      '@cashu-fault-lab/wallet-doctor-contract':
+        specifier: workspace:*
+        version: link:../../packages/wallet-doctor-contract
+      '@cashu-fault-lab/wallet-doctor-runner':
+        specifier: workspace:*
+        version: link:../../packages/wallet-doctor-runner
       '@cashu-fault-lab/wallet-lifecycle-contract':
         specifier: workspace:*
         version: link:../../packages/wallet-lifecycle-contract
@@ -124,8 +130,33 @@ importers:
       commander:
         specifier: 15.0.0
         version: 15.0.0
+      nostr-tools:
+        specifier: 2.23.12
+        version: 2.23.12(typescript@7.0.2)
 
   apps/lightning-regtest-probe: {}
+
+  apps/nip60-reference-wallet:
+    dependencies:
+      '@cashu-fault-lab/nostr-delivery':
+        specifier: workspace:*
+        version: link:../../packages/nostr-delivery
+      '@cashu/cashu-ts':
+        specifier: 4.7.2
+        version: 4.7.2
+      nostr-tools:
+        specifier: 2.23.12
+        version: 2.23.12(typescript@7.0.2)
+    devDependencies:
+      '@cashu-fault-lab/nostr-fault-relay':
+        specifier: workspace:*
+        version: link:../nostr-fault-relay
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
+      ws:
+        specifier: 8.21.1
+        version: 8.21.1
 
   apps/nostr-fault-relay:
     dependencies:
@@ -372,6 +403,67 @@ importers:
       fast-check:
         specifier: 4.9.0
         version: 4.9.0
+
+  packages/wallet-doctor-contract:
+    dependencies:
+      '@cashu-fault-lab/wallet-doctor-core':
+        specifier: workspace:*
+        version: link:../wallet-doctor-core
+      '@cashu/cashu-ts':
+        specifier: 4.7.2
+        version: 4.7.2
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
+      nostr-tools:
+        specifier: 2.23.12
+        version: 2.23.12(typescript@7.0.2)
+      ws:
+        specifier: 8.21.1
+        version: 8.21.1
+    devDependencies:
+      '@cashu-fault-lab/nostr-fault-relay':
+        specifier: workspace:*
+        version: link:../../apps/nostr-fault-relay
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
+
+  packages/wallet-doctor-core: {}
+
+  packages/wallet-doctor-oracle:
+    dependencies:
+      '@cashu-fault-lab/wallet-doctor-core':
+        specifier: workspace:*
+        version: link:../wallet-doctor-core
+
+  packages/wallet-doctor-runner:
+    dependencies:
+      '@cashu-fault-lab/wallet-doctor-contract':
+        specifier: workspace:*
+        version: link:../wallet-doctor-contract
+      '@cashu-fault-lab/wallet-doctor-core':
+        specifier: workspace:*
+        version: link:../wallet-doctor-core
+      '@cashu-fault-lab/wallet-doctor-oracle':
+        specifier: workspace:*
+        version: link:../wallet-doctor-oracle
+    devDependencies:
+      '@cashu-fault-lab/nip60-reference-wallet':
+        specifier: workspace:*
+        version: link:../../apps/nip60-reference-wallet
+      '@cashu-fault-lab/nostr-fault-relay':
+        specifier: workspace:*
+        version: link:../../apps/nostr-fault-relay
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
+      nostr-tools:
+        specifier: 2.23.12
+        version: 2.23.12(typescript@7.0.2)
+      ws:
+        specifier: 8.21.1
+        version: 8.21.1
 
   packages/wallet-lifecycle-contract:
     dependencies:

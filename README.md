@@ -61,6 +61,27 @@ automatically manages its local fault gateway and writes redacted JSON, HTML, JU
 replay evidence to `cashu-fault-results/`. Share the bundle for developer feedback, not as release
 qualification or certification.
 
+## Diagnose NIP-60 wallet state across relays
+
+The NIP-60 wallet doctor is an opt-in diagnostic lane: it collects one wallet's events from
+several Nostr relays, reconstructs the per-relay, merged, and mint-verified views, explains why
+applications disagree about a balance with nine stable diagnosis codes, and emits a deterministic
+dry-run repair plan. It never publishes events and never moves value; proof secrets are dropped at
+capture time. Like the lifecycle suite it is intentionally separate from the delivery routes and
+not part of release qualification. See the [wallet doctor guide](docs/wallet-doctor.md).
+
+```bash
+export CFL_NIP60_SUBJECT_KEY='nsec1… or 64-hex test key'
+npx cashu-fault-lab wallet-doctor collect --relay ws://127.0.0.1:4430 --relay ws://127.0.0.1:4431
+npx cashu-fault-lab wallet-doctor check artifacts/wallet-doctor/capture.json
+```
+
+External wallet teams produce the documented capture bundle (`spec/schemas/nip60-capture.schema.json`)
+in their own CI and run `wallet-doctor check` as the interop gate. The seeded scenario lane
+(`scenarios/wallet-doctor/`) drives the lab reference wallet fixture against two Nostr fault
+relays and a real mint with `pnpm test:doctor:funded`, and replays artifacts with
+`wallet-doctor replay`.
+
 ## Exercise wallet lifecycle recovery
 
 The lifecycle control plane is a developer preview for crash-safe Cashu wallet operations. It adds

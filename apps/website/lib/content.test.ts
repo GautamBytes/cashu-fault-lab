@@ -26,6 +26,7 @@ describe('canonical content', () => {
       'cli',
       'adapters',
       'wallet-lifecycle',
+      'wallet-doctor',
       'architecture',
       'delivery-profile',
       'invariants',
