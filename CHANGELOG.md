@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed funded wallet-doctor `ghost-balance` failures when Nutshell input fees made a
+  full-balance online swap impossible; the fixture now clamps send amounts with
+  `maxSpendableAfterFees` and the scenario spends a fee-safe partial amount.
 - Added the NIP-60 wallet doctor suite: multi-relay capture with NIP-44 decryption and NUT-07 mint
   verification, three-way wallet reconstruction (per-relay, merged, mint-verified), nine stable
   diagnosis codes, and deterministic dry-run repair plans with oracle-checked safety invariants.

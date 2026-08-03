@@ -244,6 +244,21 @@ describe('DoctorWallet relay behaviors', () => {
     });
   });
 
+  it('ghost spend accepts a full-balance amount (mint wallet may clamp for fees)', async () => {
+    await withRelays(async (urlA, urlB) => {
+      const wallet = makeWallet([urlA, urlB], deriveFixtureKey('ghost-full-balance'));
+      const { tokenEventId } = await wallet.mintTokens(16);
+      const result = await wallet.spend(16, 'ghost');
+      expect(result.balance).toBe(0);
+      expect(result.tokenEventId).toBe(tokenEventId);
+      for (const url of [urlA, urlB]) {
+        const events = await collectEvents(url, wallet.pubkey);
+        expect(events.some((event) => event.id === tokenEventId)).toBe(true);
+        expect(events.some((event) => event.kind === 5)).toBe(false);
+      }
+    });
+  });
+
   it('delete-only orphans proofs without spending them', async () => {
     await withRelays(async (urlA, urlB) => {
       const wallet = makeWallet([urlA, urlB], deriveFixtureKey('delete-only'));
