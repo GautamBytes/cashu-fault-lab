@@ -164,7 +164,4 @@ Repository fixtures use development identities, so passing local tests is strong
 evidence but is not an external certification claim. See the
 [v0.1.4 maintainer-preview checklist](releases/v0.1.4-checklist.md).
 
-The normative contract is [the lifecycle OpenAPI document](../spec/lifecycle-openapi.yaml). The
-approved architecture and implementation history are recorded in the
-[design](superpowers/specs/2026-08-01-wallet-lifecycle-lab-design.md) and
-[implementation plan](superpowers/plans/2026-08-01-wallet-lifecycle-v1.md).
+The normative contract is [the lifecycle OpenAPI document](../spec/lifecycle-openapi.yaml).

@@ -20,8 +20,8 @@ The lab implements an experimental `cashu-delivery-v1` application profile on ex
 Run the developer preview without cloning the repository or installing pnpm and Rust:
 
 ```bash
-npx cashu-fault-lab doctor
-npx cashu-fault-lab demo
+npx cashu-fault-lab@0.1.4 doctor
+npx cashu-fault-lab@0.1.4 demo
 ```
 
 This requires Node.js 24 and Docker. The npm package contains the CLI, scenarios, schemas, and
@@ -72,8 +72,8 @@ not part of release qualification. See the [wallet doctor guide](docs/wallet-doc
 
 ```bash
 export CFL_NIP60_SUBJECT_KEY='nsec1… or 64-hex test key'
-npx cashu-fault-lab wallet-doctor collect --relay ws://127.0.0.1:4430 --relay ws://127.0.0.1:4431
-npx cashu-fault-lab wallet-doctor check artifacts/wallet-doctor/capture.json
+npx cashu-fault-lab@0.1.4 wallet-doctor collect --relay ws://127.0.0.1:4430 --relay ws://127.0.0.1:4431
+npx cashu-fault-lab@0.1.4 wallet-doctor check artifacts/wallet-doctor/capture.json
 ```
 
 External wallet teams produce the documented capture bundle (`spec/schemas/nip60-capture.schema.json`)

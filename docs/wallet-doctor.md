@@ -26,8 +26,7 @@ Diagnosis codes emitted today: `RELAY_PARTITION`, `GHOST_TOKEN`, `ORPHANED_PROOF
 `DEL_CHAIN_BREAK`, `WALLET_EVENT_FORK`, `DELETION_NOT_PROPAGATED`, `HISTORY_GAP`, `QUOTE_LIMBO`,
 and `MALFORMED_EVENT`. Every code maps a user symptom ("sats missing", "sats counted twice",
 "wallet not recognized") to relay/mint evidence. See
-[the profile document](../spec/nip60-doctor-v1.md) for the reconstruction rules and
-[the design document](superpowers/specs/2026-08-03-nip60-wallet-doctor-design.md) for scope.
+[the profile document](../spec/nip60-doctor-v1.md) for the reconstruction rules.
 
 ## Diagnose a wallet from relays
 
@@ -53,7 +52,7 @@ plan-safety violation. Keyless evidence gathering is possible with `--pubkey <he
 events are then reported as `decryption_failed` malformed entries).
 
 External wallet teams can produce the documented capture bundle in their own CI and run
-`npx cashu-fault-lab wallet-doctor check <capture>`; the bundle format is the interop contract
+`npx cashu-fault-lab@0.1.4 wallet-doctor check <capture>`; the bundle format is the interop contract
 (`spec/schemas/nip60-capture.schema.json`). The gate fails on any error-severity finding, any
 unreachable relay in the capture, or an unsafe repair plan.
 
