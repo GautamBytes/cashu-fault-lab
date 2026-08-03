@@ -8,10 +8,10 @@ from the stable delivery routes and is not part of the current release qualifica
 [wallet lifecycle guide](docs/wallet-lifecycle.md) for implemented scope and remaining work.
 
 This is an experimental v0.1 developer preview, not certification. The current supported CLI is
-v0.1.3. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
+v0.1.4. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
 identities, trustworthy build provenance, and external integrations. See the
-[v0.1.3 release notes](docs/releases/v0.1.3.md) and
-[v0.1.3 checklist](docs/releases/v0.1.3-checklist.md).
+[v0.1.4 release notes](docs/releases/v0.1.4.md) and
+[v0.1.4 checklist](docs/releases/v0.1.4-checklist.md).
 
 The lab implements an experimental `cashu-delivery-v1` application profile on existing Cashu and Nostr protocols. Harness operation does not require a new NUT. See [ADR 001](docs/adrs/001-delivery-semantics.md) for the standardization boundary.
 
@@ -30,11 +30,11 @@ writes redacted JSON and HTML evidence, and removes the stack when it finishes.
 
 ## Test a local wallet adapter
 
-The v0.1.3 maintainer preview scaffolds an adapter, validates its contract without mutating wallet
+The v0.1.4 maintainer preview scaffolds an adapter, validates its contract without mutating wallet
 state, then runs response-loss and duplicate-delivery checks:
 
 ```bash
-npx cashu-fault-lab@0.1.3 adapter init \
+npx cashu-fault-lab@0.1.4 adapter init \
   --language typescript \
   --name my-wallet
 ```
@@ -45,17 +45,17 @@ they are connected to real wallet operations. Then start the adapter and export 
 named by its manifest.
 
 ```bash
-npx cashu-fault-lab@0.1.3 adapter preflight \
+npx cashu-fault-lab@0.1.4 adapter preflight \
   --adapters ./my-wallet/adapter-manifest.json
 
-npx cashu-fault-lab@0.1.3 adapter preview \
+npx cashu-fault-lab@0.1.4 adapter preview \
   --adapters ./my-wallet/adapter-manifest.json \
   --sender my-wallet \
   --receiver my-wallet \
   --output-dir ./cashu-fault-results
 ```
 
-Choose `typescript`, `rust`, or `python` when generating the adapter. Version 0.1.3 accepts only
+Choose `typescript`, `rust`, or `python` when generating the adapter. Version 0.1.4 accepts only
 loopback HTTP origins; remote and hosted wallet adapters are intentionally rejected. The preview
 automatically manages its local fault gateway and writes redacted JSON, HTML, JUnit, preflight, and
 replay evidence to `cashu-fault-results/`. Share the bundle for developer feedback, not as release
