@@ -14,7 +14,7 @@
     },
     {
       "op": "spend",
-      "amount": 16,
+      "amount": 4,
       "mode": "ghost"
     }
   ]

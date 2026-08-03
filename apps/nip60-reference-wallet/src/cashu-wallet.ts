@@ -57,18 +57,39 @@ export class CashuTsMintWallet implements FixtureMintWallet {
       await this.#wallet.loadMint();
       this.#loaded = true;
     }
-    // Always take the online swap path. wallet.send() may satisfy an exact
-    // offline match without contacting the mint, which breaks ghost-balance
-    // (live event proofs would stay UNSPENT). includeFees keeps the receiver
-    // amount exact when the mint charges input fees.
+    // Always take the online swap path via prepareSwapToSend/completeSwap.
+    // wallet.send() may satisfy an exact offline match without contacting the
+    // mint, which breaks ghost-balance (live event proofs would stay UNSPENT).
+    // includeFees is false so `amount` is the exact send split; input fees
+    // reduce keep. Clamp to maxSpendableAfterFees so full-balance/ghost spends
+    // still succeed when Nutshell charges per-input fees (1-sat headroom is not
+    // enough once several denomination proofs are selected).
     const normalized = normalizedProofs(proofs as unknown as Proof[]);
-    const preview = await this.#wallet.prepareSwapToSend(amount, normalized, {
-      includeFees: true,
-    });
-    const result = await this.#wallet.completeSwap(preview);
-    return {
-      send: normalizedProofs(result.send).map(normalizeProof),
-      keep: normalizedProofs(result.keep).map(normalizeProof),
-    };
+    const maxSpendable = this.#wallet.maxSpendableAfterFees(normalized).toNumber();
+    if (!Number.isSafeInteger(maxSpendable) || maxSpendable < 1) {
+      throw new Error('Not enough funds available to send after fees');
+    }
+    let attempt = Math.min(amount, maxSpendable);
+    let lastError: unknown;
+    while (attempt >= 1) {
+      try {
+        const preview = await this.#wallet.prepareSwapToSend(attempt, normalized, {
+          includeFees: false,
+        });
+        const result = await this.#wallet.completeSwap(preview);
+        return {
+          send: normalizedProofs(result.send).map(normalizeProof),
+          keep: normalizedProofs(result.keep).map(normalizeProof),
+        };
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        if (attempt === 1 || !/not enough funds/iu.test(message)) throw error;
+        attempt -= 1;
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('Not enough funds available to send after fees');
   }
 }
