@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "healthy",
+  "name": "Healthy replicated wallet",
+  "description": "A minted token event reaches every relay and all proofs stay unspent; the doctor must report zero findings.",
+  "expect": {
+    "codes": [],
+    "ok": true,
+    "merged": 16,
+    "mintVerified": 16,
+    "doubleCounted": 0
+  },
+  "commands": [
+    {
+      "op": "mint",
+      "amount": 16
+    }
+  ]
+}

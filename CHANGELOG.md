@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Added the NIP-60 wallet doctor suite: multi-relay capture with NIP-44 decryption and NUT-07 mint
+  verification, three-way wallet reconstruction (per-relay, merged, mint-verified), nine stable
+  diagnosis codes, and deterministic dry-run repair plans with oracle-checked safety invariants.
+- Added the `wallet-doctor collect/diagnose/plan/check/run/matrix/replay` CLI surface and the
+  versioned capture bundle (`spec/schemas/nip60-capture.schema.json`) as the CI interop contract
+  for external wallet teams.
+- Added a lab-only reference NIP-60 wallet fixture with deliberate publish-fault modes, seven
+  packaged scenarios under `scenarios/wallet-doctor/`, seeded replay, and the funded
+  `test:doctor:funded` lane (pinned Nutshell mint, two fault relays, fixture).
+- Added persistent history partitions and an authenticated HTTP fault-control surface
+  (`/v1/faults/*`, including `/v1/faults/reset`) to the Nostr fault relay.
+
 ## 0.1.3 — 2026-08-02
 
 - Added the wallet lifecycle lab for restart-safe mint, swap, send, receive, restore, reconcile, and melt recovery experiments.

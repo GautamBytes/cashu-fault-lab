@@ -28,6 +28,47 @@ export interface NostrFaultEvidence {
   readonly publishAttempts: number;
   readonly historyQueries: number;
   readonly rules: readonly NostrFaultRuleEvidence[];
+  readonly partition: NostrHistoryPartition | null;
+}
+
+/** Persistent relay-side history loss: matching stored events are withheld
+ * from REQ responses until the partition is cleared. */
+export interface NostrHistoryPartition {
+  readonly eventIds: readonly string[];
+  readonly kinds: readonly number[];
+  readonly authors: readonly string[];
+}
+
+export function validatePartition(input: unknown): NostrHistoryPartition {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new Error('History partition is invalid');
+  }
+  const candidate = input as Readonly<Record<string, unknown>>;
+  const hex64 = (value: unknown): value is string =>
+    typeof value === 'string' && /^[0-9a-f]{64}$/u.test(value);
+  const eventIds = candidate.eventIds === undefined ? [] : candidate.eventIds;
+  const kinds = candidate.kinds === undefined ? [] : candidate.kinds;
+  const authors = candidate.authors === undefined ? [] : candidate.authors;
+  if (!Array.isArray(eventIds) || !eventIds.every(hex64) || eventIds.length > 100_000) {
+    throw new Error('History partition eventIds are invalid');
+  }
+  if (
+    !Array.isArray(kinds) ||
+    !kinds.every(
+      (kind) => Number.isSafeInteger(kind) && (kind as number) >= 0 && (kind as number) <= 65_535,
+    ) ||
+    kinds.length > 1_024
+  ) {
+    throw new Error('History partition kinds are invalid');
+  }
+  if (!Array.isArray(authors) || !authors.every(hex64) || authors.length > 1_024) {
+    throw new Error('History partition authors are invalid');
+  }
+  return {
+    eventIds: [...eventIds],
+    kinds: [...(kinds as number[])],
+    authors: [...authors],
+  };
 }
 
 interface StoredRule {
@@ -96,6 +137,25 @@ export class NostrFaultControl {
   #nextId = 1;
   #publishAttempts = 0;
   #historyQueries = 0;
+  #partition: NostrHistoryPartition | null = null;
+
+  setPartition(input: unknown): NostrHistoryPartition {
+    this.#partition = validatePartition(input);
+    return this.#partition;
+  }
+
+  clearPartition(): void {
+    this.#partition = null;
+  }
+
+  partition(): NostrHistoryPartition | null {
+    return this.#partition;
+  }
+
+  clear(): void {
+    this.#rules.length = 0;
+    this.#partition = null;
+  }
 
   setRule(input: NostrFaultRuleInput): string {
     const id = `nostr-rule-${this.#nextId}`;
@@ -125,6 +185,7 @@ export class NostrFaultControl {
         remaining,
         applied,
       })),
+      partition: this.#partition,
     };
   }
 

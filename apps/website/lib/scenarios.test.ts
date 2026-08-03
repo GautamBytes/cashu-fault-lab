@@ -12,13 +12,14 @@ describe('getScenarioGroups', () => {
     const groups = await getScenarioGroups();
     const all = groups.flatMap((group) => group.scenarios);
 
-    expect(all).toHaveLength(41);
+    expect(all).toHaveLength(48);
     expect(groups.map((group) => group.family)).toEqual([
       'concurrency',
       'conformance',
       'crash-recovery',
       'retry',
       'security',
+      'wallet-doctor',
       'wallet-lifecycle',
     ]);
     expect(all.find((item) => item.slug === 'retry/response-lost')).toMatchObject({
@@ -32,6 +33,12 @@ describe('getScenarioGroups', () => {
       name: 'Concurrent resume',
       family: 'wallet-lifecycle',
       commandCount: 4,
+    });
+    expect(all.find((item) => item.slug === 'wallet-doctor/del-chain-break')).toMatchObject({
+      name: 'Del-chain break across two relays',
+      family: 'wallet-doctor',
+      commandCount: 2,
+      runCommand: 'pnpm lab wallet-doctor run del-chain-break --seed demo',
     });
   });
 });

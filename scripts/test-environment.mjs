@@ -25,6 +25,15 @@ const LIFECYCLE_ENV = {
   CFL_LIFECYCLE_MINTD_PUBLIC_MINT_URL: 'http://127.0.0.1:8085',
 };
 const LIFECYCLE_REGTEST_COMPOSE = 'infra/compose/lightning-regtest.compose.yml';
+const DOCTOR_COMPOSE = 'infra/compose/wallet-doctor.compose.yml';
+const DOCTOR_ENV = {
+  CFL_WALLET_DOCTOR_RELAY_TOKEN: 'wallet-doctor-relay-token',
+  CFL_WALLET_DOCTOR_FIXTURE_TOKEN: 'wallet-doctor-fixture-token',
+  CFL_WALLET_DOCTOR_RELAY_CONTROL_TOKEN: 'wallet-doctor-relay-token',
+  CFL_WALLET_DOCTOR_FIXTURE_URL: 'http://127.0.0.1:4500',
+  CFL_WALLET_DOCTOR_RELAYS: 'ws://127.0.0.1:4430,ws://127.0.0.1:4431',
+  CFL_WALLET_DOCTOR_RELAY_CONTROLS: 'http://127.0.0.1:4440,http://127.0.0.1:4441',
+};
 const LIFECYCLE_REGTEST_ENV = {
   CFL_LIGHTNING_PROBE_TOKEN: 'lifecycle-regtest-probe-token',
   CFL_HTTP_FAULT_GATEWAY_TOKEN: 'lifecycle-regtest-fault-token',
@@ -40,7 +49,7 @@ function fail(message) {
 const separator = process.argv.indexOf('--');
 if (separator < 3 || separator === process.argv.length - 1) {
   fail(
-    'usage: node scripts/test-environment.mjs <docker|funded|lifecycle-funded|lifecycle-regtest> [--skip-unavailable] -- <command> [args...]',
+    'usage: node scripts/test-environment.mjs <docker|funded|lifecycle-funded|lifecycle-regtest|doctor-funded> [--skip-unavailable] -- <command> [args...]',
   );
 } else {
   const mode = process.argv[2];
@@ -51,7 +60,8 @@ if (separator < 3 || separator === process.argv.length - 1) {
     mode !== 'docker' &&
     mode !== 'funded' &&
     mode !== 'lifecycle-funded' &&
-    mode !== 'lifecycle-regtest'
+    mode !== 'lifecycle-regtest' &&
+    mode !== 'doctor-funded'
   ) {
     fail(`unknown test environment mode: ${mode}`);
   } else if (options.size > 1 || [...options].some((value) => value !== '--skip-unavailable')) {
@@ -108,6 +118,45 @@ if (separator < 3 || separator === process.argv.length - 1) {
         { stdio: 'inherit', env: environment, timeout: 120_000 },
       );
       if (down.status !== 0 && !failed) fail('test:lifecycle:regtest could not clean up Compose');
+    } else if (mode === 'doctor-funded') {
+      const environment = { ...process.env, ...DOCTOR_ENV };
+      let failed = false;
+      const clean = spawnSync(
+        'docker',
+        ['compose', '-f', DOCTOR_COMPOSE, 'down', '--volumes', '--remove-orphans'],
+        { stdio: 'inherit', env: environment, timeout: 120_000 },
+      );
+      if (clean.status !== 0) {
+        fail('test:doctor:funded could not clean the Compose stack');
+        failed = true;
+      }
+      if (!failed) {
+        const up = spawnSync(
+          'docker',
+          ['compose', '-f', DOCTOR_COMPOSE, 'up', '--build', '-d', '--wait'],
+          { stdio: 'inherit', env: environment, timeout: 900_000 },
+        );
+        if (up.status !== 0) {
+          fail('test:doctor:funded could not start the Compose stack');
+          failed = true;
+        }
+      }
+      if (!failed) {
+        const result = spawnSync(command, args, {
+          stdio: 'inherit',
+          env: { ...environment, CFL_WALLET_DOCTOR_E2E: '1' },
+        });
+        if (result.status !== 0) {
+          process.exitCode = result.status ?? 1;
+          failed = true;
+        }
+      }
+      const down = spawnSync(
+        'docker',
+        ['compose', '-f', DOCTOR_COMPOSE, 'down', '--volumes', '--remove-orphans'],
+        { stdio: 'inherit', env: environment, timeout: 120_000 },
+      );
+      if (down.status !== 0 && !failed) fail('test:doctor:funded could not clean up Compose');
     } else if (mode === 'lifecycle-funded') {
       const environment = { ...process.env, ...LIFECYCLE_ENV };
       let failed = false;

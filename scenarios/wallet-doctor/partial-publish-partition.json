@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "partial-publish-partition",
+  "name": "Partial publish with stale predecessor",
+  "description": "A spend publishes the rollover and deletion only to the first relay; other relays still serve the spent predecessor, partitioning the successor and breaking the del chain.",
+  "expect": {
+    "codes": ["DEL_CHAIN_BREAK", "RELAY_PARTITION"],
+    "ok": false
+  },
+  "commands": [
+    {
+      "op": "mint",
+      "amount": 16
+    },
+    {
+      "op": "spend",
+      "amount": 4,
+      "mode": "partial-publish"
+    }
+  ]
+}

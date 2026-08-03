@@ -167,6 +167,11 @@ export class NostrFaultRelay {
     return { ...this.control.snapshot(), storedEvents: this.#events.size };
   }
 
+  /** Drop every stored event. Fault rules/partitions are cleared separately. */
+  clearEvents(): void {
+    this.#events.clear();
+  }
+
   async close(): Promise<void> {
     for (const socket of this.#webSockets.clients) socket.terminate();
     if (this.#webSockets.clients.size > 0) await Promise.resolve();
@@ -266,6 +271,15 @@ export class NostrFaultRelay {
     if (delayRule) await pause(delayRule.delayMs ?? 0);
     let history = [...queryEvents([...this.#events.values()], filters)];
     if (includes(rules, 'reorder_history')) history = history.reverse();
+    const partition = this.control.partition();
+    if (partition !== null) {
+      history = history.filter(
+        (event) =>
+          !partition.eventIds.includes(event.id) &&
+          !partition.kinds.includes(event.kind) &&
+          !partition.authors.includes(event.pubkey),
+      );
+    }
     for (const event of history) send(socket, ['EVENT', subscriptionValue, event]);
     send(socket, ['EOSE', subscriptionValue]);
   }

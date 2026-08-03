@@ -1,0 +1,131 @@
+name: cashu-fault-lab-wallet-doctor
+
+services:
+  doctor-redis:
+    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 1s
+      timeout: 1s
+      retries: 30
+    volumes:
+      - cashu-fault-lab-doctor-redis:/data
+
+  doctor-mint:
+    image: cashubtc/nutshell:0.20.2@sha256:65e9cbe23aaa1aeb27ce7206fa854a80f39ce8db1c9121eaecfc053a22506574
+    command: ['poetry', 'run', 'mint']
+    environment:
+      MINT_BACKEND_BOLT11_SAT: FakeWallet
+      MINT_LISTEN_HOST: 0.0.0.0
+      MINT_LISTEN_PORT: 3338
+      MINT_PRIVATE_KEY: cashu-fault-lab-doctor-test-only
+      MINT_RATE_LIMIT: 'FALSE'
+      MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE: '10000'
+      MINT_REDIS_CACHE_ENABLED: 'TRUE'
+      MINT_REDIS_CACHE_URL: redis://doctor-redis:6379
+      MINT_URL: http://doctor-mint:3338
+    depends_on:
+      doctor-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:3338/v1/info']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    ports:
+      - 127.0.0.1:${CFL_WALLET_DOCTOR_MINT_PORT:-3348}:3338
+
+  relay-a:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/nostr-fault-relay/dist/bin.js']
+    environment:
+      CFL_NOSTR_FAULT_RELAY_HOST: 0.0.0.0
+      CFL_NOSTR_FAULT_RELAY_PORT: 4400
+      CFL_NOSTR_FAULT_RELAY_CONTROL_HOST: 0.0.0.0
+      CFL_NOSTR_FAULT_RELAY_CONTROL_PORT: 4401
+      CFL_NOSTR_FAULT_RELAY_TOKEN: ${CFL_WALLET_DOCTOR_RELAY_TOKEN:?set CFL_WALLET_DOCTOR_RELAY_TOKEN}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4401/v1/faults/evidence',{headers:{authorization:'Bearer '+process.env.CFL_NOSTR_FAULT_RELAY_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    init: true
+    ports:
+      - 127.0.0.1:${CFL_WALLET_DOCTOR_RELAY_A_PORT:-4430}:4400
+      - 127.0.0.1:${CFL_WALLET_DOCTOR_RELAY_A_CONTROL_PORT:-4440}:4401
+
+  relay-b:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/nostr-fault-relay/dist/bin.js']
+    environment:
+      CFL_NOSTR_FAULT_RELAY_HOST: 0.0.0.0
+      CFL_NOSTR_FAULT_RELAY_PORT: 4400
+      CFL_NOSTR_FAULT_RELAY_CONTROL_HOST: 0.0.0.0
+      CFL_NOSTR_FAULT_RELAY_CONTROL_PORT: 4401
+      CFL_NOSTR_FAULT_RELAY_TOKEN: ${CFL_WALLET_DOCTOR_RELAY_TOKEN:?set CFL_WALLET_DOCTOR_RELAY_TOKEN}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4401/v1/faults/evidence',{headers:{authorization:'Bearer '+process.env.CFL_NOSTR_FAULT_RELAY_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    init: true
+    ports:
+      - 127.0.0.1:${CFL_WALLET_DOCTOR_RELAY_B_PORT:-4431}:4400
+      - 127.0.0.1:${CFL_WALLET_DOCTOR_RELAY_B_CONTROL_PORT:-4441}:4401
+
+  doctor-fixture:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/nip60-reference-wallet/dist/bin.js']
+    environment:
+      CFL_NIP60_FIXTURE_HOST: 0.0.0.0
+      CFL_NIP60_FIXTURE_PORT: 4500
+      CFL_NIP60_FIXTURE_TOKEN: ${CFL_WALLET_DOCTOR_FIXTURE_TOKEN:?set CFL_WALLET_DOCTOR_FIXTURE_TOKEN}
+      CFL_NIP60_FIXTURE_MINT: http://doctor-mint:3338
+      CFL_NIP60_FIXTURE_PUBLIC_MINT: http://127.0.0.1:${CFL_WALLET_DOCTOR_MINT_PORT:-3348}
+      CFL_NIP60_FIXTURE_RELAYS: ws://relay-a:4400,ws://relay-b:4400
+    depends_on:
+      doctor-mint:
+        condition: service_healthy
+      relay-a:
+        condition: service_healthy
+      relay-b:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4500/v1/doctor-wallet/capabilities',{headers:{authorization:'Bearer '+process.env.CFL_NIP60_FIXTURE_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    init: true
+    ports:
+      - 127.0.0.1:${CFL_WALLET_DOCTOR_FIXTURE_PORT:-4500}:4500
+
+volumes:
+  cashu-fault-lab-doctor-redis:

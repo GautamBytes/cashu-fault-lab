@@ -8,6 +8,7 @@ export interface ScenarioCard {
   description: string;
   family: string;
   commandCount: number;
+  runCommand: string;
   sourceUrl: string;
 }
 
@@ -98,12 +99,17 @@ async function parseScenario(scenariosRoot: string, filePath: string): Promise<S
     throw new Error(`Scenario ${location.sourcePath} must contain a commands array`);
   }
 
+  const scenarioId = location.slug.split('/').pop() ?? location.slug;
   return {
     slug: location.slug,
     name: scenarioDisplayName(parsed, location.sourcePath),
     description: requireNonEmptyString(parsed, 'description', location.sourcePath),
     family: location.family,
     commandCount: parsed.commands.length,
+    runCommand:
+      location.family === 'wallet-doctor'
+        ? `pnpm lab wallet-doctor run ${scenarioId} --seed demo`
+        : `pnpm lab run ${location.slug} --seed demo`,
     sourceUrl: sourceUrl(location.sourcePath, 'view'),
   };
 }

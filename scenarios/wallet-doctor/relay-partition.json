@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "relay-partition",
+  "name": "Relay-side history partition",
+  "description": "One relay withholds every kind:7375 token event; applications reading only that relay see an empty wallet while the mint-verified balance is intact.",
+  "expect": {
+    "codes": ["RELAY_PARTITION"],
+    "ok": true,
+    "merged": 16,
+    "mintVerified": 16,
+    "doubleCounted": 0
+  },
+  "commands": [
+    {
+      "op": "mint",
+      "amount": 16
+    },
+    {
+      "op": "relay-partition",
+      "relay": 1,
+      "kinds": [7375]
+    }
+  ]
+}

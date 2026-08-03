@@ -517,3 +517,186 @@ Exit Codes:
 Examples:
 
 - `cashu-fault-lab lifecycle replay artifacts/failure.json --seed demo --adapter cashu-ts --mint nutshell-local`
+
+## `cashu-fault-lab wallet-doctor collect --relay <url>`
+
+Fetch NIP-60 events from relays and verify proofs against their mints
+
+Options:
+
+- `--relay <url>`: Relay url; repeat for each relay.
+- `--nsec-env <var>`: Env var holding the subject secret key.
+- `--pubkey <hex>`: Subject pubkey for keyless raw capture.
+- `--timeout-ms <ms>`: Per-relay and per-mint timeout.
+- `--output <path>`: Write the capture bundle.
+
+Modes: `text`
+Environment: `CFL_NIP60_SUBJECT_KEY`
+Artifacts: `artifacts/wallet-doctor/capture.json`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab wallet-doctor collect --relay ws://127.0.0.1:4430 --relay ws://127.0.0.1:4431`
+
+## `cashu-fault-lab wallet-doctor diagnose <capture>`
+
+Explain why relays disagree about one wallet
+
+Arguments:
+
+- `<capture>`: Capture bundle JSON.
+
+Options:
+
+- `--output <path>`: Write the diagnosis artifact.
+- `--format <format>`: Diagnosis report format (json).
+
+Modes: `text`, `json`
+Environment: None
+Artifacts: `artifacts/wallet-doctor/diagnosis.json`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab wallet-doctor diagnose artifacts/wallet-doctor/capture.json`
+
+## `cashu-fault-lab wallet-doctor plan <capture>`
+
+Emit a dry-run repair plan with safety invariants
+
+Arguments:
+
+- `<capture>`: Capture bundle JSON.
+
+Options:
+
+- `--output <path>`: Write the repair plan artifact.
+
+Modes: `text`
+Environment: None
+Artifacts: `artifacts/wallet-doctor/plan.json`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab wallet-doctor plan artifacts/wallet-doctor/capture.json`
+
+## `cashu-fault-lab wallet-doctor check <capture>`
+
+CI gate: diagnosis plus safe repair plan, exit code reflects findings
+
+Arguments:
+
+- `<capture>`: Capture bundle JSON.
+
+Options:
+
+- `--output <path>`: Write the combined check artifact.
+
+Modes: `text`
+Environment: None
+Artifacts: None
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab wallet-doctor check artifacts/wallet-doctor/capture.json`
+
+## `cashu-fault-lab wallet-doctor run <scenario>`
+
+Run one wallet-doctor scenario against a live fixture/relay/mint stack
+
+Arguments:
+
+- `<scenario>`: Packaged scenario id or relative JSON path.
+
+Options:
+
+- `--seed <seed>`: Deterministic seed.
+- `--output <path>`: Write the scenario artifact.
+
+Modes: `text`
+Environment: `CFL_WALLET_DOCTOR_FIXTURE_URL`, `CFL_WALLET_DOCTOR_FIXTURE_TOKEN`, `CFL_WALLET_DOCTOR_RELAYS`, `CFL_WALLET_DOCTOR_RELAY_CONTROLS`, `CFL_WALLET_DOCTOR_RELAY_CONTROL_TOKEN`
+Artifacts: `artifacts/wallet-doctor/<scenario>.json`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab wallet-doctor run del-chain-break --seed demo`
+
+## `cashu-fault-lab wallet-doctor matrix`
+
+Run every packaged wallet-doctor scenario
+
+Options:
+
+- `--profile <profile>`: Matrix profile (nip60-doctor-v1).
+- `--seed <seed>`: Deterministic seed.
+- `--json`: Emit machine-readable matrix results.
+- `--output <path>`: Write matrix output.
+
+Modes: `text`, `json`
+Environment: `CFL_WALLET_DOCTOR_FIXTURE_URL`, `CFL_WALLET_DOCTOR_FIXTURE_TOKEN`, `CFL_WALLET_DOCTOR_RELAYS`
+Artifacts: None
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab wallet-doctor matrix --profile nip60-doctor-v1 --json`
+
+## `cashu-fault-lab wallet-doctor replay <artifact>`
+
+Replay a wallet-doctor scenario artifact with its original seed
+
+Arguments:
+
+- `<artifact>`: Scenario artifact JSON.
+
+Options:
+
+- `--seed <seed>`: Original seed supplied out of band.
+
+Modes: `text`
+Environment: `CFL_WALLET_DOCTOR_FIXTURE_URL`, `CFL_WALLET_DOCTOR_FIXTURE_TOKEN`, `CFL_WALLET_DOCTOR_RELAYS`
+Artifacts: None
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab wallet-doctor replay artifacts/wallet-doctor/del-chain-break.json --seed demo`
