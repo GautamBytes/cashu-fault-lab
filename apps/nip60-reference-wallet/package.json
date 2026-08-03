@@ -19,13 +19,12 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@cashu-fault-lab/nostr-delivery": "workspace:*",
     "@cashu/cashu-ts": "4.7.2",
-    "nostr-tools": "2.23.12"
+    "nostr-tools": "2.23.12",
+    "ws": "8.21.1"
   },
   "devDependencies": {
     "@cashu-fault-lab/nostr-fault-relay": "workspace:*",
-    "@types/ws": "8.18.1",
-    "ws": "8.21.1"
+    "@types/ws": "8.18.1"
   }
 }

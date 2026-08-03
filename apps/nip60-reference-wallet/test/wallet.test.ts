@@ -9,6 +9,7 @@ import {
   type FixtureMintWallet,
   type FixtureProof,
 } from '../src/index.js';
+import { publishLabEvent } from '../src/publish.js';
 
 const MINT = 'http://127.0.0.1:3338';
 
@@ -273,5 +274,36 @@ describe('fixture key handling', () => {
     const wallet = makeWallet(['ws://127.0.0.1:1'], key);
     expect(wallet.pubkey).toBe(getPublicKey(key));
     expect(wallet.secretKeyHex).toBe(Buffer.from(key).toString('hex'));
+  });
+});
+
+describe('publishLabEvent', () => {
+  it('publishes to a live relay and accepts docker service hostnames', async () => {
+    const relay = new NostrFaultRelay();
+    const loopbackUrl = await relay.listen(0);
+    try {
+      const key = deriveFixtureKey('publish-lab');
+      const wallet = makeWallet([loopbackUrl], key);
+      await wallet.publishWalletEvent();
+      const events = await collectEvents(loopbackUrl, wallet.pubkey);
+      const walletEvent = events.find((event) => event.kind === 17375);
+      expect(walletEvent).toBeDefined();
+
+      // Happy path against a real loopback relay.
+      await publishLabEvent(loopbackUrl, walletEvent as Event);
+
+      // Compose uses ws://relay-a:4400. Production NostrRelayClient rejects that
+      // shape at validation time; the lab publisher only fails on connect.
+      await expect(publishLabEvent('ws://relay-a:9', walletEvent as Event)).rejects.toThrow(
+        /connection failed|timed out|closed before OK/u,
+      );
+
+      // Non-ws schemes are still rejected up front.
+      await expect(publishLabEvent('http://example.test:4400', walletEvent as Event)).rejects.toThrow(
+        'fixture relay URL must use ws or wss',
+      );
+    } finally {
+      await relay.close();
+    }
   });
 });

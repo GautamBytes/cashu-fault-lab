@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { NostrRelayClient } from '@cashu-fault-lab/nostr-delivery';
 import { CashuTsMintWallet } from './cashu-wallet.js';
+import { publishLabEvent } from './publish.js';
 import { createFixtureServer } from './server.js';
 
 function positiveInteger(value: string | undefined, fallback: number, name: string): number {
@@ -41,12 +41,7 @@ const fixture = createFixtureServer({
   relays,
   token: required('CFL_NIP60_FIXTURE_TOKEN'),
   walletFactory: (mintUrl) => new CashuTsMintWallet(mintUrl),
-  publish: async (relayUrl, event) => {
-    const result = await new NostrRelayClient({ relayUrl }).publish(event);
-    if (!result.accepted) {
-      throw new Error(`relay ${relayUrl} rejected event ${event.id}: ${result.message}`);
-    }
-  },
+  publish: (relayUrl, event) => publishLabEvent(relayUrl, event),
 });
 
 const port = positiveInteger(process.env.CFL_NIP60_FIXTURE_PORT, 4500, 'CFL_NIP60_FIXTURE_PORT');
