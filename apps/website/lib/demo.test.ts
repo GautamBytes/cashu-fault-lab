@@ -6,7 +6,7 @@ describe('getDemoSummary', () => {
     const summary = await getDemoSummary();
     expect(summary).toMatchObject({
       scenarioId: 'http-response-lost',
-      seed: 'cashu-fault-lab-v0.1.2-demo',
+      seed: 'cashu-fault-lab-v0.1.4-demo',
       status: 'passed',
       commandCount: 3,
       timelineCount: 14,

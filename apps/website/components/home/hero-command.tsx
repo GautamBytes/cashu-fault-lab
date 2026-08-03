@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import styles from './home.module.css';
 
-const DEMO_COMMAND = 'npx cashu-fault-lab demo';
+const DEMO_COMMAND = 'npx cashu-fault-lab@0.1.4 demo';
 
 export function HeroCommand() {
   const [copied, setCopied] = useState(false);

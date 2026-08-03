@@ -81,7 +81,7 @@ describe('home components', () => {
       'href',
       'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
     );
-    expect(within(hero).getByText('npx cashu-fault-lab demo')).toBeVisible();
+    expect(within(hero).getByText('npx cashu-fault-lab@0.1.4 demo')).toBeVisible();
     expect(within(hero).getByRole('link', { name: /View on GitHub/ })).toHaveAttribute(
       'href',
       'https://github.com/GautamBytes/cashu-fault-lab',
@@ -115,14 +115,17 @@ describe('home components', () => {
     render(await HomePage());
 
     const command = screen.getByLabelText('Demo command');
-    expect(within(command).getByText('npx cashu-fault-lab demo')).toHaveAttribute('tabindex', '0');
+    expect(within(command).getByText('npx cashu-fault-lab@0.1.4 demo')).toHaveAttribute(
+      'tabindex',
+      '0',
+    );
     expect(
       within(command).queryByText('available with v0.1.1 · isolated · secret-redacted'),
     ).not.toBeInTheDocument();
 
     await user.click(within(command).getByRole('button', { name: 'Copy demo command' }));
 
-    expect(await navigator.clipboard.readText()).toBe('npx cashu-fault-lab demo');
+    expect(await navigator.clipboard.readText()).toBe('npx cashu-fault-lab@0.1.4 demo');
     expect(within(command).getByText('Copied')).toBeVisible();
   });
 
@@ -143,11 +146,12 @@ describe('home components', () => {
     expect(runPanel).toHaveTextContent('Artifact');
     expect(runPanel).not.toHaveTextContent(/\blive\b/i);
     expect(hero).not.toHaveTextContent('v0.1.0');
-    expect(hero).toHaveTextContent('cashu-fault-lab-v0.1.2-demo');
+    expect(hero).not.toHaveTextContent('v0.1.2');
+    expect(hero).toHaveTextContent('cashu-fault-lab-v0.1.4-demo');
     expect(screen.queryByText(/v0\.1\.0/i)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Inspect the reviewed artifact/ })).toHaveAttribute(
       'href',
-      'https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.2-demo.json',
+      'https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.4-demo.json',
     );
     expect(within(runPanel).queryByRole('list')).not.toBeInTheDocument();
     expect(within(hero).queryByText(/^TRACE \//)).not.toBeInTheDocument();
@@ -287,9 +291,9 @@ describe('home components', () => {
     expect(within(overview).getByText(summary.scenarioId)).toBeVisible();
     expect(within(overview).getByText(new RegExp(`Run ${summary.status}`, 'i'))).toBeVisible();
     expect(
-      within(overview).getByText(/report is retained from the reviewed v0\.1\.2 demo/i),
+      within(overview).getByText(/report is retained from the reviewed v0\.1\.4 demo/i),
     ).toBeVisible();
-    expect(within(overview).getByText(/not a v0\.1\.2 qualification result/i)).toBeVisible();
+    expect(within(overview).getByText(/not a v0\.1\.4 qualification result/i)).toBeVisible();
     expect(contextList).toBeVisible();
     expect(supportedList).toBeVisible();
     expect(screen.getByText('18', { selector: 'dd, strong' })).toBeVisible();
