@@ -115,7 +115,7 @@ describe('maintainer preview artifacts', () => {
       preflight,
       manifestPath: 'fixtures/custom manifest.json',
       result,
-      cliVersion: '0.1.3',
+      cliVersion: '0.1.4',
       runtime: {
         node: 'v24.18.1',
         platform: 'darwin',
@@ -142,7 +142,7 @@ describe('maintainer preview artifacts', () => {
       schemaVersion: 1,
       kind: 'cashu-fault-lab-maintainer-preview',
       qualification: false,
-      cliVersion: '0.1.3',
+      cliVersion: '0.1.4',
       runtime: { node: 'v24.18.1', platform: 'darwin', architecture: 'arm64' },
       matrix: { summary: { passed: 1, total: 1 } },
     });

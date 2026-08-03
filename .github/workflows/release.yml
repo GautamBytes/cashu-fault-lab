@@ -105,11 +105,31 @@ jobs:
       - name: Verify one real Lightning settlement through recovery
         run: pnpm test:lifecycle:regtest
 
+  funded-wallet-doctor:
+    name: Funded NIP-60 wallet doctor scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run wallet-doctor scenarios against the real mint/relay/fixture stack
+        run: pnpm test:doctor:funded
+
   release-gate:
     needs:
       - real-mint
       - funded-wallet-lifecycle
       - lightning-regtest-lifecycle
+      - funded-wallet-doctor
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

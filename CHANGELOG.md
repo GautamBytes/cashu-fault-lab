@@ -2,9 +2,8 @@
 
 ## Unreleased
 
-- Fixed funded wallet-doctor `ghost-balance` failures when Nutshell input fees made a
-  full-balance online swap impossible; the fixture now clamps send amounts with
-  `maxSpendableAfterFees` and the scenario spends a fee-safe partial amount.
+## 0.1.4 — 2026-08-03
+
 - Added the NIP-60 wallet doctor suite: multi-relay capture with NIP-44 decryption and NUT-07 mint
   verification, three-way wallet reconstruction (per-relay, merged, mint-verified), nine stable
   diagnosis codes, and deterministic dry-run repair plans with oracle-checked safety invariants.
@@ -16,6 +15,8 @@
   `test:doctor:funded` lane (pinned Nutshell mint, two fault relays, fixture).
 - Added persistent history partitions and an authenticated HTTP fault-control surface
   (`/v1/faults/*`, including `/v1/faults/reset`) to the Nostr fault relay.
+- Fixed funded wallet-doctor `ghost-balance` failures when Nutshell input fees made a full-balance
+  online swap impossible; the fixture clamps send amounts with `maxSpendableAfterFees`.
 
 ## 0.1.3 — 2026-08-02
 
