@@ -169,4 +169,53 @@ describe('NostrFaultRelay', () => {
       client.query({ kinds: [1059], '#p': [receiverPublicKey], since: 2_000_000 }),
     ).resolves.toMatchObject([{ id: event.id }]);
   });
+
+  it('withholds partitioned events from history until the partition clears', async () => {
+    const publisher = await socket();
+    const hidden = wrappedEvent('99', 2_000_006);
+    const visible = wrappedEvent('aa', 2_000_007);
+    publisher.send(JSON.stringify(['EVENT', hidden]));
+    publisher.send(JSON.stringify(['EVENT', visible]));
+    await waitFor(() => relay.snapshot().storedEvents === 2, 'two stored events');
+
+    relay.control.setPartition({ eventIds: [hidden.id] });
+    const reader = await socket();
+    const readerMessages = messages(reader);
+    reader.send(JSON.stringify(['REQ', 'partitioned', { kinds: [1059] }]));
+    await waitFor(
+      () => readerMessages.some(([type, id]) => type === 'EOSE' && id === 'partitioned'),
+      'partitioned EOSE',
+    );
+    expect(
+      readerMessages
+        .filter(([type]) => type === 'EVENT')
+        .map((message) => (message[2] as Event).id),
+    ).toEqual([visible.id]);
+    // The partition hides without deleting: storage is untouched.
+    expect(relay.snapshot().storedEvents).toBe(2);
+
+    relay.control.clearPartition();
+    const healed = await socket();
+    const healedMessages = messages(healed);
+    healed.send(JSON.stringify(['REQ', 'healed', { kinds: [1059] }]));
+    await waitFor(
+      () => healedMessages.some(([type, id]) => type === 'EOSE' && id === 'healed'),
+      'healed EOSE',
+    );
+    expect(
+      healedMessages
+        .filter(([type]) => type === 'EVENT')
+        .map((message) => (message[2] as Event).id)
+        .sort(),
+    ).toEqual([hidden.id, visible.id].sort());
+  });
+
+  it('validates partition input and exposes it in evidence', async () => {
+    expect(() => relay.control.setPartition({ eventIds: ['not-hex'] })).toThrow(/eventIds/u);
+    const partition = relay.control.setPartition({ kinds: [7375], authors: [] });
+    expect(partition.kinds).toEqual([7375]);
+    expect(relay.snapshot().partition?.kinds).toEqual([7375]);
+    relay.control.clear();
+    expect(relay.snapshot().partition).toBeNull();
+  });
 });
