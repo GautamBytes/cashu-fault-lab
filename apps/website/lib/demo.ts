@@ -66,7 +66,7 @@ function parseInvariant(value: unknown): DemoInvariant {
 }
 
 export async function getDemoSummary(): Promise<DemoSummary> {
-  const source = await readFile(resolveRepositoryPath('docs/examples/v0.1.2-demo.json'), 'utf8');
+  const source = await readFile(resolveRepositoryPath('docs/examples/v0.1.4-demo.json'), 'utf8');
   const artifact: unknown = JSON.parse(source);
 
   if (!isRecord(artifact) || artifact.schemaVersion !== 2) {

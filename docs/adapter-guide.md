@@ -43,7 +43,8 @@ compatibility extension, not a second source of identity.
 | T2   | Prove acquisition or recovery of replacement proofs |
 | T3   | Prove one durable merchant-ledger credit            |
 
-These tiers follow the canonical definitions in the [design](superpowers/specs/2026-07-19-cashu-fault-lab-design.md#34-evidence-tiers). Fault classes and real-mint execution are scenario requirements, not alternate meanings for an evidence tier.
+These tiers are the lab's evidence ladder for adapter claims. Fault classes and real-mint execution
+are scenario requirements, not alternate meanings for an evidence tier.
 
 Capability schema v2 requires `schemaVersion`, source/build digests, language/runtime identity,
 separate `roles.sender` and `roles.receiver` objects, and configured mint identities. Each role

@@ -90,8 +90,8 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           <p className={styles.eyebrow}>Reviewed demo artifact</p>
           <h2 id="evidence-report-title">Evidence, not a success boolean.</h2>
           <p>
-            This report is retained from the reviewed v0.1.2 demo. Commands, proof secrets, and
-            arbitrary evidence payloads never reach this page. It is example evidence, not a v0.1.2
+            This report is retained from the reviewed v0.1.4 demo. Commands, proof secrets, and
+            arbitrary evidence payloads never reach this page. It is example evidence, not a v0.1.4
             qualification result.
           </p>
         </div>
@@ -194,7 +194,7 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           </a>
           <a
             className={styles.reportLink}
-            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.2-demo.json"
+            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.4-demo.json"
             rel="noreferrer noopener"
             target="_blank"
           >
