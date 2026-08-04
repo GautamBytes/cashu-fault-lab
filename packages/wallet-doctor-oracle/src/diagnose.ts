@@ -1,5 +1,7 @@
 import {
   reconstruct,
+  indexMintTruth,
+  mintProofKey,
   type DoctorObservation,
   type MergedView,
   type MintObservation,
@@ -34,6 +36,8 @@ export interface Finding {
   readonly eventIds: readonly string[];
   /** Proof `y` values involved. */
   readonly ys: readonly string[];
+  /** Mint identity when the finding is scoped to exactly one mint. */
+  readonly mint?: string;
   /** Sats shown-but-gone, double-counted, or recoverable, when applicable. */
   readonly amountAtRisk: number;
 }
@@ -75,6 +79,7 @@ export interface DiagnoseOptions {
 }
 
 const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+const MAXIMUM_FINDING_SUMMARY_LENGTH = 8192;
 
 function sumAmounts(tokens: readonly TokenEventView[]): number {
   return tokens.reduce(
@@ -102,7 +107,7 @@ function sortFindings(findings: readonly Finding[]): Finding[] {
  */
 export function diagnose(observation: DoctorObservation, options: DiagnoseOptions = {}): Diagnosis {
   const { perRelay, merged } = reconstruct(observation);
-  const mintByY = new Map(observation.mint.map((entry) => [entry.y, entry]));
+  const mintByY = indexMintTruth(observation.mint);
   const okRelayUrls = observation.relays
     .filter((relay) => relay.status === 'ok')
     .map((relay) => relay.url)
@@ -119,11 +124,16 @@ export function diagnose(observation: DoctorObservation, options: DiagnoseOption
   findings.push(...quoteLimbo(observation, options.now ?? 0));
   findings.push(...malformedEvents(observation));
 
+  const boundedFindings = findings.map((finding) => ({
+    ...finding,
+    summary: finding.summary.slice(0, MAXIMUM_FINDING_SUMMARY_LENGTH),
+  }));
+
   return {
     subject: observation.subject,
-    findings: sortFindings(findings),
+    findings: sortFindings(boundedFindings),
     balance: explainBalance(perRelay, merged, mintByY),
-    ok: findings.every((finding) => finding.severity !== 'error'),
+    ok: boundedFindings.every((finding) => finding.severity !== 'error'),
   };
 }
 
@@ -150,14 +160,16 @@ function ghostTokens(merged: MergedView, mintByY: ReadonlyMap<string, MintObserv
   const findings: Finding[] = [];
   for (const token of merged.liveTokens) {
     if (token.proofs.length === 0) continue;
-    const states = token.proofs.map((proof) => mintByY.get(proof.y)?.state);
+    const states = token.proofs.map(
+      (proof) => mintByY.get(mintProofKey(token.mint, proof.y))?.state,
+    );
     if (states.some((state) => state === undefined)) continue;
     const spentYs = token.proofs
-      .filter((proof) => mintByY.get(proof.y)?.state === 'SPENT')
+      .filter((proof) => mintByY.get(mintProofKey(token.mint, proof.y))?.state === 'SPENT')
       .map((proof) => proof.y);
     if (spentYs.length === 0) continue;
     const ghostAmount = token.proofs
-      .filter((proof) => mintByY.get(proof.y)?.state === 'SPENT')
+      .filter((proof) => mintByY.get(mintProofKey(token.mint, proof.y))?.state === 'SPENT')
       .reduce((total, proof) => total + proof.amount, 0);
     findings.push({
       code: 'GHOST_TOKEN',
@@ -178,7 +190,7 @@ function orphanedProofs(
 ): Finding[] {
   const byMint = new Map<string, { ys: string[]; eventIds: Set<string>; amount: number }>();
   for (const orphan of merged.orphanCandidates) {
-    if (mintByY.get(orphan.y)?.state !== 'UNSPENT') continue;
+    if (mintByY.get(mintProofKey(orphan.mint, orphan.y))?.state !== 'UNSPENT') continue;
     const entry = byMint.get(orphan.mint) ?? { ys: [], eventIds: new Set<string>(), amount: 0 };
     entry.ys.push(orphan.y);
     for (const eventId of orphan.lastSeenIn) entry.eventIds.add(eventId);
@@ -194,6 +206,7 @@ function orphanedProofs(
       relays: [],
       eventIds: [...entry.eventIds].sort(),
       ys: entry.ys.sort(),
+      mint,
       amountAtRisk: entry.amount,
     }));
 }
@@ -233,7 +246,20 @@ function walletEventForks(
   okRelayUrls: readonly string[],
 ): Finding[] {
   const global = merged.walletEvent;
-  if (global === null) return [];
+  if (global === null) {
+    if (okRelayUrls.length === 0) return [];
+    return [
+      {
+        code: 'WALLET_EVENT_FORK',
+        severity: 'error',
+        summary: `relays ${okRelayUrls.join(', ')} serve no kind:17375 wallet event; applications do not recognize the wallet`,
+        relays: [...okRelayUrls],
+        eventIds: [],
+        ys: [],
+        amountAtRisk: 0,
+      },
+    ];
+  }
   const stale = perRelay
     .filter(
       (view) =>
@@ -407,14 +433,16 @@ function explainBalance(
   let ghost = 0;
   for (const token of merged.liveTokens) {
     for (const proof of token.proofs) {
-      const state = mintByY.get(proof.y)?.state;
+      const state = mintByY.get(mintProofKey(token.mint, proof.y))?.state;
       if (state === 'UNSPENT') mintVerified += proof.amount;
       if (state === 'SPENT') ghost += proof.amount;
     }
   }
   let orphanedUnspent = 0;
   for (const orphan of merged.orphanCandidates) {
-    if (mintByY.get(orphan.y)?.state === 'UNSPENT') orphanedUnspent += orphan.amount;
+    if (mintByY.get(mintProofKey(orphan.mint, orphan.y))?.state === 'UNSPENT') {
+      orphanedUnspent += orphan.amount;
+    }
   }
   return {
     perRelay: perRelay.map((view) => ({

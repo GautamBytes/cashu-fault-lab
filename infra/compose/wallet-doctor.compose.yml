@@ -92,6 +92,34 @@ services:
       - 127.0.0.1:${CFL_WALLET_DOCTOR_RELAY_B_PORT:-4431}:4400
       - 127.0.0.1:${CFL_WALLET_DOCTOR_RELAY_B_CONTROL_PORT:-4441}:4401
 
+  relay-c:
+    build:
+      context: ../..
+      dockerfile: infra/docker/wallet-adapters.Dockerfile
+      target: node-wallets
+    command: ['node', 'apps/nostr-fault-relay/dist/bin.js']
+    environment:
+      CFL_NOSTR_FAULT_RELAY_HOST: 0.0.0.0
+      CFL_NOSTR_FAULT_RELAY_PORT: 4400
+      CFL_NOSTR_FAULT_RELAY_CONTROL_HOST: 0.0.0.0
+      CFL_NOSTR_FAULT_RELAY_CONTROL_PORT: 4401
+      CFL_NOSTR_FAULT_RELAY_TOKEN: ${CFL_WALLET_DOCTOR_RELAY_TOKEN:?set CFL_WALLET_DOCTOR_RELAY_TOKEN}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4401/v1/faults/evidence',{headers:{authorization:'Bearer '+process.env.CFL_NOSTR_FAULT_RELAY_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    init: true
+    ports:
+      - 127.0.0.1:${CFL_WALLET_DOCTOR_RELAY_C_PORT:-4432}:4400
+      - 127.0.0.1:${CFL_WALLET_DOCTOR_RELAY_C_CONTROL_PORT:-4442}:4401
+
   doctor-fixture:
     build:
       context: ../..
@@ -104,13 +132,15 @@ services:
       CFL_NIP60_FIXTURE_TOKEN: ${CFL_WALLET_DOCTOR_FIXTURE_TOKEN:?set CFL_WALLET_DOCTOR_FIXTURE_TOKEN}
       CFL_NIP60_FIXTURE_MINT: http://doctor-mint:3338
       CFL_NIP60_FIXTURE_PUBLIC_MINT: http://127.0.0.1:${CFL_WALLET_DOCTOR_MINT_PORT:-3348}
-      CFL_NIP60_FIXTURE_RELAYS: ws://relay-a:4400,ws://relay-b:4400
+      CFL_NIP60_FIXTURE_RELAYS: ws://relay-a:4400,ws://relay-b:4400,ws://relay-c:4400
     depends_on:
       doctor-mint:
         condition: service_healthy
       relay-a:
         condition: service_healthy
       relay-b:
+        condition: service_healthy
+      relay-c:
         condition: service_healthy
     healthcheck:
       test:

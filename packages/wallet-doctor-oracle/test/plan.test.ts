@@ -164,6 +164,38 @@ describe('buildRepairPlan + checkRepairPlan', () => {
     expect(check.ok).toBe(true);
   });
 
+  it('keeps orphan recovery scoped by mint when two mints share the same Y', () => {
+    const otherMint = 'https://other-mint.example';
+    const first = token('e1', [proof(8, 'shared-y')], { seenOn: [A, B] });
+    const second = token('e2', [proof(4, 'shared-y')], {
+      mint: otherMint,
+      seenOn: [A, B],
+    });
+    const observation: DoctorObservation = {
+      subject: SUBJECT,
+      relays: [
+        relay(A, {
+          tokens: [first, second],
+          deletions: [del('d1', ['e1', 'e2'], [A])],
+        }),
+        relay(B, {
+          tokens: [first, second],
+          deletions: [del('d1', ['e1', 'e2'], [B])],
+        }),
+      ],
+      mint: [
+        { mint: MINT, y: 'shared-y', state: 'UNSPENT' },
+        { mint: otherMint, y: 'shared-y', state: 'UNSPENT' },
+      ],
+    };
+    const { plan, check } = runPipeline(observation);
+    expect(plan.steps).toEqual([
+      { action: 'wallet_action', kind: 'nut09_restore', mint: MINT, ys: ['shared-y'] },
+      { action: 'wallet_action', kind: 'nut09_restore', mint: otherMint, ys: ['shared-y'] },
+    ]);
+    expect(check.ok).toBe(true);
+  });
+
   it('republishes the latest wallet event to stale relays', () => {
     const observation: DoctorObservation = {
       subject: SUBJECT,

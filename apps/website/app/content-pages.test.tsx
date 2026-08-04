@@ -17,7 +17,7 @@ describe('generated content pages', () => {
   it('renders every repository scenario with an exact run command and source link', async () => {
     render(await ScenariosPage());
 
-    expect(screen.getAllByRole('article')).toHaveLength(48);
+    expect(screen.getAllByRole('article')).toHaveLength(50);
     const responseLost = screen.getByRole('article', { name: 'http-response-lost' });
     expect(
       within(responseLost).getByText('pnpm lab run retry/response-lost --seed demo'),

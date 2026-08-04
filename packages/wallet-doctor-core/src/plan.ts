@@ -1,3 +1,4 @@
+import { mintProofKey } from './reconstruct.js';
 import type { ProofView, TokenEventView } from './types.js';
 
 /**
@@ -66,7 +67,8 @@ export function initialPlanState(
   const proofsByY = new Map<string, ProofView>();
   for (const token of allTokens) {
     for (const proof of token.proofs) {
-      if (!proofsByY.has(proof.y)) proofsByY.set(proof.y, proof);
+      const key = mintProofKey(token.mint, proof.y);
+      if (!proofsByY.has(key)) proofsByY.set(key, proof);
     }
   }
   return {
@@ -91,7 +93,7 @@ export function simulatePlan(state: PlanState, steps: readonly RepairStep[]): Pl
       case 'publish_rollover': {
         const proofs: ProofView[] = [];
         for (const y of step.coveredYs) {
-          const proof = next.proofsByY.get(y);
+          const proof = next.proofsByY.get(mintProofKey(step.mint, y));
           if (!proof) {
             throw new Error(`rollover ${step.rolloverId} covers unknown proof y ${y}`);
           }
@@ -140,8 +142,9 @@ export function planStateUniqueBalance(state: PlanState): number {
   let total = 0;
   for (const token of state.liveTokens.values()) {
     for (const proof of token.proofs) {
-      if (seen.has(proof.y)) continue;
-      seen.add(proof.y);
+      const key = mintProofKey(token.mint, proof.y);
+      if (seen.has(key)) continue;
+      seen.add(key);
       total += proof.amount;
     }
   }

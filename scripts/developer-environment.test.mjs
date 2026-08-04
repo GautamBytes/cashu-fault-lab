@@ -49,7 +49,7 @@ describe('developer environment', () => {
     assert.match(readme, /https:\/\/codespaces\.new\/GautamBytes\/cashu-fault-lab\?quickstart=1/u);
     assert.match(readme, /\.\/scripts\/quickstart\n/u);
     assert.match(readme, /\.\/scripts\/quickstart --check/u);
-    assert.match(readme, /experimental v0\.1 developer preview/u);
+    assert.match(readme, /experimental v0\.2 developer preview/u);
   });
 
   it('keeps the portal toolchain portable and exercises user entry paths in CI', async () => {

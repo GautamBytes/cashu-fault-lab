@@ -16,48 +16,72 @@
       "minItems": 1,
       "maxItems": 1024,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["op"],
-        "properties": {
-          "op": { "enum": ["mint", "spend", "relay-partition", "relay-heal"] },
-          "amount": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-          "mode": {
-            "enum": ["clean", "partial-delete", "partial-publish", "ghost", "delete-only"]
-          },
-          "relay": { "type": "integer", "minimum": 0, "maximum": 63 },
-          "eventIds": {
-            "type": "array",
-            "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-            "maxItems": 100000
-          },
-          "kinds": {
-            "type": "array",
-            "items": { "type": "integer", "minimum": 0, "maximum": 65535 },
-            "maxItems": 1024
-          },
-          "authors": {
-            "type": "array",
-            "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-            "maxItems": 1024
-          }
-        },
-        "allOf": [
+        "oneOf": [
           {
-            "if": { "properties": { "op": { "const": "mint" } } },
-            "then": { "required": ["amount"] }
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "amount"],
+            "properties": {
+              "op": { "const": "mint" },
+              "amount": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+            }
           },
           {
-            "if": { "properties": { "op": { "const": "spend" } } },
-            "then": { "required": ["amount", "mode"] }
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "amount", "mode"],
+            "properties": {
+              "op": { "const": "spend" },
+              "amount": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "mode": {
+                "enum": [
+                  "clean",
+                  "partial-delete",
+                  "partial-publish",
+                  "ghost",
+                  "delete-only",
+                  "partial-delete-only"
+                ]
+              }
+            }
           },
           {
-            "if": { "properties": { "op": { "const": "relay-partition" } } },
-            "then": { "required": ["relay"] }
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "relay"],
+            "properties": {
+              "op": { "const": "relay-partition" },
+              "relay": { "type": "integer", "minimum": 0, "maximum": 63 },
+              "eventIds": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "maxItems": 100000
+              },
+              "kinds": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 0, "maximum": 65535 },
+                "maxItems": 1024
+              },
+              "authors": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "maxItems": 1024
+              }
+            },
+            "anyOf": [
+              { "required": ["eventIds"], "properties": { "eventIds": { "minItems": 1 } } },
+              { "required": ["kinds"], "properties": { "kinds": { "minItems": 1 } } },
+              { "required": ["authors"], "properties": { "authors": { "minItems": 1 } } }
+            ]
           },
           {
-            "if": { "properties": { "op": { "const": "relay-heal" } } },
-            "then": { "required": ["relay"] }
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "relay"],
+            "properties": {
+              "op": { "const": "relay-heal" },
+              "relay": { "type": "integer", "minimum": 0, "maximum": 63 }
+            }
           }
         ]
       }

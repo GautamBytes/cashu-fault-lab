@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Nip60Capture } from '@cashu-fault-lab/wallet-doctor-contract';
-import { checkCapture, diagnoseCapture, planForDiagnosis } from '../src/index.js';
+import { captureDigest, type Nip60Capture } from '@cashu-fault-lab/wallet-doctor-contract';
+import {
+  checkCapture,
+  compareCaptureEvidence,
+  diagnoseCapture,
+  planForDiagnosis,
+} from '../src/index.js';
 
 const A = 'ws://127.0.0.1:4430';
 const B = 'ws://127.0.0.1:4431';
@@ -13,15 +18,42 @@ function captureWith(
   relays: Nip60Capture['observation']['relays'],
   mint: Nip60Capture['observation']['mint'],
 ): Nip60Capture {
-  return {
-    schemaVersion: 1,
+  const normalizedRelays = relays.map((relay) => ({
+    ...relay,
+    wallet: relay.wallet.map((event) => ({ ...event, seenOn: [relay.url] })),
+    tokens: relay.tokens.map((event) => ({ ...event, seenOn: [relay.url] })),
+    deletions: relay.deletions.map((event) => ({ ...event, seenOn: [relay.url] })),
+    history: relay.history.map((event) => ({ ...event, seenOn: [relay.url] })),
+    quotes: relay.quotes.map((event) => ({ ...event, seenOn: [relay.url] })),
+    malformed: relay.malformed.map((event) => ({ ...event, seenOn: [relay.url] })),
+  }));
+  const bundle: Omit<Nip60Capture, 'digest'> = {
+    schemaVersion: 2,
     capturedAt: '2026-08-03T12:00:00.000Z',
-    digest: 'sha256:' + '0'.repeat(64),
     subject: SUBJECT,
-    observation: { subject: SUBJECT, relays, mint },
-    rawRelays: [],
-    redaction: { proofSecretsDropped: true },
+    observation: { subject: SUBJECT, relays: normalizedRelays, mint },
+    relayEvidence: normalizedRelays.map((relay) => ({
+      url: relay.url,
+      status: relay.status,
+      error: relay.error,
+      eventIds: [
+        ...relay.wallet,
+        ...relay.tokens,
+        ...relay.deletions,
+        ...relay.history,
+        ...relay.quotes,
+        ...relay.malformed,
+      ]
+        .flatMap((event) => (event.eventId === null ? [] : [event.eventId]))
+        .sort(),
+    })),
+    redaction: {
+      proofSecretsDropped: true,
+      encryptedContentsDropped: true,
+      walletPrivateKeyDropped: true,
+    },
   };
+  return { ...bundle, digest: captureDigest(bundle) };
 }
 
 function relay(url: string, events: Partial<Nip60Capture['observation']['relays'][number]> = {}) {
@@ -66,6 +98,79 @@ describe('checkCapture', () => {
     expect(result.ok).toBe(true);
     expect(result.planArtifact).toBeNull();
     expect(result.summary.errorFindings).toBe(0);
+    expect(result.summary.integrityErrors).toEqual([]);
+  });
+
+  it('fails closed when mint truth is missing even if diagnosis alone looks healthy', () => {
+    const token = {
+      eventId: HEX('1'),
+      createdAt: 1_700_000_000,
+      mint: MINT,
+      unit: 'sat',
+      proofs: [{ keysetId: 'k', amount: 2, y: Y('1') }],
+      del: [],
+      seenOn: [A],
+    };
+    const capture = captureWith([relay(A, { tokens: [token] })], []);
+    const result = checkCapture(capture);
+    expect(result.ok).toBe(false);
+    expect(result.summary.integrityErrors).toContain(`missing mint state for ${MINT} ${Y('1')}`);
+  });
+
+  it('fails closed instead of throwing when proof amount aggregates overflow', () => {
+    const token = {
+      eventId: HEX('1'),
+      createdAt: 1_700_000_000,
+      mint: MINT,
+      unit: 'sat',
+      proofs: [
+        { keysetId: 'k', amount: Number.MAX_SAFE_INTEGER, y: Y('1') },
+        { keysetId: 'k', amount: 1, y: Y('2') },
+      ],
+      del: [],
+      seenOn: [A],
+    };
+    const capture = captureWith(
+      [relay(A, { tokens: [token] })],
+      [
+        { mint: MINT, y: Y('1'), state: 'UNSPENT' },
+        { mint: MINT, y: Y('2'), state: 'UNSPENT' },
+      ],
+    );
+    const result = checkCapture(capture);
+    expect(result.ok).toBe(false);
+    expect(result.diagnosisArtifact).toBeNull();
+    expect(result.summary.integrityErrors).toContain(
+      'capture aggregate proof amount exceeds the safe integer limit',
+    );
+  });
+
+  it('bounds integrity errors so a failed check artifact remains serializable', () => {
+    const longMint = `https://${'a'.repeat(2040)}`;
+    const token = {
+      eventId: HEX('1'),
+      createdAt: 1_700_000_000,
+      mint: longMint,
+      unit: 'sat',
+      proofs: [{ keysetId: 'k', amount: 1, y: Y('1') }],
+      del: [],
+      seenOn: [A],
+    };
+    const capture = captureWith([relay(A, { tokens: [token] })], []);
+    const result = checkCapture(capture);
+    expect(result.ok).toBe(false);
+    expect(result.summary.integrityErrors.every((error) => error.length <= 2048)).toBe(true);
+  });
+
+  it('bounds diagnosis summaries for captures with many maximum-length relay URLs', () => {
+    const relays = Array.from({ length: 64 }, (_, index) => {
+      const prefix = `wss://${index.toString().padStart(2, '0')}.`;
+      const url = `${prefix}${'a'.repeat(2048 - prefix.length)}`;
+      return relay(url, { wallet: [] });
+    });
+    const artifact = diagnoseCapture(captureWith(relays, []));
+    expect(artifact.diagnosis.findings).toHaveLength(1);
+    expect(artifact.diagnosis.findings[0]?.summary.length).toBeLessThanOrEqual(8192);
   });
 
   it('fails when every relay is unreachable (incomplete evidence is not a pass)', () => {
@@ -208,5 +313,16 @@ describe('diagnoseCapture + planForDiagnosis artifacts', () => {
     expect(plan.kind).toBe('nip60-repair-plan');
     expect(plan.generatedFrom).toBe(capture.digest);
     expect(plan.plan.captureDigest).toBe(capture.digest);
+  });
+});
+
+describe('compareCaptureEvidence', () => {
+  it('detects a self-consistent capture that does not match an independent recapture', () => {
+    const expected = captureWith([relay(A)], []);
+    const live = captureWith([relay(A), relay(B)], []);
+    expect(compareCaptureEvidence(expected, expected)).toEqual({ ok: true, errors: [] });
+    const comparison = compareCaptureEvidence(expected, live);
+    expect(comparison.ok).toBe(false);
+    expect(comparison.errors).toContain('live relay evidence differs from the supplied capture');
   });
 });

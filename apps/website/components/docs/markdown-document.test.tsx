@@ -14,7 +14,7 @@ const docsCss = readFileSync(resolve(process.cwd(), 'components/docs/docs.module
 
 describe('repository Markdown links', () => {
   it('maps a canonical document linked from the repository root to its docs route', () => {
-    expect(resolveMarkdownHref('docs/releases/v0.1.4.md', 'README.md')).toBe('/docs/release-notes');
+    expect(resolveMarkdownHref('docs/releases/v0.2.0.md', 'README.md')).toBe('/docs/release-notes');
   });
 
   it('resolves canonical documents relative to a nested source file', () => {

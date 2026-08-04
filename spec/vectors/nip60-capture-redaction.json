@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "name": "NIP-44 token capture redaction",
+  "testOnlySubjectSecretKeyHex": "0101010101010101010101010101010101010101010101010101010101010101",
+  "subject": "1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+  "inputEvent": {
+    "kind": 7375,
+    "created_at": 1700000000,
+    "tags": [],
+    "content": "ArBtM9D+yBMPYNZIgkLwrp53WuYiQYGAEbp2wgCKR6pTUG7F/8wEqmH8yB/rpAqsxThHILH6SJdaLwLnLAgNZHN5pSTFafjJiKw13J0x42kLJlPKylw0Kjkk5AD6Oh8n2ZHf5NX81y66pAqqf2jBfCAIG6JQrKxvxTbF7e0tYqbzSr7Ins2qDtMGJea6G3tF9QL/OVdejwkdsnKV3TkjrzLfpmK5w5CxZNN1+Lhj3tsg4Uaox7ksXDeNXnDkKbGOpNZj/RMzR/zZwtPic8wzkTafMRO8+lfmMZya9qXuegbkcwc=",
+    "pubkey": "1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+    "id": "6afccb1a4290a55cedf52058005569d564232853bba6da582f4ecd4f3e53d276",
+    "sig": "3c7c8c989af7617581786515679868fb8bb371c6f3b077935b84bdf66be31156003682b58226fd2988c5994e563c13e90e6f12afb88237536155d3c19773e1ee"
+  },
+  "expectedNormalized": {
+    "eventId": "6afccb1a4290a55cedf52058005569d564232853bba6da582f4ecd4f3e53d276",
+    "createdAt": 1700000000,
+    "mint": "https://mint.example",
+    "unit": "sat",
+    "proofs": [
+      {
+        "keysetId": "00ad268c4d1f5826",
+        "amount": 2,
+        "y": "02eff44533e2bc361c9d30b3013e5198d5b1af386ee03ca862fdfb1daec93bf4a5"
+      }
+    ],
+    "del": [],
+    "seenOn": ["wss://relay.example"]
+  },
+  "mustNotAppearInCapture": [
+    "nip60-redaction-vector-secret",
+    "ArBtM9D+yBMPYNZIgkLwrp53WuYiQYGAEbp2wgCKR6pTUG7F/8wEqmH8yB/rpAqsxThHILH6SJdaLwLnLAgNZHN5pSTFafjJiKw13J0x42kLJlPKylw0Kjkk5AD6Oh8n2ZHf5NX81y66pAqqf2jBfCAIG6JQrKxvxTbF7e0tYqbzSr7Ins2qDtMGJea6G3tF9QL/OVdejwkdsnKV3TkjrzLfpmK5w5CxZNN1+Lhj3tsg4Uaox7ksXDeNXnDkKbGOpNZj/RMzR/zZwtPic8wzkTafMRO8+lfmMZya9qXuegbkcwc=",
+    "3c7c8c989af7617581786515679868fb8bb371c6f3b077935b84bdf66be31156003682b58226fd2988c5994e563c13e90e6f12afb88237536155d3c19773e1ee"
+  ]
+}

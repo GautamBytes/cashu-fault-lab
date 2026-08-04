@@ -1,8 +1,9 @@
 # `nip60-doctor-v1` — NIP-60 wallet diagnosis profile
 
 Status: experimental developer preview. This profile defines how the wallet doctor reconstructs
-and judges NIP-60 wallet state. It produces diagnostic evidence, not certification, and it is not
-part of the delivery or lifecycle release gates.
+and judges NIP-60 wallet state. It produces diagnostic evidence, not wallet certification. Its
+funded matrix is a separate tagged-release prerequisite; it does not change the delivery or
+lifecycle gate contracts.
 
 Protocol baseline: Nostr NIPs `bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91` (NIP-60, NIP-09, NIP-44,
 NIP-40) and Cashu NUTs `fccb68e9129de5348003f573dc97e1ee380a1076` (NUT-00, NUT-07, NUT-09).
@@ -19,6 +20,13 @@ A diagnosis consumes one versioned capture bundle (`spec/schemas/nip60-capture.s
 - **Mint truth**: every proof discovered in any token event is classified `UNSPENT`, `SPENT`, or
   `PENDING` by its mint via NUT-07 `checkstate`. Proof secrets are dropped at capture; artifacts
   store only the public NUT-00 `Y`.
+
+Capture v2 also stores secret-free per-relay event identifiers. It never exports event bodies,
+NIP-44 ciphertext, signatures, proof secrets, or wallet private-key material. Structural consumers
+verify the canonical digest and exact proof/mint coverage. The external `check` gate additionally
+re-fetches relays and mints with the subject key and rejects any evidence mismatch.
+Capture v2 is a breaking v0.2.0 contract. Released v1 captures must be recollected; transforming
+them cannot prove the v2 redaction and completeness invariants.
 
 ## 2. The three reconstructions
 
@@ -70,7 +78,10 @@ Nothing is published by the doctor. Execution requires an explicit future ADR.
 
 ## 5. Evidence and redaction
 
-Capture bundles, diagnosis artifacts, plan artifacts, and scenario results are versioned JSON
-written mode `0600`. Proof secrets and the NIP-60 wallet `privkey` never appear in artifacts.
+Capture bundles, diagnosis artifacts, plan artifacts, check artifacts, and scenario results are
+versioned JSON written mode `0600`. Their normative schemas live in
+`spec/schemas/nip60-*.schema.json`; committed Rust and Python files expose digest/version metadata,
+not complete models. Proof secrets, ciphertext, signatures, and the
+NIP-60 wallet `privkey` never appear in exported artifacts.
 Scenario artifacts carry a domain-separated seed hash; replay requires the original seed out of
 band and compares diagnosis codes and balances, not fresh event ids.

@@ -19,7 +19,7 @@ import {
   normalizeWalletPayload,
   parseJson,
 } from './normalize.js';
-import type { Nip60Capture, RawRelayCapture } from './types.js';
+import type { Nip60Capture, RelayCaptureEvidence } from './types.js';
 
 export interface CaptureOptions {
   /** Relay urls to read (order preserved in the bundle). */
@@ -29,6 +29,10 @@ export interface CaptureOptions {
   /** Subject hex pubkey; required when no secret key is provided. */
   readonly subjectPubkey?: string;
   readonly timeoutMs?: number;
+  /** Overall capture deadline across every relay and mint request. */
+  readonly overallTimeoutMs?: number;
+  /** Test-only/local-lab escape hatch for loopback HTTP and WS endpoints. */
+  readonly allowInsecureLoopback?: boolean;
   /** ISO timestamp override for deterministic captures (tests/replay). */
   readonly capturedAt?: string;
   /** Test hooks replacing transport. */
@@ -36,7 +40,13 @@ export interface CaptureOptions {
   readonly checkStates?: typeof checkProofStates;
 }
 
-export const CAPTURE_DIGEST_DOMAIN = 'cashu-fault-lab/nip60-capture-v1';
+export const CAPTURE_DIGEST_DOMAIN = 'cashu-fault-lab/nip60-capture-v2';
+const MAXIMUM_CAPTURE_PROOFS = 10_000;
+const MAXIMUM_CAPTURE_EVENTS = 10_000;
+const MAXIMUM_CAPTURE_MINTS = 64;
+const MAXIMUM_CAPTURE_RELAYS = 64;
+const MAXIMUM_CAPTURE_CONTENT_BYTES = 16 * 1024 * 1024;
+const DEFAULT_OVERALL_TIMEOUT_MS = 60_000;
 
 /** Stable JSON: object keys sorted recursively, arrays preserved. */
 export function canonicalJson(value: unknown): string {
@@ -63,22 +73,54 @@ export function captureDigest(bundle: Omit<Nip60Capture, 'digest'>): string {
 
 interface NormalizedRelay {
   readonly observation: RelayObservation;
-  readonly raw: RawRelayCapture;
+  readonly evidence: RelayCaptureEvidence;
+}
+
+interface CaptureBudget {
+  eventCount: number;
+  proofCandidates: number;
+  contentBytes: number;
+}
+
+function consumeEventBudget(events: readonly Event[], budget: CaptureBudget): void {
+  for (const event of events) {
+    budget.eventCount += 1;
+    budget.contentBytes += Buffer.byteLength(event.content, 'utf8');
+    if (budget.eventCount > MAXIMUM_CAPTURE_EVENTS) {
+      throw new Error(`capture event count exceeds ${MAXIMUM_CAPTURE_EVENTS}`);
+    }
+    if (budget.contentBytes > MAXIMUM_CAPTURE_CONTENT_BYTES) {
+      throw new Error(`capture encrypted content exceeds ${MAXIMUM_CAPTURE_CONTENT_BYTES} bytes`);
+    }
+  }
+}
+
+function byEventId(
+  a: { readonly eventId: string | null },
+  b: { readonly eventId: string | null },
+): number {
+  return (a.eventId ?? '').localeCompare(b.eventId ?? '');
 }
 
 function normalizeRelayEvents(
   url: string,
   events: readonly Event[],
   conversationKey: Uint8Array | null,
+  budget: CaptureBudget,
 ): NormalizedRelay {
+  const uniqueEvents = [...new Map(events.map((event) => [event.id, event])).values()];
+  consumeEventBudget(uniqueEvents, budget);
   const wallet: WalletEventView[] = [];
   const tokens: TokenEventView[] = [];
   const history: HistoryEventView[] = [];
   const quotes: QuoteEventView[] = [];
   const malformed: MalformedEventView[] = [];
-  const deletions = events
+  const deletions = uniqueEvents
     .filter((event) => event.kind === 5)
-    .map((event) => normalizeDeletionEvent(event, [url]));
+    .flatMap((event) => {
+      const result = normalizeDeletionEvent(event, [url]);
+      return result.ok ? [result.view] : [];
+    });
 
   const decrypt = (event: Event): string | null => {
     if (conversationKey === null) return null;
@@ -89,7 +131,7 @@ function normalizeRelayEvents(
     }
   };
 
-  for (const event of events) {
+  for (const event of uniqueEvents) {
     if (event.kind === 5) continue;
     if (event.kind === 7374) {
       const quote = normalizeQuoteEvent(event, [url]);
@@ -118,6 +160,17 @@ function normalizeRelayEvents(
           seenOn: [url],
         });
     } else if (event.kind === 7375) {
+      const candidateCount =
+        typeof payload === 'object' &&
+        payload !== null &&
+        !Array.isArray(payload) &&
+        Array.isArray((payload as { proofs?: unknown }).proofs)
+          ? ((payload as { proofs: unknown[] }).proofs.length ?? 0)
+          : 0;
+      budget.proofCandidates += candidateCount;
+      if (budget.proofCandidates > MAXIMUM_CAPTURE_PROOFS) {
+        throw new Error(`capture proof candidate count exceeds ${MAXIMUM_CAPTURE_PROOFS}`);
+      }
       const result = normalizeTokenPayload(event, payload, [url]);
       if (result.ok) tokens.push(result.view);
       else
@@ -146,14 +199,19 @@ function normalizeRelayEvents(
       url,
       status: 'ok',
       error: null,
-      wallet,
-      tokens,
-      deletions,
-      history,
-      quotes,
-      malformed,
+      wallet: wallet.sort(byEventId),
+      tokens: tokens.sort(byEventId),
+      deletions: deletions.sort(byEventId),
+      history: history.sort(byEventId),
+      quotes: quotes.sort(byEventId),
+      malformed: malformed.sort(byEventId),
     },
-    raw: { url, status: 'ok', error: null, events },
+    evidence: {
+      url,
+      status: 'ok',
+      error: null,
+      eventIds: uniqueEvents.map((event) => event.id).sort(),
+    },
   };
 }
 
@@ -173,19 +231,53 @@ export async function captureWallet(options: CaptureOptions): Promise<Nip60Captu
   if (subject === undefined || !/^[0-9a-f]{64}$/u.test(subject)) {
     throw new Error('A 64-hex-character subject pubkey or secret key is required');
   }
+  if (
+    options.relays.length === 0 ||
+    options.relays.length > MAXIMUM_CAPTURE_RELAYS ||
+    new Set(options.relays).size !== options.relays.length
+  ) {
+    throw new Error(`capture requires 1-${MAXIMUM_CAPTURE_RELAYS} unique relay URLs`);
+  }
+  const overallTimeoutMs = options.overallTimeoutMs ?? DEFAULT_OVERALL_TIMEOUT_MS;
+  if (
+    !Number.isSafeInteger(overallTimeoutMs) ||
+    overallTimeoutMs < 100 ||
+    overallTimeoutMs > 600_000
+  ) {
+    throw new Error('overall capture timeout must be an integer from 100 to 600000 milliseconds');
+  }
+  const deadline = Date.now() + overallTimeoutMs;
+  const remainingTimeout = (): number => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error('capture exceeded its overall timeout');
+    return Math.min(options.timeoutMs ?? 10_000, remaining);
+  };
   const conversationKey =
     options.subjectSecretKey !== undefined
       ? nip44.v2.utils.getConversationKey(options.subjectSecretKey, subject)
       : null;
 
   const relays: RelayObservation[] = [];
-  const rawRelays: RawRelayCapture[] = [];
+  const relayEvidence: RelayCaptureEvidence[] = [];
+  const budget: CaptureBudget = {
+    eventCount: 0,
+    proofCandidates: 0,
+    contentBytes: 0,
+  };
   for (const url of options.relays) {
     let events: readonly Event[];
     try {
-      events = await fetchImpl(url, subject, options.timeoutMs ?? 10_000);
+      events = await fetchImpl(url, subject, remainingTimeout(), {
+        allowInsecureLoopback: options.allowInsecureLoopback ?? false,
+        maxEvents: MAXIMUM_CAPTURE_EVENTS - budget.eventCount,
+        maxContentBytes: MAXIMUM_CAPTURE_CONTENT_BYTES - budget.contentBytes,
+        maxWireBytes: Math.min(
+          32 * 1024 * 1024,
+          MAXIMUM_CAPTURE_CONTENT_BYTES - budget.contentBytes + 8 * 1024 * 1024,
+        ),
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'relay query failed';
+      const message = (error instanceof Error ? error.message : 'relay query failed').slice(0, 512);
       relays.push({
         url,
         status: 'error',
@@ -197,37 +289,58 @@ export async function captureWallet(options: CaptureOptions): Promise<Nip60Captu
         quotes: [],
         malformed: [],
       });
-      rawRelays.push({ url, status: 'error', error: message, events: [] });
+      relayEvidence.push({ url, status: 'error', error: message, eventIds: [] });
       continue;
     }
-    const normalized = normalizeRelayEvents(url, events, conversationKey);
+    const normalized = normalizeRelayEvents(url, events, conversationKey, budget);
     relays.push(normalized.observation);
-    rawRelays.push(normalized.raw);
+    relayEvidence.push(normalized.evidence);
   }
 
   // Every proof discovered in any token event is checked against its mint.
   const ysByMint = new Map<string, Set<string>>();
+  let uniqueProofs = 0;
   for (const relay of relays) {
     for (const token of relay.tokens) {
       const set = ysByMint.get(token.mint) ?? new Set<string>();
-      for (const proof of token.proofs) set.add(proof.y);
+      for (const proof of token.proofs) {
+        if (!set.has(proof.y)) {
+          if (uniqueProofs >= MAXIMUM_CAPTURE_PROOFS) {
+            throw new Error(`capture proof count exceeds ${MAXIMUM_CAPTURE_PROOFS}`);
+          }
+          set.add(proof.y);
+          uniqueProofs += 1;
+        }
+      }
       ysByMint.set(token.mint, set);
     }
+  }
+  if (ysByMint.size > MAXIMUM_CAPTURE_MINTS) {
+    throw new Error(`capture mint count exceeds ${MAXIMUM_CAPTURE_MINTS}`);
   }
   const mint: MintObservation[] = [];
   for (const [mintUrl, ys] of [...ysByMint.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     mint.push(
-      ...(await checkImpl(mintUrl, [...ys].sort(), { timeoutMs: options.timeoutMs ?? 10_000 })),
+      ...(await checkImpl(mintUrl, [...ys].sort(), {
+        timeoutMs: remainingTimeout(),
+        allowInsecureLoopback: options.allowInsecureLoopback ?? false,
+      })),
     );
   }
 
   const bundle: Omit<Nip60Capture, 'digest'> = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     capturedAt: options.capturedAt ?? new Date().toISOString(),
     subject,
     observation: { subject, relays, mint },
-    rawRelays,
-    redaction: { proofSecretsDropped: true },
+    relayEvidence,
+    redaction: {
+      proofSecretsDropped: true,
+      encryptedContentsDropped: true,
+      walletPrivateKeyDropped: true,
+    },
   };
-  return { ...bundle, digest: captureDigest(bundle) };
+  const capture = { ...bundle, digest: captureDigest(bundle) };
+  const { assertNip60Capture } = await import('./validation.js');
+  return assertNip60Capture(capture);
 }

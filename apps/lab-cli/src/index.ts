@@ -20,7 +20,7 @@ import {
 import { HttpFaultGateway } from '@cashu-fault-lab/http-fault-gateway';
 import { Command, CommanderError, Option } from 'commander';
 import { randomBytes } from 'node:crypto';
-import { chmod, mkdir, readFile, writeFile, readdir, realpath } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, writeFile, readdir, realpath } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parseAdapterManifest, type AdapterManifest } from './adapter-manifest.js';
 import { preflightLocalAdapters, type AdapterPreflightReport } from './adapter-preflight.js';
@@ -100,6 +100,8 @@ export interface LabRuntime {
 
 export interface CliIo {
   readonly readText: (path: string) => Promise<string>;
+  /** Read at most maxBytes without first buffering an arbitrarily large file. */
+  readonly readTextLimited?: (path: string, maxBytes: number) => Promise<string>;
   readonly realPath: (path: string) => Promise<string>;
   readonly writeText: (path: string, value: string) => Promise<void>;
   readonly stdout: (value: string) => void;
@@ -143,6 +145,19 @@ export interface CliOutcome {
 
 const defaultIo: CliIo = {
   readText: async (path) => readFile(path, 'utf8'),
+  readTextLimited: async (path, maxBytes) => {
+    const handle = await open(path, 'r');
+    try {
+      const metadata = await handle.stat();
+      if (metadata.size > maxBytes) throw new Error(`file exceeds ${maxBytes} bytes`);
+      const buffer = Buffer.allocUnsafe(maxBytes + 1);
+      const { bytesRead } = await handle.read(buffer, 0, maxBytes + 1, 0);
+      if (bytesRead > maxBytes) throw new Error(`file exceeds ${maxBytes} bytes`);
+      return buffer.subarray(0, bytesRead).toString('utf8');
+    } finally {
+      await handle.close();
+    }
+  },
   realPath: realpath,
   writeText: async (path, value) => {
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });

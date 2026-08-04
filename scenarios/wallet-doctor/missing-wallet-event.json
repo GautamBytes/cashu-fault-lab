@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "missing-wallet-event",
+  "name": "Wallet metadata absent from every relay",
+  "description": "Both relays lose the replaceable kind 17375 event while token state remains readable.",
+  "commands": [
+    { "op": "mint", "amount": 16 },
+    { "op": "relay-partition", "relay": 0, "kinds": [17375] },
+    { "op": "relay-partition", "relay": 1, "kinds": [17375] },
+    { "op": "relay-partition", "relay": 2, "kinds": [17375] }
+  ],
+  "expect": {
+    "codes": ["WALLET_EVENT_FORK"],
+    "ok": false,
+    "merged": 16,
+    "mintVerified": 16
+  }
+}

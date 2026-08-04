@@ -71,16 +71,16 @@ Open `http://localhost:3000`. Website-specific checks are available through
 ## Adding an adapter
 
 1. Generate a standalone scaffold:
-   `npx cashu-fault-lab@0.1.4 adapter init --language typescript --name your-wallet`.
+   `npx cashu-fault-lab@0.2.0 adapter init --language typescript --name your-wallet`.
    Choose `typescript`, `rust`, or `python`.
 2. Implement the 8 HTTP routes described in `docs/adapter-guide.md`, including cumulative
    redemption-start evidence from `GET /v1/redemptions`.
 3. Start the adapter on a loopback origin and export the bearer-token environment variable named by
    its generated `adapter-manifest.json`.
 4. Run the read-only contract check:
-   `npx cashu-fault-lab@0.1.4 adapter preflight --adapters ./your-wallet/adapter-manifest.json`.
+   `npx cashu-fault-lab@0.2.0 adapter preflight --adapters ./your-wallet/adapter-manifest.json`.
 5. Run the response-loss and duplicate-delivery preview:
-   `npx cashu-fault-lab@0.1.4 adapter preview --adapters ./your-wallet/adapter-manifest.json --sender your-wallet --receiver your-wallet`.
+   `npx cashu-fault-lab@0.2.0 adapter preview --adapters ./your-wallet/adapter-manifest.json --sender your-wallet --receiver your-wallet`.
 6. Share the redacted feedback bundle from `cashu-fault-results/` when requesting review.
 
 ## Tests

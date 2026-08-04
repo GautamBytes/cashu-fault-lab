@@ -29,17 +29,27 @@ The lab gains a separate `nip60-doctor-v1` suite that:
 The suite reuses only genuinely common infrastructure (capture/replay/report patterns, fault
 relay, Docker fixtures, CI tiers). It does not change the `cashu-delivery-v1` or
 `wallet-lifecycle-v1` contracts, and its output is diagnostic evidence, not certification. The
-existing release gate remains blocked and untouched.
+doctor is a separate funded release workflow prerequisite: its failure blocks a tagged lab
+release, but passing it does not certify a wallet and does not alter the delivery/lifecycle
+contracts or their pass criteria.
 
 ## Safety boundary
 
 - Proof secrets are dropped at capture time. Artifacts store only each proof's NUT-00 `Y`
   (hash-to-curve of the secret), which is the public value a wallet already sends to a mint in
   NUT-07 state checks.
-- The NIP-60 wallet `privkey` (P2PK key inside `kind:17375`) is never read, stored, or
-  exported; capture records only whether one is present.
+- The NIP-60 wallet `privkey` value (P2PK key inside `kind:17375`) is discarded during
+  normalization and is never stored or exported; capture records only whether the field exists.
+- Exported capture v2 bundles discard all signed event bodies, NIP-44 ciphertext, and signatures.
+  Relay evidence contains only event identifiers. `check` independently re-fetches the relay and
+  mint evidence with the subject key before it can pass.
 - Subject keys are supplied through environment variables on the operator's own machine, never
   through command arguments, and existing `Bearer`/`nsec1` redaction applies to all output.
+- Outbound relay and mint connections require public WSS/HTTPS destinations and use the validated
+  DNS answer for the actual socket connection. Private, link-local, reserved, and mixed DNS
+  answers are rejected. Loopback WS/HTTP is available only through the explicit local-lab flag.
+- Capture work is bounded by relay, event, proof-candidate, distinct-mint, ciphertext-byte,
+  response-byte, and overall-time limits before expensive normalization or network fan-out.
 - Orphaned unspent proofs require a NUT-09 restore by a wallet holding the secrets; the doctor
   emits a `wallet_action` instruction instead of attempting it.
 
@@ -47,5 +57,5 @@ existing release gate remains blocked and untouched.
 
 - New packages `wallet-doctor-{core,contract,oracle,runner}` follow the lifecycle dependency
   rules: the oracle imports no wallet, relay, or mint implementation code.
-- A new ADR must precede any repair-execution feature or any treatment of doctor output as
-  release qualification.
+- A new ADR must precede any repair-execution feature or any treatment of doctor output as wallet
+  certification.

@@ -69,6 +69,11 @@ function sumTokens(tokens: readonly TokenEventView[]): number {
   return tokens.reduce((total, token) => total + sumProofs(token.proofs), 0);
 }
 
+/** Proof identity is mint-scoped: the same secret/Y can exist at two mints. */
+export function mintProofKey(mint: string, y: string): string {
+  return `${mint}\0${y}`;
+}
+
 /** Deduplicate events by id, merging their `seenOn` relay lists. */
 export function dedupeEvents<T extends { eventId: string; seenOn: readonly string[] }>(
   events: readonly T[],
@@ -94,7 +99,7 @@ function latestWalletEvent(events: readonly WalletEventView[]): WalletEventView 
     if (
       latest === null ||
       event.createdAt > latest.createdAt ||
-      (event.createdAt === latest.createdAt && event.eventId > latest.eventId)
+      (event.createdAt === latest.createdAt && event.eventId < latest.eventId)
     ) {
       latest = event;
     }
@@ -144,20 +149,21 @@ export function reconstructMerged(relays: readonly RelayObservation[]): MergedVi
   const proofOwners = new Map<string, { proof: ProofView; eventIds: string[] }>();
   for (const token of naiveLiveTokens) {
     for (const proof of token.proofs) {
-      const existing = proofOwners.get(proof.y);
+      const key = mintProofKey(token.mint, proof.y);
+      const existing = proofOwners.get(key);
       if (existing) {
         if (!existing.eventIds.includes(token.eventId)) {
           existing.eventIds.push(token.eventId);
         }
       } else {
-        proofOwners.set(proof.y, { proof, eventIds: [token.eventId] });
+        proofOwners.set(key, { proof, eventIds: [token.eventId] });
       }
     }
   }
   const duplicateProofs: DuplicateProof[] = [...proofOwners.entries()]
     .filter(([, owner]) => owner.eventIds.length > 1)
-    .map(([y, owner]) => ({
-      y,
+    .map(([, owner]) => ({
+      y: owner.proof.y,
       amount: owner.proof.amount,
       eventIds: [...owner.eventIds].sort(),
     }))
@@ -169,18 +175,21 @@ export function reconstructMerged(relays: readonly RelayObservation[]): MergedVi
     0,
   );
 
-  const liveYs = new Set(liveTokens.flatMap((token) => token.proofs.map((proof) => proof.y)));
+  const liveYs = new Set(
+    liveTokens.flatMap((token) => token.proofs.map((proof) => mintProofKey(token.mint, proof.y))),
+  );
   const liveEventIds = new Set(liveTokens.map((token) => token.eventId));
   const orphanByY = new Map<string, OrphanCandidate & { lastSeen: Set<string> }>();
   for (const token of allTokens) {
     if (liveEventIds.has(token.eventId)) continue;
     for (const proof of token.proofs) {
-      if (liveYs.has(proof.y)) continue;
-      const existing = orphanByY.get(proof.y);
+      const key = mintProofKey(token.mint, proof.y);
+      if (liveYs.has(key)) continue;
+      const existing = orphanByY.get(key);
       if (existing) {
         existing.lastSeen.add(token.eventId);
       } else {
-        orphanByY.set(proof.y, {
+        orphanByY.set(key, {
           y: proof.y,
           keysetId: proof.keysetId,
           amount: proof.amount,
@@ -224,7 +233,7 @@ export function indexMintTruth(
 ): ReadonlyMap<string, MintObservation> {
   const byY = new Map<string, MintObservation>();
   for (const observation of mint) {
-    byY.set(observation.y, observation);
+    byY.set(mintProofKey(observation.mint, observation.y), observation);
   }
   return byY;
 }

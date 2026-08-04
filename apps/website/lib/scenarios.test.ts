@@ -12,7 +12,7 @@ describe('getScenarioGroups', () => {
     const groups = await getScenarioGroups();
     const all = groups.flatMap((group) => group.scenarios);
 
-    expect(all).toHaveLength(48);
+    expect(all).toHaveLength(50);
     expect(groups.map((group) => group.family)).toEqual([
       'concurrency',
       'conformance',
@@ -40,5 +40,15 @@ describe('getScenarioGroups', () => {
       commandCount: 2,
       runCommand: 'pnpm lab wallet-doctor run del-chain-break --seed demo',
     });
+    expect(all.find((item) => item.slug === 'wallet-doctor/missing-wallet-event')).toMatchObject({
+      name: 'Wallet metadata absent from every relay',
+      family: 'wallet-doctor',
+    });
+    expect(all.find((item) => item.slug === 'wallet-doctor/deletion-not-propagated')).toMatchObject(
+      {
+        name: 'Standalone deletion reaches one relay',
+        family: 'wallet-doctor',
+      },
+    );
   });
 });
