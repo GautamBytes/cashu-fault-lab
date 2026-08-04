@@ -299,6 +299,12 @@ describe('home components', () => {
       screen.getByRole('img', { name: /v0\.2\.0 terminal showing the public doctor and demo/i }),
     ).toBeVisible();
     expect(screen.getByRole('img', { name: /v0\.2\.0 generated evidence report/i })).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Enlarge terminal verification screenshot' }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Enlarge generated evidence report screenshot' }),
+    ).toBeVisible();
     const results = screen.getByRole('list', { name: 'Verified v0.2.0 user results' });
     expect(within(results).getByText('10 checks · 0 failed · 0 warned')).toBeVisible();
     expect(

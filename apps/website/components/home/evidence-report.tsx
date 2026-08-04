@@ -1,5 +1,5 @@
-import Image from 'next/image';
 import type { DemoInvariant, DemoSummary, InvariantStatus } from '../../lib/demo';
+import { EvidenceGallery } from './evidence-gallery';
 import styles from './home.module.css';
 
 interface EvidenceReportProps {
@@ -201,31 +201,7 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           </li>
         </ul>
 
-        <div className={styles.evidenceGallery}>
-          <figure className={styles.evidenceFigure}>
-            <Image
-              alt="v0.2.0 terminal showing the public doctor and demo passing"
-              height={900}
-              src="/evidence/v0.2.0-terminal.png"
-              width={1440}
-            />
-            <figcaption>
-              The real user path: public <code>npx</code> commands, environment checks, and the
-              final Docker demo result.
-            </figcaption>
-          </figure>
-          <figure className={styles.evidenceFigure}>
-            <Image
-              alt="v0.2.0 generated evidence report showing the passed response-loss scenario"
-              height={960}
-              src="/evidence/v0.2.0-report.png"
-              width={1440}
-            />
-            <figcaption>
-              The generated HTML report is a human view of the same machine-readable artifact.
-            </figcaption>
-          </figure>
-        </div>
+        <EvidenceGallery />
 
         <ul aria-label="Invariant status counts" className={styles.statusGrid}>
           {(Object.keys(statusLabels) as InvariantStatus[]).map((status) => (

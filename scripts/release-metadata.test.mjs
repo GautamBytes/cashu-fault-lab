@@ -175,10 +175,14 @@ test('the website uses valid, secret-free public v0.2.0 evidence', async () => {
   assert.match(await text('apps/website/lib/demo.ts'), /docs\/examples\/v0\.2\.0-demo\.json/u);
   assert.match(
     await text('apps/website/components/home/evidence-report.tsx'),
+    /<EvidenceGallery \/>/u,
+  );
+  assert.match(
+    await text('apps/website/components/home/evidence-gallery.tsx'),
     /\/evidence\/v0\.2\.0-terminal\.png/u,
   );
   assert.match(
-    await text('apps/website/components/home/evidence-report.tsx'),
+    await text('apps/website/components/home/evidence-gallery.tsx'),
     /\/evidence\/v0\.2\.0-report\.png/u,
   );
   for (const image of [
