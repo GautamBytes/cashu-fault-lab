@@ -67,14 +67,8 @@ test('release images use native runners, isolated caches, and verified digest ma
   assert.match(workflow, /^\s{2}runtime-preflight:/mu);
   assert.match(workflow, /^\s{2}runtime-platforms:/mu);
   assert.match(workflow, /^\s{2}runtime-manifests:/mu);
-  assert.match(
-    workflow,
-    /runner: ubuntu-24\.04\s+platform: linux\/amd64\s+arch: amd64/u,
-  );
-  assert.match(
-    workflow,
-    /runner: ubuntu-24\.04-arm\s+platform: linux\/arm64\s+arch: arm64/u,
-  );
+  assert.match(workflow, /runner: ubuntu-24\.04\s+platform: linux\/amd64\s+arch: amd64/u);
+  assert.match(workflow, /runner: ubuntu-24\.04-arm\s+platform: linux\/arm64\s+arch: arm64/u);
   assert.doesNotMatch(workflow, /platforms:\s*linux\/amd64,linux\/arm64/u);
   assert.match(workflow, /platforms: \$\{\{ matrix\.platform \}\}/u);
   assert.match(workflow, /push-by-digest=true/u);
