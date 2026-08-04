@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { finalizeEvent, generateSecretKey, getPublicKey, nip44, type Event } from 'nostr-tools';
 import WebSocket from 'ws';
 import { NostrFaultRelay } from '@cashu-fault-lab/nostr-fault-relay';
-import { proofY } from '@cashu-fault-lab/wallet-doctor-contract';
+import { captureDigest, proofY, type Nip60Capture } from '@cashu-fault-lab/wallet-doctor-contract';
 
 /**
  * End-to-end gate for the NIP-60 wallet doctor CLI: two live in-process
@@ -155,14 +155,21 @@ describe('wallet-doctor CLI end-to-end', () => {
       const planPath = path.join(workdir, 'plan.json');
 
       const collect = await runCli(
-        ['wallet-doctor', 'collect', '--relay', urlA, '--relay', urlB, '--output', capturePath],
+        [
+          'wallet-doctor',
+          'collect',
+          '--relay',
+          urlA,
+          '--relay',
+          urlB,
+          '--allow-insecure-loopback',
+          '--output',
+          capturePath,
+        ],
         env,
       );
       expect(collect.code, collect.stderr).toBe(0);
-      const capture = JSON.parse(await readFile(capturePath, 'utf8')) as {
-        digest: string;
-        observation: { relays: unknown[] };
-      };
+      const capture = JSON.parse(await readFile(capturePath, 'utf8')) as Nip60Capture;
       expect(capture.observation.relays).toHaveLength(2);
       expect(JSON.stringify(capture)).not.toContain('e2e-secret-live');
       expect(collect.stdout).toContain('relays: 2 ok, 0 error');
@@ -189,10 +196,102 @@ describe('wallet-doctor CLI end-to-end', () => {
       expect(planArtifact.safety.ok).toBe(true);
       expect(plan.stdout).toContain('dry-run; nothing is published');
 
-      const check = await runCli(['wallet-doctor', 'check', capturePath], env);
+      const forgedPath = path.join(workdir, 'forged.json');
+      const forgedOutput = path.join(workdir, 'forged-check.json');
+      await writeFile(
+        forgedPath,
+        JSON.stringify({ ...capture, digest: `sha256:${'0'.repeat(64)}` }),
+      );
+      const forgedCheck = await runCli(
+        ['wallet-doctor', 'check', forgedPath, '--output', forgedOutput],
+        env,
+      );
+      expect(forgedCheck.code).toBe(1);
+      const forgedArtifact = JSON.parse(await readFile(forgedOutput, 'utf8')) as {
+        generatedFrom: string | null;
+        diagnosis: unknown;
+        summary: { integrityErrors: string[] };
+      };
+      expect(forgedArtifact.generatedFrom).toBeNull();
+      expect(forgedArtifact.diagnosis).toBeNull();
+      expect(forgedArtifact.summary.integrityErrors).toContain(
+        'capture digest does not match its canonical contents',
+      );
+
+      const missingMintPath = path.join(workdir, 'missing-mint.json');
+      const missingMintOutput = path.join(workdir, 'missing-mint-check.json');
+      const missingMintBundle = {
+        ...capture,
+        observation: { ...capture.observation, mint: [] },
+      };
+      const { digest: _missingDigest, ...missingMintWithoutDigest } = missingMintBundle;
+      await writeFile(
+        missingMintPath,
+        JSON.stringify({
+          ...missingMintWithoutDigest,
+          digest: captureDigest(missingMintWithoutDigest),
+        }),
+      );
+      const missingMintCheck = await runCli(
+        ['wallet-doctor', 'check', missingMintPath, '--output', missingMintOutput],
+        env,
+      );
+      expect(missingMintCheck.code).toBe(1);
+      expect(
+        (
+          JSON.parse(await readFile(missingMintOutput, 'utf8')) as {
+            summary: { integrityErrors: string[] };
+          }
+        ).summary.integrityErrors.some((error) => error.includes('missing mint state')),
+      ).toBe(true);
+
+      const malformedPath = path.join(workdir, 'malformed.json');
+      const malformedOutput = path.join(workdir, 'malformed-check.json');
+      await writeFile(malformedPath, '{}');
+      const malformedCheck = await runCli(
+        ['wallet-doctor', 'check', malformedPath, '--output', malformedOutput],
+        {},
+      );
+      expect(malformedCheck.code).toBe(1);
+      expect(
+        (JSON.parse(await readFile(malformedOutput, 'utf8')) as { diagnosis: unknown }).diagnosis,
+      ).toBeNull();
+
+      // Change relay evidence after collection: check must independently
+      // recapture instead of trusting the caller-supplied normalized JSON.
+      const laterHistory = finalizeEvent(
+        {
+          kind: 7376,
+          created_at: 1_700_000_400,
+          tags: [],
+          content: encrypt([['direction', 'out']]),
+        },
+        sk,
+      );
+      await publish(urlA, laterHistory);
+      const liveOutput = path.join(workdir, 'live-check.json');
+      const check = await runCli(
+        [
+          'wallet-doctor',
+          'check',
+          capturePath,
+          '--allow-insecure-loopback',
+          '--output',
+          liveOutput,
+        ],
+        env,
+      );
       expect(check.code).toBe(1);
       expect(check.stdout).toContain('check: FAIL');
       expect(check.stdout).toContain('DEL_CHAIN_BREAK');
+      expect(check.stdout).toContain('live verification: FAIL');
+      expect(
+        (
+          JSON.parse(await readFile(liveOutput, 'utf8')) as {
+            liveVerification: { ok: boolean };
+          }
+        ).liveVerification.ok,
+      ).toBe(false);
     } finally {
       await relayA.close();
       await relayB.close();

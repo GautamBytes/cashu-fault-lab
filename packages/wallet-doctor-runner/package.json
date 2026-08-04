@@ -21,7 +21,8 @@
   "dependencies": {
     "@cashu-fault-lab/wallet-doctor-contract": "workspace:*",
     "@cashu-fault-lab/wallet-doctor-core": "workspace:*",
-    "@cashu-fault-lab/wallet-doctor-oracle": "workspace:*"
+    "@cashu-fault-lab/wallet-doctor-oracle": "workspace:*",
+    "ajv": "8.20.0"
   },
   "devDependencies": {
     "@cashu-fault-lab/nip60-reference-wallet": "workspace:*",

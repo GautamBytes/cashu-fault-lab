@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "deletion-not-propagated",
+  "name": "Standalone deletion reaches one relay",
+  "description": "An unspent token is deleted on one relay without a successor while another relay still serves it.",
+  "commands": [
+    { "op": "mint", "amount": 16 },
+    { "op": "spend", "amount": 1, "mode": "partial-delete-only" }
+  ],
+  "expect": {
+    "codes": ["DELETION_NOT_PROPAGATED", "ORPHANED_PROOFS"],
+    "ok": false,
+    "merged": 0,
+    "mintVerified": 16,
+    "orphanedUnspent": 16
+  }
+}

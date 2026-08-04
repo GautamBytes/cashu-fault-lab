@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-08-04
+
+- Prepare the breaking `0.2.0` wallet-doctor contract: capture v2 is redacted, content-addressed,
+  bounded, and independently recaptured by `check`; released v1 captures must be recollected.
+- Pin relay and mint connections to public DNS answers by default, with loopback access available
+  only through an explicit local-lab flag.
+- Fix multi-mint proof identity, replaceable-event tie-breaking, relay-evidence integrity, and
+  three-relay scenario coverage.
 
 ## 0.1.4 — 2026-08-03
 

@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { NIP60_CAPTURE_SCHEMA, validateNip60Capture } from '../src/index.js';
+import {
+  NIP60_CAPTURE_SCHEMA,
+  captureDigest,
+  validateNip60Capture,
+  verifyCaptureIntegrity,
+} from '../src/index.js';
 
 const HEX = (char: string): string => char.repeat(64);
 const Y = '02' + 'ab'.repeat(32);
@@ -8,7 +13,7 @@ const MINT = 'http://127.0.0.1:3338';
 
 function validCapture(): Record<string, unknown> {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     capturedAt: '2026-08-03T12:00:00.000Z',
     digest: 'sha256:' + '0'.repeat(64),
     subject: HEX('a'),
@@ -93,33 +98,55 @@ function validCapture(): Record<string, unknown> {
       ],
       mint: [{ mint: MINT, y: Y, state: 'UNSPENT' }],
     },
-    rawRelays: [
+    relayEvidence: [
       {
         url: 'ws://127.0.0.1:4430',
         status: 'ok',
         error: null,
-        events: [
-          {
-            id: HEX('2'),
-            pubkey: HEX('a'),
-            created_at: 1_700_000_000,
-            kind: 7375,
-            tags: [],
-            content: 'encrypted',
-            sig: 'ab'.repeat(64),
-          },
-        ],
+        eventIds: [HEX('1'), HEX('2'), HEX('3'), HEX('5'), HEX('6'), HEX('7')],
+      },
+      {
+        url: 'ws://127.0.0.1:4431',
+        status: 'error',
+        error: 'connection failed',
+        eventIds: [],
       },
     ],
-    redaction: { proofSecretsDropped: true },
+    redaction: {
+      proofSecretsDropped: true,
+      encryptedContentsDropped: true,
+      walletPrivateKeyDropped: true,
+    },
   };
+}
+
+function withDigest(): Record<string, unknown> {
+  const capture = validCapture();
+  const { digest: _digest, ...bundle } = capture;
+  capture.digest = captureDigest(bundle as never);
+  return capture;
 }
 
 describe('validateNip60Capture', () => {
   it('accepts a fully populated valid bundle', () => {
-    const result = validateNip60Capture(validCapture());
+    const result = validateNip60Capture(withDigest());
     expect(result.errors).toEqual([]);
     expect(result.ok).toBe(true);
+  });
+
+  it('accepts NUT-02 v2 keyset IDs in capture artifacts', () => {
+    const capture = withDigest();
+    const relays = (
+      capture.observation as {
+        relays: Array<{ tokens: Array<{ proofs: Array<{ keysetId: string }> }> }>;
+      }
+    ).relays;
+    const proof = relays[0]?.tokens[0]?.proofs[0];
+    if (proof === undefined) throw new Error('expected proof fixture');
+    proof.keysetId = `01${'a'.repeat(64)}`;
+    const { digest: _digest, ...bundle } = capture;
+    capture.digest = captureDigest(bundle as never);
+    expect(validateNip60Capture(capture).ok).toBe(true);
   });
 
   it('rejects schema violations with readable errors', () => {
@@ -136,10 +163,75 @@ describe('validateNip60Capture', () => {
     expect(validateNip60Capture(broken).ok).toBe(false);
   });
 
+  it('fails integrity verification when the digest is forged', () => {
+    const result = verifyCaptureIntegrity(validCapture());
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain('capture digest does not match its canonical contents');
+  });
+
+  it('fails integrity verification when NUT-07 truth is incomplete', () => {
+    const capture = withDigest();
+    (capture.observation as { mint: unknown[] }).mint = [];
+    const { digest: _digest, ...bundle } = capture;
+    capture.digest = captureDigest(bundle as never);
+    const result = verifyCaptureIntegrity(capture);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(`missing mint state for ${MINT} ${Y}`);
+  });
+
+  it('fails integrity verification when relay evidence and observations diverge', () => {
+    const capture = withDigest();
+    (capture.relayEvidence as Array<{ eventIds: string[] }>)[0]?.eventIds.pop();
+    const { digest: _digest, ...bundle } = capture;
+    capture.digest = captureDigest(bundle as never);
+    const result = verifyCaptureIntegrity(capture);
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((error) => error.includes('relay evidence is missing event'))).toBe(
+      true,
+    );
+  });
+
+  it('requires a one-to-one URL mapping between relay observations and evidence', () => {
+    const capture = withDigest();
+    const relays = (capture.observation as { relays: Array<{ url: string }> }).relays;
+    if (relays[1] === undefined) throw new Error('expected second relay');
+    relays[1].url = relays[0]?.url ?? '';
+    const { digest: _digest, ...bundle } = capture;
+    capture.digest = captureDigest(bundle as never);
+    const result = verifyCaptureIntegrity(capture);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain('relay observations contain duplicate urls');
+    expect(result.errors).toContain(
+      'relay evidence URL ws://127.0.0.1:4431 has no matching observation',
+    );
+  });
+
   it('rejects additional properties', () => {
     const broken = validCapture();
     broken.extra = true;
     expect(validateNip60Capture(broken).ok).toBe(false);
+  });
+
+  it('bounds aggregate mint truth to ten thousand proofs', () => {
+    const broken = withDigest();
+    (broken.observation as { mint: unknown[] }).mint = Array.from({ length: 10_001 }, () => ({
+      mint: MINT,
+      y: Y,
+      state: 'UNSPENT',
+    }));
+    expect(validateNip60Capture(broken).ok).toBe(false);
+  });
+
+  it('preflights aggregate event occurrences before full validation and hashing', () => {
+    const broken = withDigest();
+    const relays = (broken.observation as { relays: Array<{ tokens: unknown[] }> }).relays;
+    const token = relays[0]?.tokens[0];
+    if (token === undefined) throw new Error('expected token fixture');
+    if (relays[0] === undefined) throw new Error('expected relay fixture');
+    relays[0].tokens = Array.from({ length: 10_001 }, () => token);
+    const result = verifyCaptureIntegrity(broken);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain('capture contains more than 10000 event occurrences');
   });
 });
 

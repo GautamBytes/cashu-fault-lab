@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
 import WebSocket from 'ws';
 import { finalizeEvent, generateSecretKey, getPublicKey, nip44, type Event } from 'nostr-tools';
 import { NostrFaultRelay } from '@cashu-fault-lab/nostr-fault-relay';
@@ -85,6 +86,115 @@ const fakeMintTruth = (mint: string, ys: readonly string[]): Promise<readonly Mi
   Promise.resolve(ys.map((y) => ({ mint, y, state: 'UNSPENT' as const })));
 
 describe('captureWallet against live in-process relays', () => {
+  it('matches the committed encrypted redaction vector', async () => {
+    const vectorUrl = new URL(
+      '../../../spec/vectors/nip60-capture-redaction.json',
+      import.meta.url,
+    );
+    const vector = JSON.parse(await readFile(vectorUrl, 'utf8')) as {
+      testOnlySubjectSecretKeyHex: string;
+      inputEvent: Event;
+      expectedNormalized: unknown;
+      mustNotAppearInCapture: string[];
+    };
+    const capture = await captureWallet({
+      relays: ['wss://relay.example'],
+      subjectSecretKey: Uint8Array.from(Buffer.from(vector.testOnlySubjectSecretKeyHex, 'hex')),
+      capturedAt: '2026-08-04T00:00:00.000Z',
+      fetchEvents: () => Promise.resolve([vector.inputEvent]),
+      checkStates: fakeMintTruth,
+    });
+    expect(capture.observation.relays[0]?.tokens[0]).toEqual(vector.expectedNormalized);
+    const serialized = JSON.stringify(capture);
+    for (const forbidden of vector.mustNotAppearInCapture) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it('produces the same digest when a relay returns events in a different order', async () => {
+    const fixture = makeFixture();
+    const options = {
+      relays: ['wss://relay.example'],
+      subjectSecretKey: fixture.sk,
+      capturedAt: '2026-08-04T00:00:00.000Z',
+      checkStates: fakeMintTruth,
+    } as const;
+    const forward = await captureWallet({
+      ...options,
+      fetchEvents: () => Promise.resolve([fixture.tokenA, fixture.tokenB, fixture.deletion]),
+    });
+    const reverse = await captureWallet({
+      ...options,
+      fetchEvents: () => Promise.resolve([fixture.deletion, fixture.tokenB, fixture.tokenA]),
+    });
+    expect(reverse.digest).toBe(forward.digest);
+    expect(reverse.observation).toEqual(forward.observation);
+  });
+
+  it('rejects aggregate proof candidates before repeated proofs can bypass the unique-Y cap', async () => {
+    const fixture = makeFixture();
+    const events = Array.from({ length: 2 }, (_, eventIndex) =>
+      finalizeEvent(
+        {
+          kind: 7375,
+          created_at: 1_700_001_000 + eventIndex,
+          tags: [],
+          content: nip44.v2.encrypt(
+            JSON.stringify({
+              mint: MINT,
+              proofs: Array.from({ length: 5_001 }, () => ({
+                id: '00ad268c4d1f5826',
+                amount: 1,
+                secret: 'same-proof-secret',
+              })),
+            }),
+            fixture.conversationKey,
+          ),
+        },
+        fixture.sk,
+      ),
+    );
+    await expect(
+      captureWallet({
+        relays: ['wss://relay.example'],
+        subjectSecretKey: fixture.sk,
+        fetchEvents: () => Promise.resolve(events),
+        checkStates: fakeMintTruth,
+      }),
+    ).rejects.toThrow(/proof candidate count exceeds 10000/u);
+  });
+
+  it('counts repeated proof work across relay occurrences', async () => {
+    const fixture = makeFixture();
+    const event = finalizeEvent(
+      {
+        kind: 7375,
+        created_at: 1_700_001_000,
+        tags: [],
+        content: nip44.v2.encrypt(
+          JSON.stringify({
+            mint: MINT,
+            proofs: Array.from({ length: 200 }, (_, index) => ({
+              id: '00ad268c4d1f5826',
+              amount: 1,
+              secret: `repeated-${index}`,
+            })),
+          }),
+          fixture.conversationKey,
+        ),
+      },
+      fixture.sk,
+    );
+    await expect(
+      captureWallet({
+        relays: Array.from({ length: 51 }, (_, index) => `wss://relay-${index}.example`),
+        subjectSecretKey: fixture.sk,
+        fetchEvents: () => Promise.resolve([event]),
+        checkStates: fakeMintTruth,
+      }),
+    ).rejects.toThrow(/proof candidate count exceeds 10000/u);
+  });
+
   it('collects, normalizes, redacts, and digests a divergent two-relay capture', async () => {
     const relayA = new NostrFaultRelay();
     const relayB = new NostrFaultRelay();
@@ -101,6 +211,7 @@ describe('captureWallet against live in-process relays', () => {
 
       const capture = await captureWallet({
         relays: [urlA, urlB],
+        allowInsecureLoopback: true,
         subjectSecretKey: fixture.sk,
         capturedAt: '2026-08-03T12:00:00.000Z',
         checkStates: fakeMintTruth,
@@ -121,12 +232,17 @@ describe('captureWallet against live in-process relays', () => {
       expect(capture.observation.mint).toHaveLength(2);
       expect(capture.observation.mint.every((entry) => entry.state === 'UNSPENT')).toBe(true);
 
-      // Proof secrets never reach the bundle; raw content stays encrypted.
+      // Neither plaintext secrets nor encrypted event bodies reach the bundle.
       const serialized = JSON.stringify(capture);
       for (const secret of fixture.secrets) {
         expect(serialized).not.toContain(secret);
       }
       expect(capture.redaction.proofSecretsDropped).toBe(true);
+      expect(capture.redaction.encryptedContentsDropped).toBe(true);
+      expect(capture.redaction.walletPrivateKeyDropped).toBe(true);
+      expect(serialized).not.toContain(fixture.tokenA.content);
+      expect(serialized).not.toContain(fixture.tokenA.sig);
+      expect(capture.relayEvidence[0]?.eventIds).toContain(fixture.tokenA.id);
 
       // Digest is deterministic over the redacted bundle.
       const { digest, ...bundle } = capture;
@@ -145,6 +261,7 @@ describe('captureWallet against live in-process relays', () => {
       await publish(urlA, fixture.tokenA);
       const capture = await captureWallet({
         relays: [urlA, 'ws://127.0.0.1:1'],
+        allowInsecureLoopback: true,
         subjectSecretKey: fixture.sk,
         timeoutMs: 2_000,
         capturedAt: '2026-08-03T12:00:00.000Z',
@@ -166,6 +283,7 @@ describe('captureWallet against live in-process relays', () => {
       await publish(urlA, fixture.tokenA);
       const capture = await captureWallet({
         relays: [urlA],
+        allowInsecureLoopback: true,
         subjectPubkey: fixture.pk,
         timeoutMs: 2_000,
         capturedAt: '2026-08-03T12:00:00.000Z',
@@ -181,8 +299,8 @@ describe('captureWallet against live in-process relays', () => {
           seenOn: [urlA],
         },
       ]);
-      // Raw evidence is still preserved.
-      expect(capture.rawRelays[0]?.events).toHaveLength(1);
+      // Only the event identifier is preserved as relay evidence.
+      expect(capture.relayEvidence[0]?.eventIds).toEqual([fixture.tokenA.id]);
     } finally {
       await relayA.close();
     }

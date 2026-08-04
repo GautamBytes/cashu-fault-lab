@@ -1,4 +1,4 @@
-# Cashu Fault Lab — experimental v0.1 developer preview
+# Cashu Fault Lab — experimental v0.2 developer preview
 
 Cashu Fault Lab checks payment delivery across retries, duplicates, transport loss, and process recovery. Funded cashu-ts has delivery-v1 sender and receiver paths over HTTP and NIP-17 Nostr, PostgreSQL-backed restart-safe sender state, optional T3 receiver evidence, and real SIGKILL coverage at four sender and six receiver boundaries. CDK remains a funded sender adapter against the reference receiver at T1.
 
@@ -7,10 +7,10 @@ receive, restore, reconcile, and independently verified melt recovery. It is int
 from the stable delivery routes and is not part of the current release qualification. See the
 [wallet lifecycle guide](docs/wallet-lifecycle.md) for implemented scope and remaining work.
 
-This is an experimental v0.1 developer preview, not certification. The current supported CLI is
-v0.1.4. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
+This is an experimental developer preview, not certification. Version 0.2.0 introduces the
+breaking wallet-doctor capture-v2 contract. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
 identities, trustworthy build provenance, and external integrations. See the
-[v0.1.4 release notes](docs/releases/v0.1.4.md) and
+[v0.2.0 release notes](docs/releases/v0.2.0.md) and the delivery lane's
 [v0.1.4 checklist](docs/releases/v0.1.4-checklist.md).
 
 The lab implements an experimental `cashu-delivery-v1` application profile on existing Cashu and Nostr protocols. Harness operation does not require a new NUT. See [ADR 001](docs/adrs/001-delivery-semantics.md) for the standardization boundary.
@@ -20,8 +20,8 @@ The lab implements an experimental `cashu-delivery-v1` application profile on ex
 Run the developer preview without cloning the repository or installing pnpm and Rust:
 
 ```bash
-npx cashu-fault-lab@0.1.4 doctor
-npx cashu-fault-lab@0.1.4 demo
+npx cashu-fault-lab@0.2.0 doctor
+npx cashu-fault-lab@0.2.0 demo
 ```
 
 This requires Node.js 24 and Docker. The npm package contains the CLI, scenarios, schemas, and
@@ -30,11 +30,11 @@ writes redacted JSON and HTML evidence, and removes the stack when it finishes.
 
 ## Test a local wallet adapter
 
-The v0.1.4 maintainer preview scaffolds an adapter, validates its contract without mutating wallet
+The v0.2.0 maintainer preview scaffolds an adapter, validates its contract without mutating wallet
 state, then runs response-loss and duplicate-delivery checks:
 
 ```bash
-npx cashu-fault-lab@0.1.4 adapter init \
+npx cashu-fault-lab@0.2.0 adapter init \
   --language typescript \
   --name my-wallet
 ```
@@ -45,17 +45,17 @@ they are connected to real wallet operations. Then start the adapter and export 
 named by its manifest.
 
 ```bash
-npx cashu-fault-lab@0.1.4 adapter preflight \
+npx cashu-fault-lab@0.2.0 adapter preflight \
   --adapters ./my-wallet/adapter-manifest.json
 
-npx cashu-fault-lab@0.1.4 adapter preview \
+npx cashu-fault-lab@0.2.0 adapter preview \
   --adapters ./my-wallet/adapter-manifest.json \
   --sender my-wallet \
   --receiver my-wallet \
   --output-dir ./cashu-fault-results
 ```
 
-Choose `typescript`, `rust`, or `python` when generating the adapter. Version 0.1.4 accepts only
+Choose `typescript`, `rust`, or `python` when generating the adapter. Version 0.2.0 accepts only
 loopback HTTP origins; remote and hosted wallet adapters are intentionally rejected. The preview
 automatically manages its local fault gateway and writes redacted JSON, HTML, JUnit, preflight, and
 replay evidence to `cashu-fault-results/`. Share the bundle for developer feedback, not as release
@@ -66,19 +66,25 @@ qualification or certification.
 The NIP-60 wallet doctor is an opt-in diagnostic lane: it collects one wallet's events from
 several Nostr relays, reconstructs the per-relay, merged, and mint-verified views, explains why
 applications disagree about a balance with nine stable diagnosis codes, and emits a deterministic
-dry-run repair plan. It never publishes events and never moves value; proof secrets are dropped at
-capture time. Like the lifecycle suite it is intentionally separate from the delivery routes and
-not part of release qualification. See the [wallet doctor guide](docs/wallet-doctor.md).
+dry-run repair plan. It never publishes events and never moves value; capture v2 drops proof
+secrets, encrypted bodies, and signatures. The funded doctor matrix is a separate tagged-release
+prerequisite, but its output remains diagnostic evidence rather than wallet certification. See the
+[wallet doctor guide](docs/wallet-doctor.md).
 
 ```bash
 export CFL_NIP60_SUBJECT_KEY='nsec1… or 64-hex test key'
-npx cashu-fault-lab@0.1.4 wallet-doctor collect --relay ws://127.0.0.1:4430 --relay ws://127.0.0.1:4431
-npx cashu-fault-lab@0.1.4 wallet-doctor check artifacts/wallet-doctor/capture.json
+pnpm lab wallet-doctor collect --allow-insecure-loopback --relay ws://127.0.0.1:4430 --relay ws://127.0.0.1:4431 --relay ws://127.0.0.1:4432
+pnpm lab wallet-doctor check --allow-insecure-loopback artifacts/wallet-doctor/capture.json
 ```
 
+Public operation accepts WSS relays and HTTPS mints only and pins validated public DNS answers into
+the connection. `--allow-insecure-loopback` is scoped to the local three-relay lab shown above.
+Released v0.1.4 capture-v1 files must be recollected for the breaking v0.2.0 capture-v2 contract.
+
 External wallet teams produce the documented capture bundle (`spec/schemas/nip60-capture.schema.json`)
-in their own CI and run `wallet-doctor check` as the interop gate. The seeded scenario lane
-(`scenarios/wallet-doctor/`) drives the lab reference wallet fixture against two Nostr fault
+in their own CI and run `wallet-doctor check` with the subject key available only to the checking
+environment; the command independently recaptures relay and mint evidence. The seeded scenario lane
+(`scenarios/wallet-doctor/`) drives the lab reference wallet fixture against three Nostr fault
 relays and a real mint with `pnpm test:doctor:funded`, and replays artifacts with
 `wallet-doctor replay`.
 

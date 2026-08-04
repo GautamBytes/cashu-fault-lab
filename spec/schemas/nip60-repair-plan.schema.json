@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schemas/nip60-repair-plan.schema.json",
+  "title": "NIP-60 Wallet Doctor Repair Plan Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "generatedFrom", "plan", "safety"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "kind": {
+      "const": "nip60-repair-plan"
+    },
+    "generatedFrom": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "subject", "captureDigest", "steps"],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "subject": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "captureDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "steps": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "violations"],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "violations": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "step": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "eventId", "toRelays"],
+          "properties": {
+            "action": {
+              "enum": ["republish_event", "republish_wallet_event"]
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "toRelays": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "string",
+                "maxLength": 2048
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "rolloverId", "mint", "unit", "coveredYs", "del", "toRelays"],
+          "properties": {
+            "action": {
+              "const": "publish_rollover"
+            },
+            "rolloverId": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "mint": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "unit": {
+              "type": "string",
+              "maxLength": 16
+            },
+            "coveredYs": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^0[23][0-9a-f]{64}$"
+              }
+            },
+            "del": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "toRelays": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "string",
+                "maxLength": 2048
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "eventIds", "toRelays"],
+          "properties": {
+            "action": {
+              "const": "delete_events"
+            },
+            "eventIds": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "toRelays": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "string",
+                "maxLength": 2048
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "kind", "mint", "ys"],
+          "properties": {
+            "action": {
+              "const": "wallet_action"
+            },
+            "kind": {
+              "const": "nut09_restore"
+            },
+            "mint": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "ys": {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {
+                "type": "string",
+                "maxLength": 2048,
+                "pattern": "^0[23][0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

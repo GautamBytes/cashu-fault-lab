@@ -494,13 +494,17 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
     },
     {
       name: 'wallet-doctor collect',
-      usage: 'cashu-fault-lab wallet-doctor collect --relay <url>',
+      usage: 'cashu-fault-lab wallet-doctor collect (--relay <url> | --discover-from <url>)',
       summary: 'Fetch NIP-60 events from relays and verify proofs against their mints',
       arguments: [],
       options: [
         { flags: '--relay <url>', description: 'Relay url; repeat for each relay.' },
+        {
+          flags: '--discover-from <url>',
+          description: 'Bootstrap relay for kind 10019 / NIP-65 discovery; repeatable.',
+        },
         { flags: '--nsec-env <var>', description: 'Env var holding the subject secret key.' },
-        { flags: '--pubkey <hex>', description: 'Subject pubkey for keyless raw capture.' },
+        { flags: '--pubkey <hex>', description: 'Subject pubkey for keyless redacted capture.' },
         { flags: '--timeout-ms <ms>', description: 'Per-relay and per-mint timeout.' },
         { flags: '--output <path>', description: 'Write the capture bundle.' },
       ],
@@ -542,13 +546,17 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
     {
       name: 'wallet-doctor check',
       usage: 'cashu-fault-lab wallet-doctor check <capture>',
-      summary: 'CI gate: diagnosis plus safe repair plan, exit code reflects findings',
+      summary: 'CI gate: independently recapture, diagnose, and verify the safe repair plan',
       arguments: [{ value: '<capture>', description: 'Capture bundle JSON.' }],
-      options: [{ flags: '--output <path>', description: 'Write the combined check artifact.' }],
+      options: [
+        { flags: '--nsec-env <var>', description: 'Env var holding the subject secret key.' },
+        { flags: '--timeout-ms <ms>', description: 'Per-relay and per-mint timeout.' },
+        { flags: '--output <path>', description: 'Write the combined check artifact.' },
+      ],
       examples: ['cashu-fault-lab wallet-doctor check artifacts/wallet-doctor/capture.json'],
-      env: [],
+      env: ['CFL_NIP60_SUBJECT_KEY'],
       modes: ['text'],
-      artifacts: [],
+      artifacts: ['artifacts/wallet-doctor/check.json (when --output is supplied)'],
       exitCodes: COMMON_EXIT_CODES,
     },
     {

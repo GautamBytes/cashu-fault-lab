@@ -518,15 +518,16 @@ Examples:
 
 - `cashu-fault-lab lifecycle replay artifacts/failure.json --seed demo --adapter cashu-ts --mint nutshell-local`
 
-## `cashu-fault-lab wallet-doctor collect --relay <url>`
+## `cashu-fault-lab wallet-doctor collect (--relay <url> | --discover-from <url>)`
 
 Fetch NIP-60 events from relays and verify proofs against their mints
 
 Options:
 
 - `--relay <url>`: Relay url; repeat for each relay.
+- `--discover-from <url>`: Bootstrap relay for kind 10019 / NIP-65 discovery; repeatable.
 - `--nsec-env <var>`: Env var holding the subject secret key.
-- `--pubkey <hex>`: Subject pubkey for keyless raw capture.
+- `--pubkey <hex>`: Subject pubkey for keyless redacted capture.
 - `--timeout-ms <ms>`: Per-relay and per-mint timeout.
 - `--output <path>`: Write the capture bundle.
 
@@ -599,7 +600,7 @@ Examples:
 
 ## `cashu-fault-lab wallet-doctor check <capture>`
 
-CI gate: diagnosis plus safe repair plan, exit code reflects findings
+CI gate: independently recapture, diagnose, and verify the safe repair plan
 
 Arguments:
 
@@ -607,11 +608,13 @@ Arguments:
 
 Options:
 
+- `--nsec-env <var>`: Env var holding the subject secret key.
+- `--timeout-ms <ms>`: Per-relay and per-mint timeout.
 - `--output <path>`: Write the combined check artifact.
 
 Modes: `text`
-Environment: None
-Artifacts: None
+Environment: `CFL_NIP60_SUBJECT_KEY`
+Artifacts: `artifacts/wallet-doctor/check.json (when --output is supplied)`
 
 Exit Codes:
 

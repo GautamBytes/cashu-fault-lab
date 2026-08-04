@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import { describe, expect, it } from 'vitest';
+import { Ajv2020 } from 'ajv/dist/2020.js';
 import WebSocket from 'ws';
 import { NostrFaultRelay } from '@cashu-fault-lab/nostr-fault-relay';
 import type { Event } from 'nostr-tools';
@@ -108,8 +109,10 @@ interface Lab {
   readonly fixtureUrl: string;
   readonly relayA: NostrFaultRelay;
   readonly relayB: NostrFaultRelay;
+  readonly relayC: NostrFaultRelay;
   readonly controlA: Server;
   readonly controlB: Server;
+  readonly controlC: Server;
   readonly states: Map<string, 'UNSPENT' | 'SPENT'>;
   readonly endpoints: DoctorRunEndpoints;
 }
@@ -117,14 +120,17 @@ interface Lab {
 async function startLab(): Promise<Lab> {
   const relayA = new NostrFaultRelay();
   const relayB = new NostrFaultRelay();
+  const relayC = new NostrFaultRelay();
   const urlA = await relayA.listen(0);
   const urlB = await relayB.listen(0);
+  const urlC = await relayC.listen(0);
   const controlA = await startRelayControl(relayA);
   const controlB = await startRelayControl(relayB);
+  const controlC = await startRelayControl(relayC);
   const states = new Map<string, 'UNSPENT' | 'SPENT'>();
   const fixture = createFixtureServer({
     mint: MINT,
-    relays: [urlA, urlB],
+    relays: [urlA, urlB, urlC],
     token: FIXTURE_TOKEN,
     walletFactory: () => trackedMintWallet(states),
     publish,
@@ -138,8 +144,10 @@ async function startLab(): Promise<Lab> {
     fixtureUrl,
     relayA,
     relayB,
+    relayC,
     controlA,
     controlB,
+    controlC,
     states,
     endpoints: {
       fixtureUrl,
@@ -147,6 +155,7 @@ async function startLab(): Promise<Lab> {
       relays: [
         { url: urlA, controlUrl: controlUrlOf(controlA), controlToken: CONTROL_TOKEN },
         { url: urlB, controlUrl: controlUrlOf(controlB), controlToken: CONTROL_TOKEN },
+        { url: urlC, controlUrl: controlUrlOf(controlC), controlToken: CONTROL_TOKEN },
       ],
     },
   };
@@ -156,8 +165,10 @@ async function stopLab(lab: Lab): Promise<void> {
   await new Promise<void>((resolve) => lab.fixture.server.close(() => resolve()));
   await new Promise<void>((resolve) => lab.controlA.close(() => resolve()));
   await new Promise<void>((resolve) => lab.controlB.close(() => resolve()));
+  await new Promise<void>((resolve) => lab.controlC.close(() => resolve()));
   await lab.relayA.close();
   await lab.relayB.close();
+  await lab.relayC.close();
 }
 
 async function loadPackagedScenarios(): Promise<readonly WalletDoctorScenario[]> {
@@ -172,12 +183,18 @@ async function loadPackagedScenarios(): Promise<readonly WalletDoctorScenario[]>
   return scenarios;
 }
 
+describe('packaged wallet-doctor scenario catalog', () => {
+  it('contains nine valid scenarios', async () => {
+    expect(await loadPackagedScenarios()).toHaveLength(9);
+  });
+});
+
 describe('packaged wallet-doctor scenarios (golden in-process lane)', () => {
   it('every packaged scenario produces its expected diagnosis', async () => {
     const lab = await startLab();
     try {
       const scenarios = await loadPackagedScenarios();
-      expect(scenarios.length).toBeGreaterThanOrEqual(7);
+      expect(scenarios).toHaveLength(9);
       const hooks = {
         checkStates: (mint: string, ys: readonly string[]) =>
           Promise.resolve(
@@ -246,6 +263,40 @@ describe('packaged wallet-doctor scenarios (golden in-process lane)', () => {
 });
 
 describe('validateWalletDoctorScenario', () => {
+  it('keeps the normative schema aligned with relay-partition runtime requirements', async () => {
+    const schema = JSON.parse(
+      await readFile(
+        new URL('../../../spec/schemas/wallet-doctor-scenario.schema.json', import.meta.url),
+        'utf8',
+      ),
+    ) as object;
+    const validate = new Ajv2020({ strict: false }).compile(schema);
+    const targetless = {
+      schemaVersion: 1,
+      id: 'partition',
+      name: 'partition',
+      description: 'partition',
+      commands: [{ op: 'relay-partition', relay: 0 }],
+      expect: { codes: [], ok: true },
+    };
+    expect(validate(targetless)).toBe(false);
+    expect(() => validateWalletDoctorScenario(targetless)).toThrow(/withhold/u);
+
+    const bounded = {
+      ...targetless,
+      commands: [{ op: 'relay-partition', relay: 0, kinds: [7375] }],
+    };
+    expect(validate(bounded)).toBe(true);
+    expect(validateWalletDoctorScenario(bounded).commands[0]?.kinds).toEqual([7375]);
+
+    const irrelevant = {
+      ...targetless,
+      commands: [{ op: 'mint', amount: 1, relay: 64 }],
+    };
+    expect(validate(irrelevant)).toBe(false);
+    expect(() => validateWalletDoctorScenario(irrelevant)).toThrow(/unknown property relay/u);
+  });
+
   it('rejects malformed specs', () => {
     expect(() => validateWalletDoctorScenario({ schemaVersion: 2 })).toThrow(/invalid/u);
     expect(() =>

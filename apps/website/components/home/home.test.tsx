@@ -81,7 +81,7 @@ describe('home components', () => {
       'href',
       'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
     );
-    expect(within(hero).getByText('npx cashu-fault-lab@0.1.4 demo')).toBeVisible();
+    expect(within(hero).getByText('npx cashu-fault-lab@0.2.0 demo')).toBeVisible();
     expect(within(hero).getByRole('link', { name: /View on GitHub/ })).toHaveAttribute(
       'href',
       'https://github.com/GautamBytes/cashu-fault-lab',
@@ -115,7 +115,7 @@ describe('home components', () => {
     render(await HomePage());
 
     const command = screen.getByLabelText('Demo command');
-    expect(within(command).getByText('npx cashu-fault-lab@0.1.4 demo')).toHaveAttribute(
+    expect(within(command).getByText('npx cashu-fault-lab@0.2.0 demo')).toHaveAttribute(
       'tabindex',
       '0',
     );
@@ -125,7 +125,7 @@ describe('home components', () => {
 
     await user.click(within(command).getByRole('button', { name: 'Copy demo command' }));
 
-    expect(await navigator.clipboard.readText()).toBe('npx cashu-fault-lab@0.1.4 demo');
+    expect(await navigator.clipboard.readText()).toBe('npx cashu-fault-lab@0.2.0 demo');
     expect(within(command).getByText('Copied')).toBeVisible();
   });
 

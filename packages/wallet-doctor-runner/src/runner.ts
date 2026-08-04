@@ -151,6 +151,11 @@ function compareExpectations(
   expect: WalletDoctorScenarioExpect,
   check: WalletDoctorCheck,
 ): { failures: string[]; actual: WalletDoctorScenarioArtifact['actual'] } {
+  if (check.diagnosisArtifact === null) {
+    throw new Error(
+      `captured scenario failed integrity: ${check.summary.integrityErrors.join('; ')}`,
+    );
+  }
   const balance = check.diagnosisArtifact.diagnosis.balance;
   const actual: WalletDoctorScenarioArtifact['actual'] = {
     codes: check.summary.codes,
@@ -219,6 +224,7 @@ export async function executeDoctorScenario(
   const capture: Nip60Capture = await captureWallet({
     relays: endpoints.relays.map((relay) => relay.url),
     subjectSecretKey: Uint8Array.from(Buffer.from(subject.secretKeyHex, 'hex')),
+    allowInsecureLoopback: true,
     ...(hooks.checkStates === undefined ? {} : { checkStates: hooks.checkStates }),
   });
   const check = checkCapture(capture);

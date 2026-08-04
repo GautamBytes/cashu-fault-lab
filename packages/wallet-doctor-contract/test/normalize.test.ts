@@ -48,6 +48,31 @@ describe('normalizeTokenPayload', () => {
     expect(result.view.del).toEqual(['a'.repeat(64)]);
   });
 
+  it('accepts NUT-02 v2 keyset IDs and rejects longer identifiers', () => {
+    const event = fakeEvent(7375);
+    const v2KeysetId = `01${'a'.repeat(64)}`;
+    expect(
+      normalizeTokenPayload(
+        event,
+        {
+          mint: 'https://mint.example',
+          proofs: [{ id: v2KeysetId, amount: 1, secret: 'v2-keyset-secret' }],
+        },
+        SEEN,
+      ).ok,
+    ).toBe(true);
+    expect(
+      normalizeTokenPayload(
+        event,
+        {
+          mint: 'https://mint.example',
+          proofs: [{ id: `${v2KeysetId}a`, amount: 1, secret: 'oversized-keyset-secret' }],
+        },
+        SEEN,
+      ).ok,
+    ).toBe(false);
+  });
+
   it('rejects payloads without proofs or with bad amounts', () => {
     const event = fakeEvent(7375);
     expect(normalizeTokenPayload(event, { mint: 'http://m' }, SEEN).ok).toBe(false);
@@ -55,6 +80,52 @@ describe('normalizeTokenPayload', () => {
       normalizeTokenPayload(
         event,
         { mint: 'http://m', proofs: [{ id: 'k', amount: 0, secret: 's' }] },
+        SEEN,
+      ).ok,
+    ).toBe(false);
+  });
+
+  it('bounds untrusted token fields before hashing proofs', () => {
+    const event = fakeEvent(7375);
+    expect(
+      normalizeTokenPayload(event, { mint: `https://${'m'.repeat(2049)}`, proofs: [] }, SEEN).ok,
+    ).toBe(false);
+    expect(
+      normalizeTokenPayload(
+        event,
+        {
+          mint: 'https://mint.example',
+          unit: 'u'.repeat(17),
+          proofs: [{ id: 'k', amount: 1, secret: 's' }],
+        },
+        SEEN,
+      ).ok,
+    ).toBe(false);
+    expect(
+      normalizeTokenPayload(
+        event,
+        { mint: 'https://mint.example', proofs: Array.from({ length: 10_001 }, () => ({})) },
+        SEEN,
+      ).ok,
+    ).toBe(false);
+    expect(
+      normalizeTokenPayload(
+        event,
+        {
+          mint: 'https://mint.example',
+          proofs: [{ id: 'k', amount: 1, secret: 'x'.repeat(8193) }],
+        },
+        SEEN,
+      ).ok,
+    ).toBe(false);
+    expect(
+      normalizeTokenPayload(
+        event,
+        {
+          mint: 'https://mint.example',
+          proofs: [{ id: 'k', amount: 1, secret: 's' }],
+          del: ['not-an-event-id'],
+        },
         SEEN,
       ).ok,
     ).toBe(false);
@@ -83,6 +154,12 @@ describe('normalizeWalletPayload', () => {
   it('flags wallet events without mints', () => {
     const result = normalizeWalletPayload(fakeEvent(17375), [['privkey', 'x']], SEEN);
     expect(result).toEqual({ ok: false, reason: 'wallet_without_mints' });
+  });
+
+  it('rejects wallet mint fields that cannot fit the capture schema', () => {
+    expect(
+      normalizeWalletPayload(fakeEvent(17375), [['mint', `https://${'m'.repeat(2049)}`]], SEEN).ok,
+    ).toBe(false);
   });
 });
 
@@ -116,6 +193,13 @@ describe('normalizeHistoryEvent', () => {
     expect(result.view.destroyed).toEqual(['a'.repeat(64)]);
     expect(result.view.redeemed).toEqual(['c'.repeat(64)]);
   });
+
+  it('rejects invalid numeric, unit, and event-reference fields', () => {
+    const event = fakeEvent(7376);
+    expect(normalizeHistoryEvent(event, [['amount', '-1']], SEEN).ok).toBe(false);
+    expect(normalizeHistoryEvent(event, [['unit', 'u'.repeat(17)]], SEEN).ok).toBe(false);
+    expect(normalizeHistoryEvent(event, [['e', 'bad', '', 'created']], SEEN).ok).toBe(false);
+  });
 });
 
 describe('normalizeDeletionEvent', () => {
@@ -134,10 +218,54 @@ describe('normalizeDeletionEvent', () => {
       },
       sk,
     );
-    const view = normalizeDeletionEvent(event, SEEN);
-    expect(view.targets).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
-    expect(view.kinds).toEqual([7375]);
+    const result = normalizeDeletionEvent(event, SEEN);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.view.targets).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
+    expect(result.view.kinds).toEqual([7375]);
   });
+
+  it('ignores deletion events that do not explicitly target kind 7375', () => {
+    const sk = generateSecretKey();
+    const event = finalizeEvent(
+      {
+        kind: 5,
+        created_at: 1_700_000_100,
+        tags: [
+          ['e', 'a'.repeat(64)],
+          ['k', '1'],
+        ],
+        content: '',
+      },
+      sk,
+    );
+    expect(normalizeDeletionEvent(event, SEEN)).toEqual({
+      ok: false,
+      reason: 'invalid_payload',
+    });
+  });
+
+  it.each(['7375junk', '07375', '+7375', '7375.0'])(
+    'rejects non-canonical deletion kind tag %s',
+    (kind) => {
+      const event = finalizeEvent(
+        {
+          kind: 5,
+          created_at: 1_700_000_100,
+          tags: [
+            ['e', 'a'.repeat(64)],
+            ['k', kind],
+          ],
+          content: '',
+        },
+        generateSecretKey(),
+      );
+      expect(normalizeDeletionEvent(event, SEEN)).toEqual({
+        ok: false,
+        reason: 'invalid_payload',
+      });
+    },
+  );
 });
 
 describe('normalizeQuoteEvent', () => {

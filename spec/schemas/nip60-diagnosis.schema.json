@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashu-fault-lab.dev/schemas/nip60-diagnosis.schema.json",
+  "title": "NIP-60 Wallet Doctor Diagnosis Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "generatedFrom", "diagnosis"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "kind": {
+      "const": "nip60-diagnosis"
+    },
+    "generatedFrom": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "diagnosis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "findings", "balance", "ok"],
+      "properties": {
+        "subject": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "findings": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "balance": {
+          "$ref": "#/$defs/balance"
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "summary", "relays", "eventIds", "ys", "amountAtRisk"],
+      "properties": {
+        "code": {
+          "enum": [
+            "RELAY_PARTITION",
+            "GHOST_TOKEN",
+            "ORPHANED_PROOFS",
+            "DEL_CHAIN_BREAK",
+            "WALLET_EVENT_FORK",
+            "DELETION_NOT_PROPAGATED",
+            "HISTORY_GAP",
+            "QUOTE_LIMBO",
+            "MALFORMED_EVENT"
+          ]
+        },
+        "severity": {
+          "enum": ["error", "warning", "info"]
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "relays": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "eventIds": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "ys": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^0[23][0-9a-f]{64}$"
+          }
+        },
+        "mint": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "amountAtRisk": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "relayBalance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "status", "balance"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "status": {
+          "enum": ["ok", "error"]
+        },
+        "balance": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "balance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "perRelay",
+        "naiveMerged",
+        "merged",
+        "mintVerified",
+        "doubleCounted",
+        "ghost",
+        "orphanedUnspent"
+      ],
+      "properties": {
+        "perRelay": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/relayBalance"
+          }
+        },
+        "naiveMerged": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "merged": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "mintVerified": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "doubleCounted": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "ghost": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "orphanedUnspent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    }
+  }
+}

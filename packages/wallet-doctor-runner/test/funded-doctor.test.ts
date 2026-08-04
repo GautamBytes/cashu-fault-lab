@@ -9,7 +9,7 @@ import {
 
 /**
  * Funded lane: every packaged wallet-doctor scenario against the real
- * reference wallet fixture, two real fault relays, and a real Nutshell mint
+ * reference wallet fixture, three real fault relays, and a real Nutshell mint
  * (compose stack from infra/compose/wallet-doctor.compose.yml). Runs only
  * through `pnpm test:doctor:funded`, which sets CFL_WALLET_DOCTOR_E2E.
  */
@@ -56,7 +56,8 @@ describe('funded wallet-doctor lane', () => {
         validateWalletDoctorScenario(JSON.parse(await readFile(new URL(file, directory), 'utf8'))),
       );
     }
-    expect(scenarios.length).toBeGreaterThanOrEqual(7);
+    expect(endpoints().relays).toHaveLength(3);
+    expect(scenarios).toHaveLength(9);
     // No checkStates hook: capture verifies proofs against the real mint.
     const matrix = await runDoctorMatrix(
       'nip60-doctor-v1',

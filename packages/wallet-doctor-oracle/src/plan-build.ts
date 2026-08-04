@@ -1,5 +1,7 @@
 import {
   reconstruct,
+  indexMintTruth,
+  mintProofKey,
   type DoctorObservation,
   type MintObservation,
   type RepairPlan,
@@ -35,7 +37,7 @@ function eventYs(token: TokenEventView): readonly string[] {
 export function buildRepairPlan(input: BuildPlanInput): RepairPlan {
   const { observation, diagnosis } = input;
   const { merged } = reconstruct(observation);
-  const mintByY = new Map(observation.mint.map((entry) => [entry.y, entry]));
+  const mintByY = indexMintTruth(observation.mint);
   const okRelays = observation.relays
     .filter((relay) => relay.status === 'ok')
     .map((relay) => relay.url)
@@ -90,14 +92,18 @@ export function buildRepairPlan(input: BuildPlanInput): RepairPlan {
     // truth over the events it would delete is left unrepaired instead.
     const deletesUncheckedProof = deleteIds.some((eventId) => {
       const token = findToken(merged.liveTokens, merged.naiveLiveTokens, eventId);
-      return token?.proofs.some((proof) => !mintByY.has(proof.y)) ?? false;
+      return (
+        token?.proofs.some((proof) => !mintByY.has(mintProofKey(token.mint, proof.y))) ?? false
+      );
     });
     if (deletesUncheckedProof) continue;
     const coveredYs = [
       ...new Set(
         liveForMint.flatMap((token) =>
           token.proofs
-            .filter((proof) => COVERED_STATES.has(mintByY.get(proof.y)?.state ?? 'SPENT'))
+            .filter((proof) =>
+              COVERED_STATES.has(mintByY.get(mintProofKey(token.mint, proof.y))?.state ?? 'SPENT'),
+            )
             .map((proof) => proof.y),
         ),
       ),
@@ -123,7 +129,7 @@ export function buildRepairPlan(input: BuildPlanInput): RepairPlan {
     const staleRelays = [
       ...new Set(
         forkFindings.flatMap((finding) =>
-          finding.relays.filter((url) => url !== merged.walletEvent?.eventId),
+          finding.relays.filter((url) => !merged.walletEvent?.seenOn.includes(url)),
         ),
       ),
     ].sort();
@@ -155,9 +161,16 @@ function isOrphanFinding(finding: Finding): boolean {
 }
 
 function orphanMint(finding: Finding, mint: readonly MintObservation[]): string | null {
+  if (finding.mint !== undefined) return finding.mint;
   const y = finding.ys[0];
   if (y === undefined) return null;
-  return mint.find((entry) => entry.y === y)?.mint ?? null;
+  const candidates = new Set(
+    mint
+      .filter((entry) => finding.ys.includes(entry.y) && entry.state === 'UNSPENT')
+      .map((entry) => entry.mint),
+  );
+  if (candidates.size === 1) return [...candidates][0] ?? null;
+  return null;
 }
 
 function findToken(

@@ -4,7 +4,7 @@ An adapter gives the lab one control surface for a wallet or service. Keep walle
 
 ## Contract
 
-Version 0.1.4 accepts these routes only on loopback origins
+Version 0.2.0 accepts these routes only on loopback origins
 (`http://127.0.0.1:<port>` or `http://[::1]:<port>`):
 
 | Method | Route                | Purpose                                                              |
@@ -81,7 +81,7 @@ store only a domain-separated seed hash; callers provide the raw seed out of ban
 
 ## Maintainer preview
 
-Version 0.1.4 intentionally accepts only adapter and evidence origins on
+Version 0.2.0 intentionally accepts only adapter and evidence origins on
 `http://127.0.0.1:<port>` or `http://[::1]:<port>`. Hosted adapters, TLS termination, redirects,
 userinfo, paths, queries, and fragments are rejected. This keeps wallet control tokens and funded
 test traffic on the maintainer's machine while the external contract is still experimental.
@@ -89,10 +89,10 @@ test traffic on the maintainer's machine while the external contract is still ex
 Start the adapter processes, export the token variables named by `adapter-manifest.json`, and run:
 
 ```bash
-npx cashu-fault-lab@0.1.4 adapter preflight \
+npx cashu-fault-lab@0.2.0 adapter preflight \
   --adapters adapter-manifest.json
 
-npx cashu-fault-lab@0.1.4 adapter preview \
+npx cashu-fault-lab@0.2.0 adapter preview \
   --adapters adapter-manifest.json \
   --sender my-wallet \
   --receiver my-wallet \

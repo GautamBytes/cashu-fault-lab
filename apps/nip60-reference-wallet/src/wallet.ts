@@ -31,8 +31,11 @@ export type PublishFn = (relayUrl: string, event: Event) => Promise<void>;
  *   (live events carry spent proofs -> ghost balance).
  * - `delete-only`: a deletion is published with no spend and no successor
  *   (unspent proofs lose their event -> orphaned proofs).
+ * - `partial-delete-only`: an irrelevant deletion reaches every relay, then
+ *   a valid standalone token deletion reaches only one (filtering plus divergence).
  */
-export type SpendMode = 'clean' | 'partial-delete' | 'partial-publish' | 'ghost' | 'delete-only';
+export type SpendMode =
+  'clean' | 'partial-delete' | 'partial-publish' | 'ghost' | 'delete-only' | 'partial-delete-only';
 
 export const SPEND_MODES: readonly SpendMode[] = [
   'clean',
@@ -40,6 +43,7 @@ export const SPEND_MODES: readonly SpendMode[] = [
   'partial-publish',
   'ghost',
   'delete-only',
+  'partial-delete-only',
 ];
 
 export interface DoctorWalletOptions {
@@ -189,14 +193,14 @@ export class DoctorWallet {
     );
   }
 
-  #buildDeletionEvent(target: string): Event {
+  #buildDeletionEvent(target: string, kind = 7375): Event {
     return finalizeEvent(
       {
         kind: 5,
         created_at: this.#now(),
         tags: [
           ['e', target],
-          ['k', '7375'],
+          ['k', String(kind)],
         ],
         content: '',
       },
@@ -212,10 +216,21 @@ export class DoctorWallet {
     if (!Number.isSafeInteger(amount) || amount < 1) {
       throw new Error('Spend amount must be a positive integer');
     }
-    if (mode === 'delete-only') {
+    if (mode === 'delete-only' || mode === 'partial-delete-only') {
       if (this.#currentTokenEventId === null) throw new Error('No live token event to delete');
+      if (mode === 'partial-delete-only') {
+        // The doctor must ignore kind:5 events that do not explicitly target
+        // token kind 7375, even when the target id happens to be a token.
+        await this.#publishTo(
+          this.#options.relays,
+          this.#buildDeletionEvent(this.#currentTokenEventId, 1),
+        );
+      }
       const deletion = this.#buildDeletionEvent(this.#currentTokenEventId);
-      await this.#publishTo(this.#options.relays, deletion);
+      await this.#publishTo(
+        mode === 'partial-delete-only' ? this.#options.relays.slice(0, 1) : this.#options.relays,
+        deletion,
+      );
       const deletedEventId = this.#currentTokenEventId;
       this.#currentTokenEventId = null;
       // Proofs stay in local state: they are still valid at the mint, which is

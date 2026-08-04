@@ -1,6 +1,6 @@
 {
   "name": "cashu-fault-lab",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Deterministic Cashu payment delivery fault injection and recovery evidence",
   "private": false,
   "type": "module",

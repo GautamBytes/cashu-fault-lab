@@ -6,13 +6,15 @@ three different readers would see it, verifies every discovered proof against it
 exactly why two applications disagree about a balance, and emits a deterministic **dry-run** repair
 plan. It lives in this repository because it reuses the same fault injection, deterministic
 replay, redacted-evidence, and independent-oracle principles as delivery and lifecycle testing.
-It does not change the `cashu-delivery-v1` or `wallet-lifecycle-v1` contracts or their release
-gates, and its output is diagnostic evidence, not certification.
+It does not change the `cashu-delivery-v1` or `wallet-lifecycle-v1` contracts or their pass
+criteria, and its output is diagnostic evidence, not certification. Its funded matrix is a
+separate tagged-release prerequisite.
 
 Read [ADR 002](adrs/002-nip60-wallet-doctor.md) for the safety boundary. The doctor never
 publishes events and never moves value. Proof secrets are dropped at capture time; artifacts carry
 only each proof's public NUT-00 `Y` (the value a wallet already sends to a mint in NUT-07 state
-checks). The NIP-60 wallet `privkey` inside `kind:17375` is never read or stored.
+checks). Capture v2 also drops signed event bodies, ciphertext, signatures, and the wallet
+`privkey` value; relay evidence contains event IDs only.
 
 ## Current implementation
 
@@ -37,35 +39,56 @@ environment variable, never from command arguments:
 export CFL_NIP60_SUBJECT_KEY='nsec1… or 64-hex test key'
 
 pnpm lab wallet-doctor collect \
-  --relay ws://127.0.0.1:4430 --relay ws://127.0.0.1:4431 \
+  --allow-insecure-loopback \
+  --relay ws://127.0.0.1:4430 --relay ws://127.0.0.1:4431 --relay ws://127.0.0.1:4432 \
   --output artifacts/wallet-doctor/capture.json
 
 pnpm lab wallet-doctor diagnose artifacts/wallet-doctor/capture.json
 pnpm lab wallet-doctor plan artifacts/wallet-doctor/capture.json
-pnpm lab wallet-doctor check artifacts/wallet-doctor/capture.json
+pnpm lab wallet-doctor check --allow-insecure-loopback artifacts/wallet-doctor/capture.json
 ```
 
 `diagnose` prints the three balances (per-relay, naive merged, mint-verified) and every finding.
 `plan` prints the repair steps with their safety-invariant outcome and writes a plan artifact;
-nothing is published. `check` is the CI gate: it exits non-zero on any error finding and on any
-plan-safety violation. Keyless evidence gathering is possible with `--pubkey <hex>` (encrypted
-events are then reported as `decryption_failed` malformed entries).
+nothing is published. `check` is the strong CI gate: it requires `CFL_NIP60_SUBJECT_KEY`,
+independently re-fetches the listed relays and exact NUT-07 state, and exits non-zero on evidence
+mismatch, incomplete mint truth, any error finding, or any plan-safety violation. Keyless evidence
+gathering remains possible with `collect --pubkey <hex>`, but such a capture cannot pass `check`.
 
-External wallet teams can produce the documented capture bundle in their own CI and run
-`npx cashu-fault-lab@0.1.4 wallet-doctor check <capture>`; the bundle format is the interop contract
-(`spec/schemas/nip60-capture.schema.json`). The gate fails on any error-severity finding, any
-unreachable relay in the capture, or an unsafe repair plan.
+To follow the NIP-60 discovery flow, provide one or more bootstrap relays instead of a fixed wallet
+relay list:
+
+```bash
+pnpm lab wallet-doctor collect \
+  --discover-from wss://bootstrap.example \
+  --output artifacts/wallet-doctor/capture.json
+```
+
+The collector uses the latest kind `10019` `relay` tags and falls back to the latest NIP-65 kind
+`10002` write/bidirectional `r` tags.
+
+External wallet teams can produce the documented capture v2 bundle in their own CI and run
+`pnpm lab wallet-doctor check <capture>` from the v0.2.0 release with the subject
+key available only in the checking environment. The immutable v0.1.4 package uses capture v1.
+There is intentionally no v1-to-v2 upgrader: v1 can retain signed ciphertext and cannot prove the
+new redaction/completeness invariants, so operators must recollect after v0.2.0 is released.
+Capture, diagnosis, plan, and check JSON Schemas under `spec/schemas/` are the normative
+language-neutral contracts. The Rust and Python files under
+`packages/wallet-doctor-contract/generated/` expose only version/digest interoperability metadata,
+not complete generated models.
+Capture files are capped at 32 MiB before JSON parsing; event, proof, relay, mint, content, wire,
+and overall-time budgets are then enforced before canonical hashing or diagnosis.
 
 ## Run the scenario lane
 
-Seeded scenarios drive the lab reference wallet fixture against two Nostr fault relays and a
+Seeded scenarios drive the lab reference wallet fixture against three Nostr fault relays and a
 real mint. They require the funded stack:
 
 ```bash
 export CFL_WALLET_DOCTOR_FIXTURE_URL=http://127.0.0.1:4500
 export CFL_WALLET_DOCTOR_FIXTURE_TOKEN='<fixture control token>'
-export CFL_WALLET_DOCTOR_RELAYS=ws://127.0.0.1:4430,ws://127.0.0.1:4431
-export CFL_WALLET_DOCTOR_RELAY_CONTROLS=http://127.0.0.1:4440,http://127.0.0.1:4441
+export CFL_WALLET_DOCTOR_RELAYS=ws://127.0.0.1:4430,ws://127.0.0.1:4431,ws://127.0.0.1:4432
+export CFL_WALLET_DOCTOR_RELAY_CONTROLS=http://127.0.0.1:4440,http://127.0.0.1:4441,http://127.0.0.1:4442
 export CFL_WALLET_DOCTOR_RELAY_CONTROL_TOKEN='<relay control token>'
 
 pnpm lab wallet-doctor run del-chain-break --seed demo
@@ -79,8 +102,9 @@ hash. Replay re-executes the scenario with the original seed and verifies the sa
 balances; event ids and proof `y` values are fresh on every execution and intentionally not
 compared.
 
-The funded lane brings the whole stack up and down around the run (pinned Nutshell mint, two
-fault relays with HTTP fault control, the reference fixture). Run it only on a disposable
+The funded lane brings the whole stack up and down around the run (pinned Nutshell mint, three
+fault relays with HTTP fault control, the reference fixture) and executes nine packaged scenarios.
+Run it only on a disposable
 development host:
 
 ```bash
@@ -145,5 +169,5 @@ rules. When `CFL_NOSTR_FAULT_RELAY_TOKEN` is set, the relay also serves an HTTP 
 - NIP-61 nutzap redemption is recognized in history markers only.
 - The funded lane covers the reference fixture; independent wallet implementations plug in through
   the capture bundle and the `check` CI gate.
-- The doctor is not part of release qualification; the delivery release gate remains blocked and
-  untouched.
+- The funded doctor matrix is a tagged-release prerequisite. It remains diagnostic evidence and
+  does not certify external wallets or alter delivery/lifecycle contract outcomes.

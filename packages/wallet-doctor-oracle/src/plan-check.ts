@@ -1,6 +1,8 @@
 import {
   dedupeEvents,
+  indexMintTruth,
   initialPlanState,
+  mintProofKey,
   planStateUniqueBalance,
   reconstruct,
   simulatePlan,
@@ -22,8 +24,12 @@ function coveredSets(steps: readonly RepairStep[]): {
   const rolloverYs = new Set<string>();
   const restoreYs = new Set<string>();
   for (const step of steps) {
-    if (step.action === 'publish_rollover') for (const y of step.coveredYs) rolloverYs.add(y);
-    if (step.action === 'wallet_action') for (const y of step.ys) restoreYs.add(y);
+    if (step.action === 'publish_rollover') {
+      for (const y of step.coveredYs) rolloverYs.add(mintProofKey(step.mint, y));
+    }
+    if (step.action === 'wallet_action') {
+      for (const y of step.ys) restoreYs.add(mintProofKey(step.mint, y));
+    }
   }
   return { rolloverYs, restoreYs };
 }
@@ -46,7 +52,7 @@ export function checkRepairPlan(input: {
 }): PlanCheckResult {
   const { observation, plan } = input;
   const { merged } = reconstruct(observation);
-  const mintByY = new Map(observation.mint.map((entry) => [entry.y, entry]));
+  const mintByY = indexMintTruth(observation.mint);
   const allTokens = dedupeEvents(
     observation.relays.filter((relay) => relay.status === 'ok').flatMap((relay) => relay.tokens),
   );
@@ -56,7 +62,9 @@ export function checkRepairPlan(input: {
       .filter((relay) => relay.status === 'ok')
       .flatMap((relay) => relay.wallet.map((event) => event.eventId)),
   );
-  const knownYs = new Set(allTokens.flatMap((token) => token.proofs.map((proof) => proof.y)));
+  const knownYs = new Set(
+    allTokens.flatMap((token) => token.proofs.map((proof) => mintProofKey(token.mint, proof.y))),
+  );
   const violations: string[] = [];
 
   // P3: references exist.
@@ -76,7 +84,9 @@ export function checkRepairPlan(input: {
     }
     if (step.action === 'publish_rollover') {
       for (const y of step.coveredYs) {
-        if (!knownYs.has(y)) violations.push(`P3_UNKNOWN_REFERENCE: rollover covers ${y}`);
+        if (!knownYs.has(mintProofKey(step.mint, y))) {
+          violations.push(`P3_UNKNOWN_REFERENCE: rollover covers ${y}`);
+        }
       }
       for (const eventId of step.del) {
         if (!tokensById.has(eventId)) {
@@ -86,7 +96,9 @@ export function checkRepairPlan(input: {
     }
     if (step.action === 'wallet_action') {
       for (const y of step.ys) {
-        if (!knownYs.has(y)) violations.push(`P3_UNKNOWN_REFERENCE: restore ${y}`);
+        if (!knownYs.has(mintProofKey(step.mint, y))) {
+          violations.push(`P3_UNKNOWN_REFERENCE: restore ${y}`);
+        }
       }
     }
   }
@@ -106,13 +118,14 @@ export function checkRepairPlan(input: {
     const token = tokensById.get(eventId);
     if (!token) continue;
     for (const proof of token.proofs) {
-      const state = mintByY.get(proof.y)?.state;
+      const key = mintProofKey(token.mint, proof.y);
+      const state = mintByY.get(key)?.state;
       if (state === undefined) {
         violations.push(`MISSING_MINT_TRUTH: ${proof.y} deleted with ${eventId} is unchecked`);
         continue;
       }
       if (state === 'UNSPENT' || state === 'PENDING') {
-        if (!rolloverYs.has(proof.y) && !restoreYs.has(proof.y)) {
+        if (!rolloverYs.has(key) && !restoreYs.has(key)) {
           violations.push(`P1_UNCOVERED_UNSPENT: ${proof.y} deleted with ${eventId}`);
         }
       }
@@ -142,8 +155,12 @@ export function checkRepairPlan(input: {
   }
 
   // Convergence requires complete mint truth over pre-plan live proofs.
-  const liveProofs = merged.liveTokens.flatMap((token) => token.proofs);
-  const unknownTruth = liveProofs.filter((proof) => !mintByY.has(proof.y));
+  const liveProofs = merged.liveTokens.flatMap((token) =>
+    token.proofs.map((proof) => ({ mint: token.mint, proof })),
+  );
+  const unknownTruth = liveProofs.filter(
+    ({ mint, proof }) => !mintByY.has(mintProofKey(mint, proof.y)),
+  );
   if (unknownTruth.length > 0) {
     violations.push(`MISSING_MINT_TRUTH: ${unknownTruth.length} live proof(s) unchecked`);
     return { ok: false, violations: violations.sort() };
@@ -154,24 +171,28 @@ export function checkRepairPlan(input: {
   let duplicates = 0;
   for (const token of once.liveTokens.values()) {
     for (const proof of token.proofs) {
-      if (mintByY.get(proof.y)?.state === 'SPENT') {
+      const key = mintProofKey(token.mint, proof.y);
+      if (mintByY.get(key)?.state === 'SPENT') {
         violations.push(`CONVERGENCE_SPENT_REMAINS: ${proof.y}`);
       }
-      if (finalYs.has(proof.y)) duplicates += 1;
-      finalYs.add(proof.y);
+      if (finalYs.has(key)) duplicates += 1;
+      finalYs.add(key);
     }
   }
   if (duplicates > 0) violations.push('CONVERGENCE_DUPLICATE_REMAINS');
 
   const expected = new Set<string>();
-  for (const proof of liveProofs) {
-    const state = mintByY.get(proof.y)?.state;
-    if (state === 'UNSPENT' || state === 'PENDING') expected.add(proof.y);
+  for (const { mint, proof } of liveProofs) {
+    const key = mintProofKey(mint, proof.y);
+    const state = mintByY.get(key)?.state;
+    if (state === 'UNSPENT' || state === 'PENDING') expected.add(key);
   }
-  const expectedBalance = [...expected].reduce((total, y) => {
+  const expectedBalance = [...expected].reduce((total, key) => {
     const amount = [...merged.liveTokens, ...allTokens]
-      .flatMap((token: TokenEventView) => token.proofs)
-      .find((proof) => proof.y === y)?.amount;
+      .flatMap((token: TokenEventView) =>
+        token.proofs.map((proof) => ({ key: mintProofKey(token.mint, proof.y), proof })),
+      )
+      .find((entry) => entry.key === key)?.proof.amount;
     return total + (amount ?? 0);
   }, 0);
   if (planStateUniqueBalance(once) !== expectedBalance) {

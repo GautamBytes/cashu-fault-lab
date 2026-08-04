@@ -43,7 +43,7 @@ test('workspace and Rust adapter versions identify the v0.1 developer preview', 
     await text('adapters/cdk/Cargo.lock'),
     /name = "cashu-fault-lab-cdk-adapter"\nversion = "0\.1\.0"/u,
   );
-  assert.equal(JSON.parse(await text('apps/npm-cli/package.json')).version, '0.1.4');
+  assert.equal(JSON.parse(await text('apps/npm-cli/package.json')).version, '0.2.0');
 });
 
 test('release docs make the preview, demo, and certification boundary explicit', async () => {
@@ -51,33 +51,37 @@ test('release docs make the preview, demo, and certification boundary explicit',
   const notes = await text('docs/releases/v0.1.0.md');
   const checklist = await text('docs/releases/v0.1.0-checklist.md');
 
-  for (const contents of [readme, notes]) {
-    assert.match(contents, /experimental v0\.1 developer preview/iu);
-    assert.match(contents, /not (?:a )?certification/iu);
-    assert.ok(contents.includes(demoCommand), 'release docs must include the deterministic demo');
-  }
+  assert.match(readme, /experimental v0\.2 developer preview/iu);
+  assert.match(readme, /not (?:a )?certification/iu);
+  assert.match(readme, /npx cashu-fault-lab@0\.2\.0 demo/iu);
+  assert.match(notes, /experimental v0\.1 developer preview/iu);
+  assert.match(notes, /not (?:a )?certification/iu);
+  assert.ok(
+    notes.includes(demoCommand),
+    'historical release docs must retain the deterministic demo',
+  );
   assert.match(checklist, /- \[ \].*independent wallet receiver/iu);
   assert.match(checklist, /- \[ \].*external endorsement/iu);
   assert.match(checklist, /- \[ \].*distinct mint identit/iu);
 });
 
-test('v0.1.4 maintainer documentation stays aligned with the shipped adapter workflow', async () => {
+test('v0.2 maintainer documentation stays aligned with the shipped adapter workflow', async () => {
   const readme = await text('README.md');
   const contributing = await text('CONTRIBUTING.md');
   const adapterGuide = await text('docs/adapter-guide.md');
   const deliveryProfile = await text('spec/delivery-v1.md');
   const threatModel = await text('spec/threat-model.md');
-  const releaseNotes = await text('docs/releases/v0.1.4.md');
+  const releaseNotes = await text('docs/releases/v0.2.0.md');
   const checklist = await text('docs/releases/v0.1.4-checklist.md');
   const changelog = await text('CHANGELOG.md');
 
-  assert.match(readme, /\[v0\.1\.4 release notes\]\(docs\/releases\/v0\.1\.4\.md\)/u);
+  assert.match(readme, /\[v0\.2\.0 release notes\]\(docs\/releases\/v0\.2\.0\.md\)/u);
   assert.match(readme, /wallet-doctor collect/u);
   const workflowSteps = [
-    'npx cashu-fault-lab@0.1.4 adapter init',
+    'npx cashu-fault-lab@0.2.0 adapter init',
     'Implement the eight adapter routes',
-    'npx cashu-fault-lab@0.1.4 adapter preflight',
-    'npx cashu-fault-lab@0.1.4 adapter preview',
+    'npx cashu-fault-lab@0.2.0 adapter preflight',
+    'npx cashu-fault-lab@0.2.0 adapter preview',
   ].map((step) => readme.indexOf(step));
   assert.ok(
     workflowSteps.every((index) => index >= 0),
@@ -89,12 +93,12 @@ test('v0.1.4 maintainer documentation stays aligned with the shipped adapter wor
     'README must order init, implementation, preflight, and preview',
   );
 
-  assert.match(contributing, /npx cashu-fault-lab@0\.1\.4 adapter init/u);
+  assert.match(contributing, /npx cashu-fault-lab@0\.2\.0 adapter init/u);
   assert.match(contributing, /Implement the 8 HTTP routes/u);
   assert.match(contributing, /adapter preflight/u);
   assert.match(contributing, /adapter preview/u);
 
-  assert.match(adapterGuide, /Version 0\.1\.4 accepts these routes only on loopback origins/iu);
+  assert.match(adapterGuide, /Version 0\.2\.0 accepts these routes only on loopback origins/iu);
   assert.match(deliveryProfile, /GET \/v1\/redemptions/u);
   assert.match(deliveryProfile, /cumulative redemption-start count/iu);
 
@@ -118,7 +122,7 @@ test('v0.1.4 maintainer documentation stays aligned with the shipped adapter wor
     checklist,
     /capability contract,\s+profile support,\s+and configured\s+read-only evidence endpoints/iu,
   );
-  assert.match(releaseNotes, /wallet doctor/iu);
+  assert.match(releaseNotes, /wallet[- ]doctor/iu);
   assert.match(changelog, /^## 0\.1\.4 — 2026-08-03$/mu);
 });
 

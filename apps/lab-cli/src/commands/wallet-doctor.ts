@@ -1,9 +1,10 @@
 import { Option, type Command } from 'commander';
 import { readdir, readFile } from 'node:fs/promises';
-import { nip19 } from 'nostr-tools';
+import { getPublicKey, nip19 } from 'nostr-tools';
 import {
   assertNip60Capture,
   captureWallet,
+  discoverNip60Relays,
   type Nip60Capture,
 } from '@cashu-fault-lab/wallet-doctor-contract';
 import {
@@ -13,6 +14,8 @@ import {
   planForDiagnosis,
   replayDoctorScenario,
   runDoctorMatrix,
+  verifyCaptureAgainstLive,
+  validateNip60CheckArtifact,
   validateWalletDoctorScenario,
   type DoctorRunEndpoints,
   type WalletDoctorScenario,
@@ -33,6 +36,12 @@ const DEFAULT_CAPTURE_DIR = 'artifacts/wallet-doctor';
 const DEFAULT_SEED = 'cashu-fault-lab-wallet-doctor';
 const SCENARIO_ID = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 const MAX_SCENARIO_BYTES = 262_144;
+const MAX_CAPTURE_FILE_BYTES = 32 * 1024 * 1024;
+const MAX_ARTIFACT_ERROR_LENGTH = 2048;
+
+function artifactError(message: string): string {
+  return message.slice(0, MAX_ARTIFACT_ERROR_LENGTH);
+}
 
 async function loadScenario(
   io: CliIo,
@@ -172,16 +181,27 @@ function subjectKeyFromEnv(env: NodeJS.ProcessEnv, variable: string): Uint8Array
   throw new Error(`${variable} must hold an nsec1… or 64-hex Nostr secret key`);
 }
 
-async function readCapture(io: CliIo, path: string): Promise<Nip60Capture> {
+async function readCaptureValue(io: CliIo, path: string): Promise<unknown> {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await io.readText(path)) as unknown;
+    const raw =
+      io.readTextLimited === undefined
+        ? await io.readText(path)
+        : await io.readTextLimited(path, MAX_CAPTURE_FILE_BYTES);
+    if (Buffer.byteLength(raw, 'utf8') > MAX_CAPTURE_FILE_BYTES) {
+      throw new Error(`capture exceeds ${MAX_CAPTURE_FILE_BYTES} bytes`);
+    }
+    parsed = JSON.parse(raw) as unknown;
   } catch (error) {
     throw new Error(
       `capture at ${path} is not readable JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  return assertNip60Capture(parsed);
+  return parsed;
+}
+
+async function readCapture(io: CliIo, path: string): Promise<Nip60Capture> {
+  return assertNip60Capture(await readCaptureValue(io, path));
 }
 
 function renderFindingLines(
@@ -234,32 +254,80 @@ export function registerWalletDoctorCommands(
     .command('collect')
     .description('Fetch NIP-60 events from relays and verify proofs against their mints')
     .option('--relay <url>', 'relay url (repeatable)', collect, [])
+    .option(
+      '--discover-from <url>',
+      'bootstrap relay for kind 10019 / NIP-65 discovery (repeatable)',
+      collect,
+      [],
+    )
     .option('--nsec-env <var>', 'env var holding the subject secret key', DEFAULT_SUBJECT_KEY_ENV)
-    .option('--pubkey <hex>', 'subject pubkey for keyless raw capture (no decryption)')
+    .option('--pubkey <hex>', 'subject pubkey for keyless redacted capture (no decryption)')
     .option('--timeout-ms <ms>', 'per-relay and per-mint timeout', '10000')
+    .option('--overall-timeout-ms <ms>', 'overall capture timeout', '60000')
+    .option(
+      '--allow-insecure-loopback',
+      'allow loopback HTTP/WS endpoints for the local lab only',
+      false,
+    )
     .option('--output <path>', 'write the capture bundle', `${DEFAULT_CAPTURE_DIR}/capture.json`)
     .action(
       async (options: {
         relay: string[];
+        discoverFrom: string[];
         nsecEnv: string;
         pubkey?: string;
         timeoutMs: string;
+        overallTimeoutMs: string;
+        allowInsecureLoopback: boolean;
         output: string;
       }) => {
-        if (options.relay.length === 0) {
-          throw new Error('at least one --relay <url> is required');
+        if (options.relay.length === 0 && options.discoverFrom.length === 0) {
+          throw new Error('at least one --relay or --discover-from <url> is required');
         }
         const timeoutMs = Number.parseInt(options.timeoutMs, 10);
         if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 300_000) {
           throw new Error('--timeout-ms must be an integer from 100 to 300000');
         }
-        const relays = options.relay.map(assertRelayUrl);
+        const overallTimeoutMs = Number.parseInt(options.overallTimeoutMs, 10);
+        if (
+          !Number.isSafeInteger(overallTimeoutMs) ||
+          overallTimeoutMs < 100 ||
+          overallTimeoutMs > 600_000
+        ) {
+          throw new Error('--overall-timeout-ms must be an integer from 100 to 600000');
+        }
+        const subjectSecretKey =
+          options.pubkey === undefined ? subjectKeyFromEnv(env, options.nsecEnv) : undefined;
+        const subject =
+          subjectSecretKey === undefined ? options.pubkey : getPublicKey(subjectSecretKey);
+        if (subject === undefined || !/^[0-9a-f]{64}$/u.test(subject)) {
+          throw new Error('--pubkey must be a 64-hex-character Nostr public key');
+        }
+        const deadline = Date.now() + overallTimeoutMs;
+        const discovered =
+          options.discoverFrom.length === 0
+            ? []
+            : await discoverNip60Relays(
+                subject,
+                options.discoverFrom.map(assertRelayUrl),
+                timeoutMs,
+                {
+                  allowInsecureLoopback: options.allowInsecureLoopback,
+                  overallTimeoutMs,
+                },
+              );
+        const relays = [...new Set([...options.relay.map(assertRelayUrl), ...discovered])].sort();
+        const remainingOverallTimeoutMs =
+          options.discoverFrom.length === 0 ? overallTimeoutMs : deadline - Date.now();
+        if (options.discoverFrom.length > 0 && remainingOverallTimeoutMs < 100) {
+          throw new Error('wallet-doctor collection exceeded its overall timeout during discovery');
+        }
         const capture = await captureWallet({
           relays,
-          ...(options.pubkey === undefined
-            ? { subjectSecretKey: subjectKeyFromEnv(env, options.nsecEnv) }
-            : { subjectPubkey: options.pubkey }),
+          ...(subjectSecretKey !== undefined ? { subjectSecretKey } : { subjectPubkey: subject }),
           timeoutMs,
+          overallTimeoutMs: remainingOverallTimeoutMs,
+          allowInsecureLoopback: options.allowInsecureLoopback,
         });
         await io.writeText(options.output, `${JSON.stringify(capture, null, 2)}\n`);
         io.stdout(renderRelayStatus(capture));
@@ -326,40 +394,105 @@ export function registerWalletDoctorCommands(
 
   walletDoctor
     .command('check')
-    .description('CI gate: diagnosis plus safe repair plan, exit code reflects findings')
+    .description('CI gate: independently recapture, diagnose, and verify the safe repair plan')
     .argument('<capture>', 'capture bundle path')
+    .option('--nsec-env <var>', 'env var holding the subject secret key', DEFAULT_SUBJECT_KEY_ENV)
+    .option('--timeout-ms <ms>', 'per-relay and per-mint timeout', '10000')
+    .option('--overall-timeout-ms <ms>', 'overall live recapture timeout', '60000')
+    .option(
+      '--allow-insecure-loopback',
+      'allow loopback HTTP/WS endpoints for the local lab only',
+      false,
+    )
     .option('--output <path>', 'write the combined check artifact')
-    .action(async (path: string, options: { output?: string }) => {
-      const capture = await readCapture(io, path);
-      const result = checkCapture(capture);
-      if (options.output !== undefined) {
-        await io.writeText(
-          options.output,
-          `${JSON.stringify(
-            {
-              schemaVersion: 1,
-              kind: 'nip60-check',
-              generatedFrom: capture.digest,
-              ok: result.ok,
-              summary: result.summary,
-              diagnosis: result.diagnosisArtifact,
-              plan: result.planArtifact,
-            },
-            null,
-            2,
-          )}\n`,
+    .action(
+      async (
+        path: string,
+        options: {
+          output?: string;
+          nsecEnv: string;
+          timeoutMs: string;
+          overallTimeoutMs: string;
+          allowInsecureLoopback: boolean;
+        },
+      ) => {
+        const value = await readCaptureValue(io, path);
+        const timeoutMs = Number.parseInt(options.timeoutMs, 10);
+        if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 300_000) {
+          throw new Error('--timeout-ms must be an integer from 100 to 300000');
+        }
+        const overallTimeoutMs = Number.parseInt(options.overallTimeoutMs, 10);
+        if (
+          !Number.isSafeInteger(overallTimeoutMs) ||
+          overallTimeoutMs < 100 ||
+          overallTimeoutMs > 600_000
+        ) {
+          throw new Error('--overall-timeout-ms must be an integer from 100 to 600000');
+        }
+        const result = checkCapture(value);
+        const capture = result.diagnosisArtifact === null ? null : (value as Nip60Capture);
+        let live = {
+          ok: false,
+          errors: [
+            'live verification skipped because capture integrity failed',
+          ] as readonly string[],
+        };
+        if (capture !== null) {
+          try {
+            live = await verifyCaptureAgainstLive(
+              capture,
+              subjectKeyFromEnv(env, options.nsecEnv),
+              {
+                timeoutMs,
+                overallTimeoutMs,
+                allowInsecureLoopback: options.allowInsecureLoopback,
+              },
+            );
+          } catch (error) {
+            live = {
+              ok: false,
+              errors: [
+                artifactError(
+                  `live recapture failed: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+              ],
+            };
+          }
+        }
+        const ok = result.ok && live.ok;
+        if (options.output !== undefined) {
+          const artifact = {
+            schemaVersion: 1,
+            kind: 'nip60-check',
+            generatedFrom: capture?.digest ?? null,
+            ok,
+            summary: result.summary,
+            liveVerification: live,
+            diagnosis: result.diagnosisArtifact,
+            plan: result.planArtifact,
+          } as const;
+          const validation = validateNip60CheckArtifact(artifact);
+          if (!validation.ok) {
+            throw new Error(`generated check artifact is invalid: ${validation.errors.join('; ')}`);
+          }
+          await io.writeText(options.output, `${JSON.stringify(artifact, null, 2)}\n`);
+        }
+        if (capture !== null && result.diagnosisArtifact !== null) {
+          io.stdout(renderRelayStatus(capture));
+          io.stdout(renderBalance(result.diagnosisArtifact.diagnosis.balance));
+          io.stdout(renderFindingLines(result.diagnosisArtifact.diagnosis.findings));
+        } else {
+          io.stdout(`integrity: FAIL (${result.summary.integrityErrors.join('; ')})\n`);
+        }
+        io.stdout(`live verification: ${live.ok ? 'PASS' : `FAIL (${live.errors.join('; ')})`}\n`);
+        io.stdout(
+          `check: ${ok ? 'PASS' : 'FAIL'} (${result.summary.errorFindings} error, ` +
+            `${result.summary.warningFindings} warning, ${result.summary.infoFindings} info, ` +
+            `${result.summary.failedRelays} relay failed)\n`,
         );
-      }
-      io.stdout(renderRelayStatus(capture));
-      io.stdout(renderBalance(result.diagnosisArtifact.diagnosis.balance));
-      io.stdout(renderFindingLines(result.diagnosisArtifact.diagnosis.findings));
-      io.stdout(
-        `check: ${result.ok ? 'PASS' : 'FAIL'} (${result.summary.errorFindings} error, ` +
-          `${result.summary.warningFindings} warning, ${result.summary.infoFindings} info, ` +
-          `${result.summary.failedRelays} relay failed)\n`,
-      );
-      if (!result.ok) setExitCode(1);
-    });
+        if (!ok) setExitCode(1);
+      },
+    );
 
   walletDoctor
     .command('run')

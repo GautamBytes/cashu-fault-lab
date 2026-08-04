@@ -92,15 +92,15 @@ describe('reconstructRelay', () => {
   });
 
   it('selects the latest wallet event by created_at with id tie-break', () => {
-    const older: WalletEventView = {
+    const higherId: WalletEventView = {
       eventId: 'zzz',
-      createdAt: 100,
+      createdAt: 200,
       mints: [MINT],
       hasP2pkKey: true,
       seenOn: [RELAY_A],
     };
-    const newer: WalletEventView = { ...older, eventId: 'aaa', createdAt: 200 };
-    const view = reconstructRelay(relay(RELAY_A, { wallet: [older, newer] }));
+    const lowerId: WalletEventView = { ...higherId, eventId: 'aaa' };
+    const view = reconstructRelay(relay(RELAY_A, { wallet: [higherId, lowerId] }));
     expect(view.walletEvent?.eventId).toBe('aaa');
   });
 });
@@ -135,6 +135,17 @@ describe('reconstructMerged', () => {
     expect(merged.naiveBalance).toBe(16);
     expect(merged.doubleCounted).toBe(8);
     expect(merged.duplicateProofs).toEqual([{ y: 'y-shared', amount: 8, eventIds: ['e1', 'e2'] }]);
+  });
+
+  it('treats the same Y from different mints as two distinct proofs', () => {
+    const sharedY = proof(4, 'y-shared-across-mints');
+    const mintA = token('e-mint-a', [sharedY], { mint: 'https://mint-a.example' });
+    const mintB = token('e-mint-b', [sharedY], { mint: 'https://mint-b.example' });
+    const merged = reconstructMerged([relay(RELAY_A, { tokens: [mintA, mintB] })]);
+    expect(merged.balance).toBe(8);
+    expect(merged.naiveBalance).toBe(8);
+    expect(merged.doubleCounted).toBe(0);
+    expect(merged.duplicateProofs).toEqual([]);
   });
 
   it('treats a globally deleted event as gone even without a successor', () => {

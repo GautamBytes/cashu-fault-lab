@@ -83,6 +83,32 @@ describe('diagnose: healthy wallet', () => {
     expect(result.balance.doubleCounted).toBe(0);
     expect(result.balance.perRelay.map((entry) => entry.balance)).toEqual([6, 6]);
   });
+
+  it('keeps mint truth isolated when two mints return different state for the same Y', () => {
+    const shared = proof(4, 'same-y');
+    const mintA = 'https://mint-a.example';
+    const mintB = 'https://mint-b.example';
+    const result = diagnose(
+      observe(
+        [
+          relay(A, {
+            tokens: [
+              token('mint-a-token', [shared], { mint: mintA }),
+              token('mint-b-token', [shared], { mint: mintB }),
+            ],
+          }),
+        ],
+        [
+          { mint: mintA, y: shared.y, state: 'SPENT' },
+          { mint: mintB, y: shared.y, state: 'UNSPENT' },
+        ],
+      ),
+    );
+    expect(result.balance.merged).toBe(8);
+    expect(result.balance.ghost).toBe(4);
+    expect(result.balance.mintVerified).toBe(4);
+    expect(result.findings.filter((finding) => finding.code === 'GHOST_TOKEN')).toHaveLength(1);
+  });
 });
 
 describe('diagnose: divergence codes', () => {
@@ -246,6 +272,15 @@ describe('diagnose: divergence codes', () => {
     expect(finding?.severity).toBe('error');
     expect(finding?.relays).toEqual([B]);
     expect(finding?.eventIds).toContain('w2');
+  });
+
+  it('WALLET_EVENT_FORK when every healthy relay serves no wallet event', () => {
+    const result = diagnose(observe([relay(A, { wallet: [] }), relay(B, { wallet: [] })], []));
+    const finding = result.findings.find((entry) => entry.code === 'WALLET_EVENT_FORK');
+    expect(finding?.severity).toBe('error');
+    expect(finding?.relays).toEqual([A, B]);
+    expect(finding?.eventIds).toEqual([]);
+    expect(finding?.summary).toMatch(/no kind:17375 wallet event/u);
   });
 
   it('HISTORY_GAP for history entries referencing unknown token events', () => {
