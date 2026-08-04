@@ -24,12 +24,30 @@ COPY --from=node-build /app/infra ./infra
 COPY --from=node-build /app/spec ./spec
 USER node
 
-FROM rust:1.97-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS cdk-build
+FROM rust:1.97-bookworm@sha256:77fac8b98f9f46062bb680b6d25d5bcaabfc400143952ebc572e924bcbedc3fa AS cdk-chef
+
+RUN cargo install cargo-chef --version 0.1.77 --locked
+ENV CARGO_TARGET_DIR=/app/adapters/cdk/target
+
+FROM cdk-chef AS cdk-planner
 
 WORKDIR /app
+COPY infra/docker/cdk-workspace.Cargo.toml ./Cargo.toml
+COPY adapters/cdk/Cargo.lock ./Cargo.lock
+COPY adapters/cdk ./adapters/cdk
+COPY packages/wallet-lifecycle-contract/generated/rust ./packages/wallet-lifecycle-contract/generated/rust
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM cdk-chef AS cdk-build
+
+WORKDIR /app
+COPY --from=cdk-planner /app/recipe.json ./recipe.json
+RUN cargo chef cook --locked --release --recipe-path recipe.json
+
 COPY adapters/cdk ./adapters/cdk
 COPY packages/wallet-lifecycle-contract/generated/rust ./packages/wallet-lifecycle-contract/generated/rust
 COPY spec/openapi.yaml ./spec/openapi.yaml
+COPY adapters/cdk/Cargo.lock ./Cargo.lock
 RUN cargo build --locked --release --manifest-path adapters/cdk/Cargo.toml
 
 FROM debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818 AS cdk-adapter

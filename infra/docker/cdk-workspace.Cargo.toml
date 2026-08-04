@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = [
+  "adapters/cdk",
+  "packages/wallet-lifecycle-contract/generated/rust",
+]

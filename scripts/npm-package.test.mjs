@@ -60,6 +60,79 @@ test('publishing is blocked until the runtime images support anonymous pulls', a
   assert.match(workflow, /CFL_NPM_E2E_DEMO: '1'/u);
 });
 
+test('release images use native runners, isolated caches, and verified digest manifests', async () => {
+  const workflow = await readFile(new URL('.github/workflows/publish.yml', root), 'utf8');
+
+  assert.doesNotMatch(workflow, /docker\/setup-qemu-action/u);
+  assert.match(workflow, /^\s{2}runtime-preflight:/mu);
+  assert.match(workflow, /^\s{2}runtime-platforms:/mu);
+  assert.match(workflow, /^\s{2}runtime-manifests:/mu);
+  assert.match(workflow, /runner: ubuntu-24\.04\s+platform: linux\/amd64\s+arch: amd64/u);
+  assert.match(workflow, /runner: ubuntu-24\.04-arm\s+platform: linux\/arm64\s+arch: arm64/u);
+  assert.doesNotMatch(workflow, /platforms:\s*linux\/amd64,linux\/arm64/u);
+  assert.match(workflow, /platforms: \$\{\{ matrix\.platform \}\}/u);
+  assert.match(workflow, /push-by-digest=true/u);
+  assert.match(workflow, /actions\/upload-artifact@/u);
+  assert.match(workflow, /actions\/download-artifact@/u);
+  assert.match(workflow, /docker buildx imagetools create/u);
+  assert.match(workflow, /linux\/amd64\\nlinux\/arm64/u);
+  assert.match(
+    workflow,
+    /cache-from: type=registry,ref=ghcr\.io\/gautambytes\/\$\{\{ matrix\.image \}\}:buildcache-\$\{\{ matrix\.arch \}\}/u,
+  );
+  assert.match(
+    workflow,
+    /cache-to: type=registry,ref=ghcr\.io\/gautambytes\/\$\{\{ matrix\.image \}\}:buildcache-\$\{\{ matrix\.arch \}\},mode=max/u,
+  );
+  assert.match(workflow, /org\.opencontainers\.image\.revision/u);
+  assert.doesNotMatch(workflow, /docker pull --platform/u);
+  assert.match(workflow, /platform_digest=/u);
+  assert.match(workflow, /platform_reference="\$\{repository\}@\$\{platform_digest\}"/u);
+  assert.match(workflow, /missing-images/u);
+  assert.match(workflow, /refusing to overwrite/u);
+  assert.match(workflow, /^\s{4}needs: runtime-manifests$/mu);
+});
+
+test('the CDK image cooks locked Rust dependencies before copying live sources', async () => {
+  const dockerfile = await readFile(
+    new URL('infra/docker/wallet-adapters.Dockerfile', root),
+    'utf8',
+  );
+  const workspacePath = new URL('infra/docker/cdk-workspace.Cargo.toml', root);
+
+  assert.match(dockerfile, /AS cdk-chef/u);
+  assert.match(dockerfile, /cargo install cargo-chef --version 0\.1\.77 --locked/u);
+  assert.match(dockerfile, /ENV CARGO_TARGET_DIR=\/app\/adapters\/cdk\/target/u);
+  assert.match(dockerfile, /FROM cdk-chef AS cdk-planner/u);
+  assert.equal(existsSync(workspacePath), true);
+  const workspace = await readFile(workspacePath, 'utf8');
+  assert.match(workspace, /"adapters\/cdk"/u);
+  assert.match(workspace, /"packages\/wallet-lifecycle-contract\/generated\/rust"/u);
+  assert.match(dockerfile, /COPY infra\/docker\/cdk-workspace\.Cargo\.toml \.\/Cargo\.toml/u);
+  assert.match(dockerfile, /cargo chef prepare --recipe-path recipe\.json/u);
+  assert.match(dockerfile, /FROM cdk-chef AS cdk-build/u);
+  assert.match(dockerfile, /cargo chef cook --locked --release --recipe-path recipe\.json/u);
+
+  const cook = dockerfile.indexOf('cargo chef cook --locked --release --recipe-path recipe.json');
+  const liveAdapter = dockerfile.lastIndexOf('COPY adapters/cdk ./adapters/cdk');
+  const liveLock = dockerfile.lastIndexOf('COPY adapters/cdk/Cargo.lock ./Cargo.lock');
+  const liveContract = dockerfile.lastIndexOf(
+    'COPY packages/wallet-lifecycle-contract/generated/rust ./packages/wallet-lifecycle-contract/generated/rust',
+  );
+  const liveOpenApi = dockerfile.lastIndexOf('COPY spec/openapi.yaml ./spec/openapi.yaml');
+
+  assert.ok(cook >= 0, 'missing cargo-chef cook step');
+  assert.ok(liveAdapter > cook, 'live CDK adapter source must be copied after dependency cooking');
+  assert.ok(liveLock > cook, 'the real lockfile must replace cargo-chef dummy package versions');
+  assert.ok(liveContract > cook, 'live generated contract must be copied after dependency cooking');
+  assert.ok(liveOpenApi > cook, 'live OpenAPI input must be copied after dependency cooking');
+  assert.match(
+    dockerfile,
+    /COPY --from=cdk-build \/app\/adapters\/cdk\/target\/release\/cashu-fault-lab-cdk-adapter \/usr\/local\/bin\/cashu-fault-lab-cdk-adapter/u,
+  );
+  assert.match(dockerfile, /ENTRYPOINT \["cashu-fault-lab-cdk-adapter"\]/u);
+});
+
 test('the npm README stays concise and sends developers to the full website', async () => {
   const readme = await readFile(new URL('apps/npm-cli/README.md', root), 'utf8');
   const words = readme.trim().split(/\s+/u);

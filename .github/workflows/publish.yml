@@ -10,71 +10,225 @@ permissions:
   packages: write
 
 jobs:
-  runtime-images:
-    name: Runtime image — ${{ matrix.image }}
-    runs-on: ubuntu-latest
+  runtime-preflight:
+    name: Runtime image preflight
+    runs-on: ubuntu-24.04
+    outputs:
+      missing_images: ${{ steps.images.outputs.missing_images }}
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find missing-images and protect existing version tags
+        id: images
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          missing_images='[]'
+          for image in \
+            cashu-fault-lab-node-wallets \
+            cashu-fault-lab-cdk-adapter \
+            cashu-fault-lab-netns
+          do
+            reference="ghcr.io/gautambytes/${image}:${version}"
+            if ! manifest="$(docker manifest inspect "${reference}" 2>/dev/null)"
+            then
+              missing_images="$(jq --compact-output --arg image "${image}" '. + [$image]' <<< "${missing_images}")"
+              continue
+            fi
+
+            repository="${reference%:*}"
+            for architecture in amd64 arm64
+            do
+              mapfile -t platform_digests < <(
+                jq --raw-output \
+                  --arg architecture "${architecture}" \
+                  '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $architecture) | .digest' \
+                  <<< "${manifest}"
+              )
+              if [ "${#platform_digests[@]}" -ne 1 ]
+              then
+                echo "expected one linux/${architecture} manifest for ${reference}"
+                exit 1
+              fi
+              platform_digest="${platform_digests[0]}"
+              platform_reference="${repository}@${platform_digest}"
+              docker pull "${platform_reference}"
+              revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${platform_reference}")"
+              if [ "${revision}" != "${GITHUB_SHA}" ]
+              then
+                echo "refusing to overwrite ${reference}, whose linux/${architecture} image belongs to ${revision}"
+                exit 1
+              fi
+            done
+          done
+          echo "missing_images=${missing_images}" >> "${GITHUB_OUTPUT}"
+
+  runtime-platforms:
+    name: Runtime platform — ${{ matrix.image }} (${{ matrix.arch }})
+    needs: runtime-preflight
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - image: cashu-fault-lab-node-wallets
             target: node-wallets
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            arch: amd64
+          - image: cashu-fault-lab-node-wallets
+            target: node-wallets
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
           - image: cashu-fault-lab-cdk-adapter
             target: cdk-adapter
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            arch: amd64
+          - image: cashu-fault-lab-cdk-adapter
+            target: cdk-adapter
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
           - image: cashu-fault-lab-netns
             target: lab-netns
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            arch: amd64
+          - image: cashu-fault-lab-netns
+            target: lab-netns
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
     steps:
       - uses: actions/checkout@v6
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
         with:
           persist-credentials: false
-      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
+      - uses: docker/login-action@v4
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: metadata
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/gautambytes/${{ matrix.image }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+      - id: build
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: infra/docker/wallet-adapters.Dockerfile
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/gautambytes/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/gautambytes/${{ matrix.image }}:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=ghcr.io/gautambytes/${{ matrix.image }}:buildcache-${{ matrix.arch }},mode=max
+      - name: Export image digest
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          digest="${DIGEST#sha256:}"
+          test "${digest}" != "${DIGEST}"
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${digest}"
+      - name: Upload image digest
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  runtime-manifests:
+    name: Runtime manifest — ${{ matrix.image }}
+    needs: [runtime-preflight, runtime-platforms]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - cashu-fault-lab-node-wallets
+          - cashu-fault-lab-cdk-adapter
+          - cashu-fault-lab-netns
+    steps:
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Protect an existing version tag
-        id: existing
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          reference="ghcr.io/gautambytes/${{ matrix.image }}:${version}"
-          if docker manifest inspect "${reference}" >/dev/null 2>&1
-          then
-            docker pull --platform linux/amd64 "${reference}"
-            revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${reference}")"
-            if [ "${revision}" != "${GITHUB_SHA}" ]
-            then
-              echo "refusing to overwrite ${reference}, which belongs to ${revision}"
-              exit 1
-            fi
-            echo "skip=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "skip=false" >> "${GITHUB_OUTPUT}"
-          fi
+      - name: Download platform digests
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digests-${{ matrix.image }}-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
       - id: metadata
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/gautambytes/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}}
             type=sha
-      - uses: docker/build-push-action@v7
-        if: steps.existing.outputs.skip != 'true'
-        with:
-          context: .
-          file: infra/docker/wallet-adapters.Dockerfile
-          target: ${{ matrix.target }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+      - name: Create multi-platform manifest
+        if: contains(fromJSON(needs.runtime-preflight.outputs.missing_images), matrix.image)
+        env:
+          TAGS: ${{ steps.metadata.outputs.tags }}
+        run: |
+          mapfile -t digest_files < <(find "${RUNNER_TEMP}/digests" -maxdepth 1 -type f | sort)
+          if [ "${#digest_files[@]}" -ne 2 ]
+          then
+            echo "expected two platform digests, found ${#digest_files[@]}"
+            exit 1
+          fi
+
+          tag_args=()
+          while IFS= read -r tag
+          do
+            tag_args+=(--tag "${tag}")
+          done <<< "${TAGS}"
+
+          sources=()
+          for digest_file in "${digest_files[@]}"
+          do
+            sources+=("ghcr.io/gautambytes/${{ matrix.image }}@sha256:$(basename "${digest_file}")")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+      - name: Verify final manifest platforms
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          reference="ghcr.io/gautambytes/${{ matrix.image }}:${version}"
+          platforms="$(
+            docker buildx imagetools inspect --raw "${reference}" \
+              | jq --raw-output '.manifests[] | select(.platform.os != "unknown") | "\(.platform.os)/\(.platform.architecture)"' \
+              | sort --unique
+          )"
+          expected="$(printf 'linux/amd64\nlinux/arm64')"
+          if [ "${platforms}" != "${expected}" ]
+          then
+            echo "unexpected platforms for ${reference}:"
+            printf '%s\n' "${platforms}"
+            exit 1
+          fi
 
   npm:
     name: npm package
-    needs: runtime-images
+    needs: runtime-manifests
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: npm
