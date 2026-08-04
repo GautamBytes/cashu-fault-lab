@@ -90,6 +90,37 @@ test('release images use native runners, isolated caches, and verified digest ma
   assert.match(workflow, /^\s{4}needs: runtime-manifests$/mu);
 });
 
+test('the CDK image cooks locked Rust dependencies before copying live sources', async () => {
+  const dockerfile = await readFile(
+    new URL('infra/docker/wallet-adapters.Dockerfile', root),
+    'utf8',
+  );
+
+  assert.match(dockerfile, /AS cdk-chef/u);
+  assert.match(dockerfile, /cargo install cargo-chef --version 0\.1\.77 --locked/u);
+  assert.match(dockerfile, /FROM cdk-chef AS cdk-planner/u);
+  assert.match(dockerfile, /cargo chef prepare --recipe-path recipe\.json/u);
+  assert.match(dockerfile, /FROM cdk-chef AS cdk-build/u);
+  assert.match(dockerfile, /cargo chef cook --locked --release --recipe-path recipe\.json/u);
+
+  const cook = dockerfile.indexOf('cargo chef cook --locked --release --recipe-path recipe.json');
+  const liveAdapter = dockerfile.lastIndexOf('COPY adapters/cdk ./adapters/cdk');
+  const liveContract = dockerfile.lastIndexOf(
+    'COPY packages/wallet-lifecycle-contract/generated/rust ./packages/wallet-lifecycle-contract/generated/rust',
+  );
+  const liveOpenApi = dockerfile.lastIndexOf('COPY spec/openapi.yaml ./spec/openapi.yaml');
+
+  assert.ok(cook >= 0, 'missing cargo-chef cook step');
+  assert.ok(liveAdapter > cook, 'live CDK adapter source must be copied after dependency cooking');
+  assert.ok(liveContract > cook, 'live generated contract must be copied after dependency cooking');
+  assert.ok(liveOpenApi > cook, 'live OpenAPI input must be copied after dependency cooking');
+  assert.match(
+    dockerfile,
+    /COPY --from=cdk-build \/app\/adapters\/cdk\/target\/release\/cashu-fault-lab-cdk-adapter \/usr\/local\/bin\/cashu-fault-lab-cdk-adapter/u,
+  );
+  assert.match(dockerfile, /ENTRYPOINT \["cashu-fault-lab-cdk-adapter"\]/u);
+});
+
 test('the npm README stays concise and sends developers to the full website', async () => {
   const readme = await readFile(new URL('apps/npm-cli/README.md', root), 'utf8');
   const words = readme.trim().split(/\s+/u);
