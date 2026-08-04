@@ -11,8 +11,8 @@ evidence without cloning the repository.
 ## Quick start
 
 ```bash
-npx cashu-fault-lab@0.2.0 doctor
-npx cashu-fault-lab@0.2.0 demo
+npx --yes cashu-fault-lab@0.2.0 doctor
+npx --yes cashu-fault-lab@0.2.0 demo
 ```
 
 The demo starts an isolated stack, loses an HTTP response, retries the exact delivery and checks
@@ -22,12 +22,12 @@ removes the stack unless you pass `--keep`.
 Useful commands:
 
 ```bash
-npx cashu-fault-lab@0.2.0 ls
-npx cashu-fault-lab@0.2.0 inspect retry/response-lost
-npx cashu-fault-lab@0.2.0 adapter init --language typescript --name my-wallet
-npx cashu-fault-lab@0.2.0 adapter preflight --adapters adapter-manifest.json
-npx cashu-fault-lab@0.2.0 adapter preview --adapters adapter-manifest.json --sender my-wallet --receiver my-wallet
-npx cashu-fault-lab@0.2.0 wallet-doctor check artifacts/wallet-doctor/capture.json
+npx --yes cashu-fault-lab@0.2.0 ls
+npx --yes cashu-fault-lab@0.2.0 inspect retry/response-lost
+npx --yes cashu-fault-lab@0.2.0 adapter init --language typescript --name my-wallet
+npx --yes cashu-fault-lab@0.2.0 adapter preflight --adapters adapter-manifest.json
+npx --yes cashu-fault-lab@0.2.0 adapter preview --adapters adapter-manifest.json --sender my-wallet --receiver my-wallet
+npx --yes cashu-fault-lab@0.2.0 wallet-doctor check artifacts/wallet-doctor/capture.json
 ```
 
 Adapter preflight and preview accept loopback HTTP origins only. Preview runs response-loss and

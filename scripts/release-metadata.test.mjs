@@ -53,7 +53,7 @@ test('release docs make the preview, demo, and certification boundary explicit',
 
   assert.match(readme, /experimental v0\.2 developer preview/iu);
   assert.match(readme, /not (?:a )?certification/iu);
-  assert.match(readme, /npx cashu-fault-lab@0\.2\.0 demo/iu);
+  assert.match(readme, /npx --yes cashu-fault-lab@0\.2\.0 demo/iu);
   assert.match(notes, /experimental v0\.1 developer preview/iu);
   assert.match(notes, /not (?:a )?certification/iu);
   assert.ok(
@@ -72,17 +72,17 @@ test('v0.2 maintainer documentation stays aligned with the shipped adapter workf
   const deliveryProfile = await text('spec/delivery-v1.md');
   const threatModel = await text('spec/threat-model.md');
   const releaseNotes = await text('docs/releases/v0.2.0.md');
-  const checklist = await text('docs/releases/v0.1.4-checklist.md');
+  const checklist = await text('docs/releases/v0.2.0-checklist.md');
   const changelog = await text('CHANGELOG.md');
   const adapterInit = await text('apps/lab-cli/src/adapter-init.ts');
 
   assert.match(readme, /\[v0\.2\.0 release notes\]\(docs\/releases\/v0\.2\.0\.md\)/u);
   assert.match(readme, /wallet-doctor collect/u);
   const workflowSteps = [
-    'npx cashu-fault-lab@0.2.0 adapter init',
+    'npx --yes cashu-fault-lab@0.2.0 adapter init',
     'Implement the eight adapter routes',
-    'npx cashu-fault-lab@0.2.0 adapter preflight',
-    'npx cashu-fault-lab@0.2.0 adapter preview',
+    'npx --yes cashu-fault-lab@0.2.0 adapter preflight',
+    'npx --yes cashu-fault-lab@0.2.0 adapter preview',
   ].map((step) => readme.indexOf(step));
   assert.ok(
     workflowSteps.every((index) => index >= 0),
@@ -94,7 +94,7 @@ test('v0.2 maintainer documentation stays aligned with the shipped adapter workf
     'README must order init, implementation, preflight, and preview',
   );
 
-  assert.match(contributing, /npx cashu-fault-lab@0\.2\.0 adapter init/u);
+  assert.match(contributing, /npx --yes cashu-fault-lab@0\.2\.0 adapter init/u);
   assert.match(contributing, /Implement the 8 HTTP routes/u);
   assert.match(contributing, /adapter preflight/u);
   assert.match(contributing, /adapter preview/u);
@@ -109,7 +109,7 @@ test('v0.2 maintainer documentation stays aligned with the shipped adapter workf
   );
   assert.match(threatModel, /internal evidence, not independent release qualification/iu);
 
-  assert.match(checklist, /^# v0\.1\.4 maintainer-preview checklist$/mu);
+  assert.match(checklist, /^# v0\.2\.0 maintainer-preview checklist$/mu);
   assert.match(checklist, /- \[x\].*adapter preflight/iu);
   assert.match(checklist, /- \[x\].*adapter preview/iu);
   assert.match(checklist, /- \[x\].*Lightning settlement probe/iu);
@@ -124,6 +124,8 @@ test('v0.2 maintainer documentation stays aligned with the shipped adapter workf
     /capability contract,\s+profile support,\s+and configured\s+read-only evidence endpoints/iu,
   );
   assert.match(releaseNotes, /wallet[- ]doctor/iu);
+  assert.match(releaseNotes, /npx --yes cashu-fault-lab@0\.2\.0 demo/u);
+  assert.match(checklist, /First-party reproducible evidence/u);
   assert.match(changelog, /^## 0\.1\.4 — 2026-08-03$/mu);
   assert.doesNotMatch(adapterInit, /cashu-fault-lab@0\.1\.4/u);
   assert.match(adapterInit, /cashu-fault-lab@0\.2\.0 adapter preflight/u);

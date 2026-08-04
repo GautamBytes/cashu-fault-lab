@@ -89,10 +89,10 @@ test traffic on the maintainer's machine while the external contract is still ex
 Start the adapter processes, export the token variables named by `adapter-manifest.json`, and run:
 
 ```bash
-npx cashu-fault-lab@0.2.0 adapter preflight \
+npx --yes cashu-fault-lab@0.2.0 adapter preflight \
   --adapters adapter-manifest.json
 
-npx cashu-fault-lab@0.2.0 adapter preview \
+npx --yes cashu-fault-lab@0.2.0 adapter preview \
   --adapters adapter-manifest.json \
   --sender my-wallet \
   --receiver my-wallet \

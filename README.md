@@ -10,8 +10,8 @@ from the stable delivery routes and is not part of the current release qualifica
 This is an experimental developer preview, not certification. Version 0.2.0 introduces the
 breaking wallet-doctor capture-v2 contract. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
 identities, trustworthy build provenance, and external integrations. See the
-[v0.2.0 release notes](docs/releases/v0.2.0.md) and the delivery lane's
-[v0.1.4 checklist](docs/releases/v0.1.4-checklist.md).
+[v0.2.0 release notes](docs/releases/v0.2.0.md) and
+[v0.2.0 checklist](docs/releases/v0.2.0-checklist.md).
 
 The lab implements an experimental `cashu-delivery-v1` application profile on existing Cashu and Nostr protocols. Harness operation does not require a new NUT. See [ADR 001](docs/adrs/001-delivery-semantics.md) for the standardization boundary.
 
@@ -20,8 +20,8 @@ The lab implements an experimental `cashu-delivery-v1` application profile on ex
 Run the developer preview without cloning the repository or installing pnpm and Rust:
 
 ```bash
-npx cashu-fault-lab@0.2.0 doctor
-npx cashu-fault-lab@0.2.0 demo
+npx --yes cashu-fault-lab@0.2.0 doctor
+npx --yes cashu-fault-lab@0.2.0 demo
 ```
 
 This requires Node.js 24 and Docker. The npm package contains the CLI, scenarios, schemas, and
@@ -34,7 +34,7 @@ The v0.2.0 maintainer preview scaffolds an adapter, validates its contract witho
 state, then runs response-loss and duplicate-delivery checks:
 
 ```bash
-npx cashu-fault-lab@0.2.0 adapter init \
+npx --yes cashu-fault-lab@0.2.0 adapter init \
   --language typescript \
   --name my-wallet
 ```
@@ -45,10 +45,10 @@ they are connected to real wallet operations. Then start the adapter and export 
 named by its manifest.
 
 ```bash
-npx cashu-fault-lab@0.2.0 adapter preflight \
+npx --yes cashu-fault-lab@0.2.0 adapter preflight \
   --adapters ./my-wallet/adapter-manifest.json
 
-npx cashu-fault-lab@0.2.0 adapter preview \
+npx --yes cashu-fault-lab@0.2.0 adapter preview \
   --adapters ./my-wallet/adapter-manifest.json \
   --sender my-wallet \
   --receiver my-wallet \
