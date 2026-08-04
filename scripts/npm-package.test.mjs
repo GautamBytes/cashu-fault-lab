@@ -25,8 +25,23 @@ test('the public npm package exposes only the bundled CLI and runtime assets', a
 
 test('Turbo restores every generated npm package artifact on a build cache hit', async () => {
   const turbo = await manifest('turbo.json');
-  const outputs = turbo.tasks.build.outputs;
+  const packageBuild = turbo.tasks['cashu-fault-lab#build'];
+  const inputs = packageBuild.inputs;
+  const outputs = packageBuild.outputs;
 
+  assert.deepEqual(packageBuild.dependsOn, ['^build']);
+  assert.ok(inputs.includes('$TURBO_DEFAULT$'));
+  for (const input of [
+    '$TURBO_ROOT$/LICENSE',
+    '$TURBO_ROOT$/scenarios/**',
+    '$TURBO_ROOT$/spec/**',
+    '$TURBO_ROOT$/infra/compose/nutshell.compose.yml',
+    '$TURBO_ROOT$/infra/compose/lab.compose.yml',
+    '$TURBO_ROOT$/infra/compose/cdk-mint.compose.yml',
+    '$TURBO_ROOT$/infra/compose/npm-runtime.compose.yml',
+  ]) {
+    assert.ok(inputs.includes(input), `build cache must hash ${input}`);
+  }
   assert.ok(outputs.includes('dist/**'));
   assert.ok(outputs.includes('runtime/**'));
   assert.ok(outputs.includes('LICENSE'));

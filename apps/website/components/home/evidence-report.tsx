@@ -317,6 +317,14 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           >
             v0.2.0 release <span aria-hidden="true">↗</span>
           </a>
+          <a
+            className={styles.reportLink}
+            href={summary.verification.publicationRunUrl}
+            rel="noreferrer noopener"
+            target="_blank"
+          >
+            Successful publication run <span aria-hidden="true">↗</span>
+          </a>
         </div>
       </div>
     </section>

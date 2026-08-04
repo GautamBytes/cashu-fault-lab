@@ -5,6 +5,20 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "runtime/**", "LICENSE", ".next/**", "!.next/cache/**"]
     },
+    "cashu-fault-lab#build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/LICENSE",
+        "$TURBO_ROOT$/scenarios/**",
+        "$TURBO_ROOT$/spec/**",
+        "$TURBO_ROOT$/infra/compose/nutshell.compose.yml",
+        "$TURBO_ROOT$/infra/compose/lab.compose.yml",
+        "$TURBO_ROOT$/infra/compose/cdk-mint.compose.yml",
+        "$TURBO_ROOT$/infra/compose/npm-runtime.compose.yml"
+      ],
+      "outputs": ["dist/**", "runtime/**", "LICENSE"]
+    },
     "test": {
       "dependsOn": ["^build"],
       "outputs": []

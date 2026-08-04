@@ -313,6 +313,10 @@ describe('home components', () => {
     expect(screen.getByRole('link', { name: /Full HTML report/ })).toBeVisible();
     expect(screen.getByRole('link', { name: /Provenance record/ })).toBeVisible();
     expect(screen.getByRole('link', { name: /v0\.2\.0 release/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Successful publication run/ })).toHaveAttribute(
+      'href',
+      'https://github.com/GautamBytes/cashu-fault-lab/actions/runs/30937256267',
+    );
     expect(items).toHaveLength(18);
     expect(within(contextList).getByText('Crash recovery')).toBeVisible();
     expect(within(contextList).getAllByText('Not applicable').length).toBeGreaterThan(0);

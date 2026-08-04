@@ -28,6 +28,7 @@ export interface DemoVerification {
   release: string;
   package: string;
   command: string;
+  publicationRunUrl: string;
   evidenceType: string;
   executedAt: string;
   environment: {
@@ -130,6 +131,7 @@ function parseVerification(value: unknown): DemoVerification {
     release: requiredString(value, 'release'),
     package: requiredString(value, 'package'),
     command: requiredString(value, 'command'),
+    publicationRunUrl: requiredString(value, 'publicationRunUrl'),
     evidenceType: requiredString(value, 'evidenceType'),
     executedAt: requiredString(value, 'executedAt'),
     environment: {

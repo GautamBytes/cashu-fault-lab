@@ -18,6 +18,8 @@ describe('getDemoSummary', () => {
         release: 'v0.2.0',
         package: 'cashu-fault-lab@0.2.0',
         command: 'npx --yes cashu-fault-lab@0.2.0 demo',
+        publicationRunUrl:
+          'https://github.com/GautamBytes/cashu-fault-lab/actions/runs/30937256267',
         evidenceType: 'first-party-reproducible',
         doctor: { checks: 10, failed: 0, warned: 0 },
         cleanup: { containers: 0, networks: 0, volumes: 0 },
