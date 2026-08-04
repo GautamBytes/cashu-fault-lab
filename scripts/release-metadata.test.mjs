@@ -157,16 +157,41 @@ test('checked-in demo artifacts are valid, deterministic, and secret-free', asyn
   }
 });
 
-test('the website uses a valid, secret-free v0.1.4 demo artifact', async () => {
-  const demoSeed = 'cashu-fault-lab-v0.1.4-demo';
-  const json = await text('docs/examples/v0.1.4-demo.json');
-  const html = await text('docs/examples/v0.1.4-demo.html');
+test('the website uses valid, secret-free public v0.2.0 evidence', async () => {
+  const demoSeed = 'cashu-fault-lab-v0.1.0-demo';
+  const json = await text('docs/examples/v0.2.0-demo.json');
+  const html = await text('docs/examples/v0.2.0-demo.html');
+  const provenance = JSON.parse(await text('docs/examples/v0.2.0-provenance.json'));
   const artifact = JSON.parse(json);
 
   assert.equal(artifact.seed, demoSeed);
   assert.equal(artifact.status, 'passed');
   assert.match(html, new RegExp(demoSeed, 'u'));
-  assert.match(await text('apps/website/lib/demo.ts'), /docs\/examples\/v0\.1\.4-demo\.json/u);
+  assert.equal(provenance.release, 'v0.2.0');
+  assert.equal(provenance.package, 'cashu-fault-lab@0.2.0');
+  assert.equal(provenance.command, 'npx --yes cashu-fault-lab@0.2.0 demo');
+  assert.deepEqual(provenance.results.doctor, { checks: 10, failed: 0, warned: 0 });
+  assert.deepEqual(provenance.results.cleanup, { containers: 0, networks: 0, volumes: 0 });
+  assert.match(await text('apps/website/lib/demo.ts'), /docs\/examples\/v0\.2\.0-demo\.json/u);
+  assert.match(
+    await text('apps/website/components/home/evidence-report.tsx'),
+    /<EvidenceGallery \/>/u,
+  );
+  assert.match(
+    await text('apps/website/components/home/evidence-gallery.tsx'),
+    /\/evidence\/v0\.2\.0-terminal\.png/u,
+  );
+  assert.match(
+    await text('apps/website/components/home/evidence-gallery.tsx'),
+    /\/evidence\/v0\.2\.0-report\.png/u,
+  );
+  for (const image of [
+    'apps/website/public/evidence/v0.2.0-terminal.png',
+    'apps/website/public/evidence/v0.2.0-report.png',
+  ]) {
+    const contents = await readFile(new URL(image, root));
+    assert.equal(contents.subarray(1, 4).toString('ascii'), 'PNG', `${image} must be a PNG`);
+  }
   for (const secret of [
     'lab-only-cashu-ts-token',
     'lab-only-cdk-token',
@@ -174,8 +199,8 @@ test('the website uses a valid, secret-free v0.1.4 demo artifact', async () => {
     'lab-only-fault-token',
     'proof-secret',
   ]) {
-    assert.ok(!json.includes(secret), `JSON v0.1.4 demo leaks ${secret}`);
-    assert.ok(!html.includes(secret), `HTML v0.1.4 demo leaks ${secret}`);
+    assert.ok(!json.includes(secret), `JSON v0.2.0 demo leaks ${secret}`);
+    assert.ok(!html.includes(secret), `HTML v0.2.0 demo leaks ${secret}`);
   }
 });
 

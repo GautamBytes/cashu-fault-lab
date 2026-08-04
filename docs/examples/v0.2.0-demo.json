@@ -1,0 +1,488 @@
+{
+  "schemaVersion": 2,
+  "scenarioId": "http-response-lost",
+  "seed": "cashu-fault-lab-v0.1.0-demo",
+  "status": "passed",
+  "invariants": [
+    {
+      "id": "at-most-once-redemption-start",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "proofs",
+          "index": 3,
+          "description": "Mint redemption evidence contains one start per delivery."
+        }
+      ]
+    },
+    {
+      "id": "at-most-one-merchant-credit-per-request",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "ledger",
+          "index": 6,
+          "description": "Receiver ledger observation records merchant credit cardinality and value."
+        }
+      ]
+    },
+    {
+      "id": "at-most-one-merchant-credit-per-delivery",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "ledger",
+          "index": 6,
+          "description": "Receiver ledger observation records merchant credit cardinality and value."
+        }
+      ]
+    },
+    {
+      "id": "proof-set-exclusivity",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "timeline",
+          "index": 1,
+          "description": "Delivery-attempt identities derive a unique owner for every proof set."
+        },
+        {
+          "source": "proofs",
+          "index": 4,
+          "description": "Mint evidence binds the delivery to its input proof-set identity and state."
+        }
+      ]
+    },
+    {
+      "id": "delivery-identity-immutability",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "timeline",
+          "index": 1,
+          "description": "Ordered delivery-attempt observations retain one identity per delivery."
+        },
+        {
+          "source": "receipt",
+          "index": 7,
+          "description": "Receiver receipt observation records delivery status and version."
+        },
+        {
+          "source": "proofs",
+          "index": 4,
+          "description": "Mint evidence binds the delivery to its input proof-set identity and state."
+        }
+      ]
+    },
+    {
+      "id": "exact-net-amount",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "receipt",
+          "index": 7,
+          "description": "Receiver receipt observation records delivery status and version."
+        },
+        {
+          "source": "ledger",
+          "index": 6,
+          "description": "Receiver ledger observation records merchant credit cardinality and value."
+        }
+      ]
+    },
+    {
+      "id": "no-premature-settlement",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "receipt",
+          "index": 7,
+          "description": "Receiver receipt observation records delivery status and version."
+        },
+        {
+          "source": "ledger",
+          "index": 6,
+          "description": "Receiver ledger observation records merchant credit cardinality and value."
+        },
+        {
+          "source": "proofs",
+          "index": 4,
+          "description": "Mint evidence binds the delivery to its input proof-set identity and state."
+        },
+        {
+          "source": "timeline",
+          "index": 5,
+          "description": "Receiver settlement observation binds recovered replacement outputs."
+        }
+      ]
+    },
+    {
+      "id": "no-false-rejection-after-possible-consumption",
+      "status": "not_applicable",
+      "confidence": "derived",
+      "evidence": [],
+      "reason": "No rejected receipt was observed."
+    },
+    {
+      "id": "monotonic-receipts",
+      "status": "passed",
+      "confidence": "derived",
+      "evidence": [
+        {
+          "source": "receipt",
+          "index": 7,
+          "description": "Receiver receipt observation records delivery status and version."
+        }
+      ]
+    },
+    {
+      "id": "stable-duplicate-response",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "timeline",
+          "index": 1,
+          "description": "Repeated delivery attempts retain one identity and side-effect set."
+        },
+        {
+          "source": "receipt",
+          "index": 7,
+          "description": "Receiver receipt observation records delivery status and version."
+        },
+        {
+          "source": "ledger",
+          "index": 6,
+          "description": "Receiver ledger observation records merchant credit cardinality and value."
+        },
+        {
+          "source": "proofs",
+          "index": 4,
+          "description": "Mint evidence binds the delivery to its input proof-set identity and state."
+        }
+      ]
+    },
+    {
+      "id": "eventual-terminal-or-recovery-state",
+      "status": "passed",
+      "confidence": "derived",
+      "evidence": [
+        {
+          "source": "receipt",
+          "index": 7,
+          "description": "Receiver receipt observation records delivery status and version."
+        }
+      ]
+    },
+    {
+      "id": "crash-recovery",
+      "status": "not_applicable",
+      "confidence": "derived",
+      "evidence": [],
+      "reason": "The scenario does not restart a component."
+    },
+    {
+      "id": "retry-convergence",
+      "status": "passed",
+      "confidence": "derived",
+      "evidence": [
+        {
+          "source": "receipt",
+          "index": 7,
+          "description": "Receiver receipt observation records delivery status and version."
+        }
+      ]
+    },
+    {
+      "id": "transport-convergence",
+      "status": "not_applicable",
+      "confidence": "derived",
+      "evidence": [],
+      "reason": "The scenario does not use multiple transports."
+    },
+    {
+      "id": "independent-mint-evidence",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "proofs",
+          "index": 4,
+          "description": "Mint proof-state endpoint observation records the input state."
+        }
+      ]
+    },
+    {
+      "id": "independent-ledger-evidence",
+      "status": "passed",
+      "confidence": "adapter_claimed",
+      "evidence": [
+        {
+          "source": "ledger",
+          "index": 6,
+          "description": "Receiver ledger observation records merchant credit cardinality and value."
+        }
+      ]
+    },
+    {
+      "id": "reproducibility",
+      "status": "passed",
+      "confidence": "derived",
+      "evidence": [
+        {
+          "source": "timeline",
+          "description": "Scenario ID, seed, versions, and ordered history are recorded."
+        }
+      ]
+    },
+    {
+      "id": "no-unsupported-pass",
+      "status": "passed",
+      "confidence": "derived",
+      "evidence": [
+        {
+          "source": "capabilities",
+          "description": "Both executed roles declare the selected profile and the runner observed execution."
+        }
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "type": "configure_fault",
+      "target": "http",
+      "fault": "drop_response",
+      "occurrence": 1
+    },
+    {
+      "type": "send",
+      "sender": "reference",
+      "requestId": "AAECAwQFBgcICQoLDA0ODw"
+    },
+    {
+      "type": "assert_quiescent"
+    }
+  ],
+  "timeline": [
+    {
+      "sequence": 0,
+      "at": 0,
+      "phase": "invoked",
+      "actor": "http",
+      "event": "configure_fault",
+      "commandIndex": 0
+    },
+    {
+      "sequence": 1,
+      "at": 0,
+      "phase": "completed",
+      "actor": "http",
+      "event": "configure_fault",
+      "commandIndex": 0,
+      "outcome": "passed"
+    },
+    {
+      "sequence": 2,
+      "at": 0,
+      "phase": "invoked",
+      "actor": "reference",
+      "event": "send",
+      "commandIndex": 1
+    },
+    {
+      "sequence": 3,
+      "at": 0,
+      "phase": "observation",
+      "actor": "oracle",
+      "event": "request_observed",
+      "commandIndex": 1,
+      "data": {
+        "requestId": "cRaQMcUoyK1P81_X-Tw72Q",
+        "singleUse": true
+      }
+    },
+    {
+      "sequence": 4,
+      "at": 0,
+      "phase": "observation",
+      "actor": "oracle",
+      "event": "delivery_attempted",
+      "commandIndex": 1,
+      "data": {
+        "requestId": "cRaQMcUoyK1P81_X-Tw72Q",
+        "deliveryId": "87ciHsOw54jv60iB_MAenQ",
+        "payloadHash": "b9840cd2764708ec379fe2526f1d8294d9431ab44fa646d8b9b6c46c5205a153",
+        "proofSetHash": "643a406459f815cb9a29e310a0eb2e7dfc40ab90212b6494b8b562b28d8bb7b9",
+        "transport": "http"
+      }
+    },
+    {
+      "sequence": 5,
+      "at": 0,
+      "phase": "observation",
+      "actor": "oracle",
+      "event": "delivery_attempted",
+      "commandIndex": 1,
+      "data": {
+        "requestId": "cRaQMcUoyK1P81_X-Tw72Q",
+        "deliveryId": "87ciHsOw54jv60iB_MAenQ",
+        "payloadHash": "b9840cd2764708ec379fe2526f1d8294d9431ab44fa646d8b9b6c46c5205a153",
+        "proofSetHash": "643a406459f815cb9a29e310a0eb2e7dfc40ab90212b6494b8b562b28d8bb7b9",
+        "transport": "http"
+      }
+    },
+    {
+      "sequence": 6,
+      "at": 0,
+      "phase": "observation",
+      "actor": "oracle",
+      "event": "redemption_started",
+      "commandIndex": 1,
+      "data": {
+        "deliveryId": "87ciHsOw54jv60iB_MAenQ",
+        "proofSetHash": "643a406459f815cb9a29e310a0eb2e7dfc40ab90212b6494b8b562b28d8bb7b9"
+      }
+    },
+    {
+      "sequence": 7,
+      "at": 0,
+      "phase": "observation",
+      "actor": "oracle",
+      "event": "mint_proofs_state",
+      "commandIndex": 1,
+      "data": {
+        "proofSetHash": "643a406459f815cb9a29e310a0eb2e7dfc40ab90212b6494b8b562b28d8bb7b9",
+        "state": "SPENT"
+      }
+    },
+    {
+      "sequence": 8,
+      "at": 0,
+      "phase": "observation",
+      "actor": "oracle",
+      "event": "receiver_settled",
+      "commandIndex": 1,
+      "data": {
+        "deliveryId": "87ciHsOw54jv60iB_MAenQ",
+        "replacementPlanHash": "25579ff9c7a1589136de7852e97d15830b21b973e9af41c2e59feb73e1bc78f9"
+      }
+    },
+    {
+      "sequence": 9,
+      "at": 0,
+      "phase": "observation",
+      "actor": "oracle",
+      "event": "merchant_credited",
+      "commandIndex": 1,
+      "data": {
+        "creditId": "47219249a22d559b67e042dcdbff081e4550fc4545273ec52e06315f560f8c0a",
+        "requestId": "cRaQMcUoyK1P81_X-Tw72Q",
+        "deliveryId": "87ciHsOw54jv60iB_MAenQ",
+        "amount": 8,
+        "unit": "sat"
+      }
+    },
+    {
+      "sequence": 10,
+      "at": 0,
+      "phase": "observation",
+      "actor": "oracle",
+      "event": "receipt_observed",
+      "commandIndex": 1,
+      "data": {
+        "requestId": "cRaQMcUoyK1P81_X-Tw72Q",
+        "deliveryId": "87ciHsOw54jv60iB_MAenQ",
+        "payloadHash": "b9840cd2764708ec379fe2526f1d8294d9431ab44fa646d8b9b6c46c5205a153",
+        "status": "settled",
+        "detailCode": "settled",
+        "version": 3,
+        "amount": 8,
+        "unit": "sat"
+      }
+    },
+    {
+      "sequence": 11,
+      "at": 0,
+      "phase": "completed",
+      "actor": "reference",
+      "event": "send",
+      "commandIndex": 1,
+      "outcome": "passed"
+    },
+    {
+      "sequence": 12,
+      "at": 0,
+      "phase": "invoked",
+      "actor": "runner",
+      "event": "assert_quiescent",
+      "commandIndex": 2
+    },
+    {
+      "sequence": 13,
+      "at": 0,
+      "phase": "completed",
+      "actor": "runner",
+      "event": "assert_quiescent",
+      "commandIndex": 2,
+      "outcome": "passed"
+    }
+  ],
+  "capabilities": {
+    "sender": {
+      "implementation": {
+        "id": "cashu-ts",
+        "version": "4.7.2",
+        "language": "typescript",
+        "runtime": "node-24",
+        "sourceDigest": "sha256:81d6719ab1a7d820d0fe1ac98dc29ef7dbf9599d06572a76a0aacff57af6ae22",
+        "buildDigest": "sha256:7c3263be90100bbc66bdcd1d687915e1cce8b0e045fc3801cf4a528c474c53ef"
+      },
+      "role": {
+        "transports": ["http", "nostr"],
+        "profiles": ["delivery-v1"],
+        "durability": "restart_safe",
+        "evidence": {
+          "tier": "T1",
+          "sources": ["adapter", "runner", "transport", "durable_state"]
+        }
+      }
+    },
+    "receiver": {
+      "implementation": {
+        "id": "reference-receiver",
+        "version": "0.1.0",
+        "language": "typescript",
+        "runtime": "node-24",
+        "sourceDigest": "sha256:bcb2734a98e43548e4bb0ac71f9897af134274ef6338386b6d4ab336aac0fb31",
+        "buildDigest": "sha256:ff5befa0b846dbe733271ad2d5171f494da2c347e1c5a5748940474d2904e90f"
+      },
+      "role": {
+        "transports": ["http"],
+        "profiles": ["delivery-v1"],
+        "durability": "process",
+        "evidence": {
+          "tier": "T1",
+          "sources": ["adapter", "runner", "transport", "mint"]
+        }
+      }
+    }
+  },
+  "componentVersions": {
+    "adapter-contract": "0.1.0",
+    "delivery-core": "0.1.0",
+    "lab-cli": "0.1.0",
+    "oracle": "0.1.0",
+    "receiver/reference-receiver": "0.1.0",
+    "report": "0.1.0",
+    "scenario-runner": "0.1.0",
+    "sender/cashu-ts": "4.7.2"
+  },
+  "imageDigests": {}
+}

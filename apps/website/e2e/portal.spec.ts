@@ -175,6 +175,33 @@ test('home is accessible, has one visible title, and fits the viewport', async (
   );
 });
 
+test('evidence screenshots open clearly and support every close path', async ({ page }) => {
+  await page.goto('/');
+  const trigger = page.getByRole('button', {
+    name: 'Enlarge terminal verification screenshot',
+  });
+
+  await trigger.click();
+  const dialog = page.getByRole('dialog', { name: 'Terminal verification output' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('img')).toHaveAttribute('src', '/evidence/v0.2.0-terminal.png');
+  await expectNoSeriousAccessibilityViolations(page);
+
+  await dialog.getByRole('button', { name: 'Close image preview' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await dialog.click({ position: { x: 4, y: 4 } });
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
 test('user laptop viewport shows the complete hero and next section cue', async ({
   page,
 }, testInfo) => {

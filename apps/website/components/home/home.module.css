@@ -749,12 +749,37 @@
   max-width: 13ch;
 }
 
-.evidenceOverview .sectionHeading > p:last-child {
+.evidenceOverview .sectionHeading > p:not(.eyebrow) {
   color: var(--muted-text);
   font-size: 0.9rem;
   line-height: 1.55;
   margin-top: 1rem;
   max-width: 39rem;
+}
+
+.evidenceCommand {
+  border: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1.25rem;
+  max-width: 39rem;
+  padding: 0.85rem 1rem;
+}
+
+.evidenceCommand span {
+  color: var(--purple-electric);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
+.evidenceCommand code {
+  background: transparent;
+  border: 0;
+  color: var(--sand-100);
+  font-size: clamp(0.7rem, 1.4vw, 0.82rem);
+  overflow-wrap: anywhere;
+  padding: 0;
 }
 
 .reportMeta {
@@ -842,6 +867,216 @@
   font-weight: 700;
   margin: 0.35rem 0 0;
   overflow-wrap: anywhere;
+}
+
+.seedNote {
+  border-top: 1px solid var(--hairline);
+  color: var(--muted-text);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.8rem 1rem;
+}
+
+.seedNote code {
+  background: transparent;
+  border: 0;
+  color: var(--sand-300);
+  font-size: inherit;
+  padding: 0;
+}
+
+.verificationGrid {
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.verificationGrid li {
+  align-items: start;
+  border-bottom: 1px solid var(--hairline);
+  border-right: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 7rem;
+  padding: 1rem;
+}
+
+.verificationGrid li:nth-child(3n) {
+  border-right: 0;
+}
+
+.verificationGrid li:nth-last-child(-n + 3) {
+  border-bottom: 0;
+}
+
+.verificationGrid strong {
+  color: var(--sand-100);
+  font-size: 0.88rem;
+}
+
+.verificationGrid p {
+  color: var(--muted-text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  margin: 0.45rem 0 0;
+}
+
+.verificationStep {
+  color: var(--purple-electric);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.65rem;
+}
+
+.evidenceGallery {
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.evidenceFigure {
+  display: grid;
+  margin: 0;
+  min-width: 0;
+}
+
+.evidenceFigure + .evidenceFigure {
+  border-left: 1px solid var(--hairline);
+}
+
+.evidenceImageButton {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: zoom-in;
+  display: grid;
+  padding: 0;
+  position: relative;
+  text-align: left;
+  width: 100%;
+}
+
+.evidenceImageButton:focus-visible {
+  outline: 3px solid var(--sand-500);
+  outline-offset: -3px;
+}
+
+.evidenceZoomLabel {
+  background: rgba(7, 5, 15, 0.86);
+  bottom: 0.75rem;
+  color: var(--sand-100);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  padding: 0.45rem 0.6rem;
+  pointer-events: none;
+  position: absolute;
+  right: 0.75rem;
+}
+
+.evidenceFigure img {
+  background: var(--control-surface);
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.evidenceFigure figcaption {
+  border-top: 1px solid var(--hairline);
+  color: var(--muted-text);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  padding: 0.8rem 1rem;
+}
+
+.evidenceFigure code {
+  background: transparent;
+  border: 0;
+  color: var(--sand-300);
+  font-size: inherit;
+  padding: 0;
+}
+
+.evidenceDialog {
+  background: transparent;
+  border: 0;
+  color: var(--sand-100);
+  height: 100dvh;
+  margin: 0;
+  max-height: none;
+  max-width: none;
+  padding: clamp(0.75rem, 3vw, 2rem);
+  width: 100vw;
+}
+
+.evidenceDialog[open] {
+  display: grid;
+  place-items: center;
+}
+
+.evidenceDialog::backdrop {
+  background: rgba(5, 3, 12, 0.9);
+}
+
+.evidenceDialogPanel {
+  background: var(--control-surface);
+  border: 1px solid var(--sand-500);
+  max-height: calc(100dvh - clamp(1.5rem, 6vw, 4rem));
+  max-width: 1440px;
+  overflow: auto;
+  width: 100%;
+}
+
+.evidenceDialogPanel header {
+  align-items: center;
+  background: var(--control-surface);
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.evidenceDialogPanel h3 {
+  font-size: clamp(0.82rem, 2vw, 1rem);
+  margin: 0;
+}
+
+.evidenceDialogPanel header button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--sand-100);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.5rem;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.evidenceDialogPanel header button:hover {
+  background: var(--purple-700);
+  border-color: var(--purple-electric);
+}
+
+.evidenceDialogPanel header button:focus-visible {
+  background: var(--purple-700);
+  outline: 2px solid var(--sand-500);
+  outline-offset: -3px;
+}
+
+.evidenceDialogPanel img {
+  display: block;
+  height: auto;
+  width: 100%;
 }
 
 .statusGrid {
@@ -1106,7 +1341,7 @@
 
 .reportLinks {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .reportLinks .reportLink + .reportLink {
@@ -1755,6 +1990,32 @@
     border-top: 1px solid var(--hairline);
   }
 
+  .verificationGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .verificationGrid li:nth-child(n) {
+    border-bottom: 1px solid var(--hairline);
+    border-right: 1px solid var(--hairline);
+  }
+
+  .verificationGrid li:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .verificationGrid li:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .evidenceGallery {
+    grid-template-columns: 1fr;
+  }
+
+  .evidenceFigure + .evidenceFigure {
+    border-left: 0;
+    border-top: 1px solid var(--hairline);
+  }
+
   .statusCard {
     align-content: start;
     font-size: 0.58rem;
@@ -1985,8 +2246,18 @@
   }
 
   .reportFacts,
-  .reportLinks {
+  .reportLinks,
+  .verificationGrid {
     grid-template-columns: 1fr;
+  }
+
+  .verificationGrid li:nth-child(n) {
+    border-bottom: 1px solid var(--hairline);
+    border-right: 0;
+  }
+
+  .verificationGrid li:last-child {
+    border-bottom: 0;
   }
 
   .reportFacts > div {

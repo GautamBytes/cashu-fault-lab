@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Cashu Fault Lab — http-response-lost</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: #101313;
+        color: #e9efec;
+      }
+      body {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 32px 20px;
+      }
+      h1 {
+        font-size: 1.5rem;
+      }
+      .status {
+        display: inline-block;
+        padding: 4px 9px;
+        border-radius: 99px;
+        font-weight: 700;
+      }
+      .passed {
+        background: #164e33;
+        color: #a7f3d0;
+      }
+      .failed {
+        background: #5f1f24;
+        color: #fecaca;
+      }
+      pre {
+        overflow: auto;
+        padding: 18px;
+        border: 1px solid #34403a;
+        border-radius: 8px;
+        background: #161b19;
+        line-height: 1.45;
+      }
+      small {
+        color: #9aaba2;
+      }
+    </style>
+  </head>
+  <body>
+    <small>Cashu Fault Lab · schema v2 · seed cashu-fault-lab-v0.1.0-demo</small>
+    <h1>http-response-lost</h1>
+    <p class="status passed">PASSED</p>
+    <pre>
+{
+  &quot;schemaVersion&quot;: 2,
+  &quot;scenarioId&quot;: &quot;http-response-lost&quot;,
+  &quot;seed&quot;: &quot;cashu-fault-lab-v0.1.0-demo&quot;,
+  &quot;status&quot;: &quot;passed&quot;,
+  &quot;invariants&quot;: [
+    {
+      &quot;id&quot;: &quot;at-most-once-redemption-start&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 3,
+          &quot;description&quot;: &quot;Mint redemption evidence contains one start per delivery.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;at-most-one-merchant-credit-per-request&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;ledger&quot;,
+          &quot;index&quot;: 6,
+          &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;at-most-one-merchant-credit-per-delivery&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;ledger&quot;,
+          &quot;index&quot;: 6,
+          &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;proof-set-exclusivity&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;timeline&quot;,
+          &quot;index&quot;: 1,
+          &quot;description&quot;: &quot;Delivery-attempt identities derive a unique owner for every proof set.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 4,
+          &quot;description&quot;: &quot;Mint evidence binds the delivery to its input proof-set identity and state.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;delivery-identity-immutability&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;timeline&quot;,
+          &quot;index&quot;: 1,
+          &quot;description&quot;: &quot;Ordered delivery-attempt observations retain one identity per delivery.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;receipt&quot;,
+          &quot;index&quot;: 7,
+          &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 4,
+          &quot;description&quot;: &quot;Mint evidence binds the delivery to its input proof-set identity and state.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;exact-net-amount&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;receipt&quot;,
+          &quot;index&quot;: 7,
+          &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;ledger&quot;,
+          &quot;index&quot;: 6,
+          &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;no-premature-settlement&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;receipt&quot;,
+          &quot;index&quot;: 7,
+          &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;ledger&quot;,
+          &quot;index&quot;: 6,
+          &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 4,
+          &quot;description&quot;: &quot;Mint evidence binds the delivery to its input proof-set identity and state.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;timeline&quot;,
+          &quot;index&quot;: 5,
+          &quot;description&quot;: &quot;Receiver settlement observation binds recovered replacement outputs.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;no-false-rejection-after-possible-consumption&quot;,
+      &quot;status&quot;: &quot;not_applicable&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [],
+      &quot;reason&quot;: &quot;No rejected receipt was observed.&quot;
+    },
+    {
+      &quot;id&quot;: &quot;monotonic-receipts&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;receipt&quot;,
+          &quot;index&quot;: 7,
+          &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;stable-duplicate-response&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;timeline&quot;,
+          &quot;index&quot;: 1,
+          &quot;description&quot;: &quot;Repeated delivery attempts retain one identity and side-effect set.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;receipt&quot;,
+          &quot;index&quot;: 7,
+          &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;ledger&quot;,
+          &quot;index&quot;: 6,
+          &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
+        },
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 4,
+          &quot;description&quot;: &quot;Mint evidence binds the delivery to its input proof-set identity and state.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;eventual-terminal-or-recovery-state&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;receipt&quot;,
+          &quot;index&quot;: 7,
+          &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;crash-recovery&quot;,
+      &quot;status&quot;: &quot;not_applicable&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [],
+      &quot;reason&quot;: &quot;The scenario does not restart a component.&quot;
+    },
+    {
+      &quot;id&quot;: &quot;retry-convergence&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;receipt&quot;,
+          &quot;index&quot;: 7,
+          &quot;description&quot;: &quot;Receiver receipt observation records delivery status and version.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;transport-convergence&quot;,
+      &quot;status&quot;: &quot;not_applicable&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [],
+      &quot;reason&quot;: &quot;The scenario does not use multiple transports.&quot;
+    },
+    {
+      &quot;id&quot;: &quot;independent-mint-evidence&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;proofs&quot;,
+          &quot;index&quot;: 4,
+          &quot;description&quot;: &quot;Mint proof-state endpoint observation records the input state.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;independent-ledger-evidence&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;adapter_claimed&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;ledger&quot;,
+          &quot;index&quot;: 6,
+          &quot;description&quot;: &quot;Receiver ledger observation records merchant credit cardinality and value.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;reproducibility&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;timeline&quot;,
+          &quot;description&quot;: &quot;Scenario ID, seed, versions, and ordered history are recorded.&quot;
+        }
+      ]
+    },
+    {
+      &quot;id&quot;: &quot;no-unsupported-pass&quot;,
+      &quot;status&quot;: &quot;passed&quot;,
+      &quot;confidence&quot;: &quot;derived&quot;,
+      &quot;evidence&quot;: [
+        {
+          &quot;source&quot;: &quot;capabilities&quot;,
+          &quot;description&quot;: &quot;Both executed roles declare the selected profile and the runner observed execution.&quot;
+        }
+      ]
+    }
+  ],
+  &quot;commands&quot;: [
+    {
+      &quot;type&quot;: &quot;configure_fault&quot;,
+      &quot;target&quot;: &quot;http&quot;,
+      &quot;fault&quot;: &quot;drop_response&quot;,
+      &quot;occurrence&quot;: 1
+    },
+    {
+      &quot;type&quot;: &quot;send&quot;,
+      &quot;sender&quot;: &quot;reference&quot;,
+      &quot;requestId&quot;: &quot;AAECAwQFBgcICQoLDA0ODw&quot;
+    },
+    {
+      &quot;type&quot;: &quot;assert_quiescent&quot;
+    }
+  ],
+  &quot;timeline&quot;: [
+    {
+      &quot;sequence&quot;: 0,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;invoked&quot;,
+      &quot;actor&quot;: &quot;http&quot;,
+      &quot;event&quot;: &quot;configure_fault&quot;,
+      &quot;commandIndex&quot;: 0
+    },
+    {
+      &quot;sequence&quot;: 1,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;completed&quot;,
+      &quot;actor&quot;: &quot;http&quot;,
+      &quot;event&quot;: &quot;configure_fault&quot;,
+      &quot;commandIndex&quot;: 0,
+      &quot;outcome&quot;: &quot;passed&quot;
+    },
+    {
+      &quot;sequence&quot;: 2,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;invoked&quot;,
+      &quot;actor&quot;: &quot;reference&quot;,
+      &quot;event&quot;: &quot;send&quot;,
+      &quot;commandIndex&quot;: 1
+    },
+    {
+      &quot;sequence&quot;: 3,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;observation&quot;,
+      &quot;actor&quot;: &quot;oracle&quot;,
+      &quot;event&quot;: &quot;request_observed&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;data&quot;: {
+        &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
+        &quot;singleUse&quot;: true
+      }
+    },
+    {
+      &quot;sequence&quot;: 4,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;observation&quot;,
+      &quot;actor&quot;: &quot;oracle&quot;,
+      &quot;event&quot;: &quot;delivery_attempted&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;data&quot;: {
+        &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
+        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
+        &quot;payloadHash&quot;: &quot;b9840cd2764708ec379fe2526f1d8294d9431ab44fa646d8b9b6c46c5205a153&quot;,
+        &quot;proofSetHash&quot;: &quot;643a406459f815cb9a29e310a0eb2e7dfc40ab90212b6494b8b562b28d8bb7b9&quot;,
+        &quot;transport&quot;: &quot;http&quot;
+      }
+    },
+    {
+      &quot;sequence&quot;: 5,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;observation&quot;,
+      &quot;actor&quot;: &quot;oracle&quot;,
+      &quot;event&quot;: &quot;delivery_attempted&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;data&quot;: {
+        &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
+        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
+        &quot;payloadHash&quot;: &quot;b9840cd2764708ec379fe2526f1d8294d9431ab44fa646d8b9b6c46c5205a153&quot;,
+        &quot;proofSetHash&quot;: &quot;643a406459f815cb9a29e310a0eb2e7dfc40ab90212b6494b8b562b28d8bb7b9&quot;,
+        &quot;transport&quot;: &quot;http&quot;
+      }
+    },
+    {
+      &quot;sequence&quot;: 6,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;observation&quot;,
+      &quot;actor&quot;: &quot;oracle&quot;,
+      &quot;event&quot;: &quot;redemption_started&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;data&quot;: {
+        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
+        &quot;proofSetHash&quot;: &quot;643a406459f815cb9a29e310a0eb2e7dfc40ab90212b6494b8b562b28d8bb7b9&quot;
+      }
+    },
+    {
+      &quot;sequence&quot;: 7,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;observation&quot;,
+      &quot;actor&quot;: &quot;oracle&quot;,
+      &quot;event&quot;: &quot;mint_proofs_state&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;data&quot;: {
+        &quot;proofSetHash&quot;: &quot;643a406459f815cb9a29e310a0eb2e7dfc40ab90212b6494b8b562b28d8bb7b9&quot;,
+        &quot;state&quot;: &quot;SPENT&quot;
+      }
+    },
+    {
+      &quot;sequence&quot;: 8,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;observation&quot;,
+      &quot;actor&quot;: &quot;oracle&quot;,
+      &quot;event&quot;: &quot;receiver_settled&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;data&quot;: {
+        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
+        &quot;replacementPlanHash&quot;: &quot;25579ff9c7a1589136de7852e97d15830b21b973e9af41c2e59feb73e1bc78f9&quot;
+      }
+    },
+    {
+      &quot;sequence&quot;: 9,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;observation&quot;,
+      &quot;actor&quot;: &quot;oracle&quot;,
+      &quot;event&quot;: &quot;merchant_credited&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;data&quot;: {
+        &quot;creditId&quot;: &quot;47219249a22d559b67e042dcdbff081e4550fc4545273ec52e06315f560f8c0a&quot;,
+        &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
+        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
+        &quot;amount&quot;: 8,
+        &quot;unit&quot;: &quot;sat&quot;
+      }
+    },
+    {
+      &quot;sequence&quot;: 10,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;observation&quot;,
+      &quot;actor&quot;: &quot;oracle&quot;,
+      &quot;event&quot;: &quot;receipt_observed&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;data&quot;: {
+        &quot;requestId&quot;: &quot;cRaQMcUoyK1P81_X-Tw72Q&quot;,
+        &quot;deliveryId&quot;: &quot;87ciHsOw54jv60iB_MAenQ&quot;,
+        &quot;payloadHash&quot;: &quot;b9840cd2764708ec379fe2526f1d8294d9431ab44fa646d8b9b6c46c5205a153&quot;,
+        &quot;status&quot;: &quot;settled&quot;,
+        &quot;detailCode&quot;: &quot;settled&quot;,
+        &quot;version&quot;: 3,
+        &quot;amount&quot;: 8,
+        &quot;unit&quot;: &quot;sat&quot;
+      }
+    },
+    {
+      &quot;sequence&quot;: 11,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;completed&quot;,
+      &quot;actor&quot;: &quot;reference&quot;,
+      &quot;event&quot;: &quot;send&quot;,
+      &quot;commandIndex&quot;: 1,
+      &quot;outcome&quot;: &quot;passed&quot;
+    },
+    {
+      &quot;sequence&quot;: 12,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;invoked&quot;,
+      &quot;actor&quot;: &quot;runner&quot;,
+      &quot;event&quot;: &quot;assert_quiescent&quot;,
+      &quot;commandIndex&quot;: 2
+    },
+    {
+      &quot;sequence&quot;: 13,
+      &quot;at&quot;: 0,
+      &quot;phase&quot;: &quot;completed&quot;,
+      &quot;actor&quot;: &quot;runner&quot;,
+      &quot;event&quot;: &quot;assert_quiescent&quot;,
+      &quot;commandIndex&quot;: 2,
+      &quot;outcome&quot;: &quot;passed&quot;
+    }
+  ],
+  &quot;capabilities&quot;: {
+    &quot;sender&quot;: {
+      &quot;implementation&quot;: {
+        &quot;id&quot;: &quot;cashu-ts&quot;,
+        &quot;version&quot;: &quot;4.7.2&quot;,
+        &quot;language&quot;: &quot;typescript&quot;,
+        &quot;runtime&quot;: &quot;node-24&quot;,
+        &quot;sourceDigest&quot;: &quot;sha256:81d6719ab1a7d820d0fe1ac98dc29ef7dbf9599d06572a76a0aacff57af6ae22&quot;,
+        &quot;buildDigest&quot;: &quot;sha256:7c3263be90100bbc66bdcd1d687915e1cce8b0e045fc3801cf4a528c474c53ef&quot;
+      },
+      &quot;role&quot;: {
+        &quot;transports&quot;: [
+          &quot;http&quot;,
+          &quot;nostr&quot;
+        ],
+        &quot;profiles&quot;: [
+          &quot;delivery-v1&quot;
+        ],
+        &quot;durability&quot;: &quot;restart_safe&quot;,
+        &quot;evidence&quot;: {
+          &quot;tier&quot;: &quot;T1&quot;,
+          &quot;sources&quot;: [
+            &quot;adapter&quot;,
+            &quot;runner&quot;,
+            &quot;transport&quot;,
+            &quot;durable_state&quot;
+          ]
+        }
+      }
+    },
+    &quot;receiver&quot;: {
+      &quot;implementation&quot;: {
+        &quot;id&quot;: &quot;reference-receiver&quot;,
+        &quot;version&quot;: &quot;0.1.0&quot;,
+        &quot;language&quot;: &quot;typescript&quot;,
+        &quot;runtime&quot;: &quot;node-24&quot;,
+        &quot;sourceDigest&quot;: &quot;sha256:bcb2734a98e43548e4bb0ac71f9897af134274ef6338386b6d4ab336aac0fb31&quot;,
+        &quot;buildDigest&quot;: &quot;sha256:ff5befa0b846dbe733271ad2d5171f494da2c347e1c5a5748940474d2904e90f&quot;
+      },
+      &quot;role&quot;: {
+        &quot;transports&quot;: [
+          &quot;http&quot;
+        ],
+        &quot;profiles&quot;: [
+          &quot;delivery-v1&quot;
+        ],
+        &quot;durability&quot;: &quot;process&quot;,
+        &quot;evidence&quot;: {
+          &quot;tier&quot;: &quot;T1&quot;,
+          &quot;sources&quot;: [
+            &quot;adapter&quot;,
+            &quot;runner&quot;,
+            &quot;transport&quot;,
+            &quot;mint&quot;
+          ]
+        }
+      }
+    }
+  },
+  &quot;componentVersions&quot;: {
+    &quot;adapter-contract&quot;: &quot;0.1.0&quot;,
+    &quot;delivery-core&quot;: &quot;0.1.0&quot;,
+    &quot;lab-cli&quot;: &quot;0.1.0&quot;,
+    &quot;oracle&quot;: &quot;0.1.0&quot;,
+    &quot;receiver/reference-receiver&quot;: &quot;0.1.0&quot;,
+    &quot;report&quot;: &quot;0.1.0&quot;,
+    &quot;scenario-runner&quot;: &quot;0.1.0&quot;,
+    &quot;sender/cashu-ts&quot;: &quot;4.7.2&quot;
+  },
+  &quot;imageDigests&quot;: {}
+}
+</pre>
+  </body>
+</html>

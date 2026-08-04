@@ -129,7 +129,7 @@ describe('home components', () => {
     expect(within(command).getByText('Copied')).toBeVisible();
   });
 
-  it('renders canonical artifact data without a second staged trace', async () => {
+  it('renders canonical v0.2.0 artifact data without a second staged trace', async () => {
     stubMotionPreference();
     const summary = await getDemoSummary();
     render(await HomePage());
@@ -145,13 +145,11 @@ describe('home components', () => {
     expect(runPanel).toHaveTextContent('Checked in');
     expect(runPanel).toHaveTextContent('Artifact');
     expect(runPanel).not.toHaveTextContent(/\blive\b/i);
-    expect(hero).not.toHaveTextContent('v0.1.0');
     expect(hero).not.toHaveTextContent('v0.1.2');
-    expect(hero).toHaveTextContent('cashu-fault-lab-v0.1.4-demo');
-    expect(screen.queryByText(/v0\.1\.0/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Inspect the reviewed artifact/ })).toHaveAttribute(
+    expect(hero).toHaveTextContent('cashu-fault-lab-v0.1.0-demo');
+    expect(screen.getByRole('link', { name: /Machine-readable evidence/ })).toHaveAttribute(
       'href',
-      'https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.4-demo.json',
+      'https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.2.0-demo.json',
     );
     expect(within(runPanel).queryByRole('list')).not.toBeInTheDocument();
     expect(within(hero).queryByText(/^TRACE \//)).not.toBeInTheDocument();
@@ -271,7 +269,7 @@ describe('home components', () => {
     expect(css).not.toMatch(/\.statusGrid,\s*\.reportLinks\s*{[^}]*grid-template-columns:\s*1fr/s);
   });
 
-  it('lists every reviewed invariant with its current evidence state', async () => {
+  it('shows every user-visible v0.2.0 result and invariant state', async () => {
     const summary = await getDemoSummary();
     render(<EvidenceReport summary={summary} />);
 
@@ -290,14 +288,41 @@ describe('home components', () => {
 
     expect(within(overview).getByText(summary.scenarioId)).toBeVisible();
     expect(within(overview).getByText(new RegExp(`Run ${summary.status}`, 'i'))).toBeVisible();
+    expect(within(overview).getByText('First-party reproducible evidence')).toBeVisible();
+    expect(within(overview).getByText('npx --yes cashu-fault-lab@0.2.0 demo')).toBeVisible();
     expect(
-      within(overview).getByText(/report is retained from the reviewed v0\.1\.4 demo/i),
+      within(overview).getByText(
+        /First-party reproducible evidence is not independent wallet validation or certification/i,
+      ),
     ).toBeVisible();
-    expect(within(overview).getByText(/not a v0\.1\.4 qualification result/i)).toBeVisible();
+    expect(
+      screen.getByRole('img', { name: /v0\.2\.0 terminal showing the public doctor and demo/i }),
+    ).toBeVisible();
+    expect(screen.getByRole('img', { name: /v0\.2\.0 generated evidence report/i })).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Enlarge terminal verification screenshot' }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Enlarge generated evidence report screenshot' }),
+    ).toBeVisible();
+    const results = screen.getByRole('list', { name: 'Verified v0.2.0 user results' });
+    expect(within(results).getByText('10 checks · 0 failed · 0 warned')).toBeVisible();
+    expect(
+      within(results).getByText('2 attempts · 1 redemption start · 1 merchant credit'),
+    ).toBeVisible();
+    expect(within(results).getByText('15 passed · 0 failed · 3 not applicable')).toBeVisible();
+    expect(within(results).getByText('0 containers · 0 networks · 0 volumes')).toBeVisible();
     expect(contextList).toBeVisible();
     expect(supportedList).toBeVisible();
     expect(screen.getByText('18', { selector: 'dd, strong' })).toBeVisible();
-    expect(screen.getByRole('link', { name: /Inspect the reviewed artifact/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Machine-readable evidence/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Full HTML report/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Provenance record/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /v0\.2\.0 release/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Successful publication run/ })).toHaveAttribute(
+      'href',
+      'https://github.com/GautamBytes/cashu-fault-lab/actions/runs/30937256267',
+    );
     expect(items).toHaveLength(18);
     expect(within(contextList).getByText('Crash recovery')).toBeVisible();
     expect(within(contextList).getAllByText('Not applicable').length).toBeGreaterThan(0);
