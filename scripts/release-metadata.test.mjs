@@ -74,6 +74,7 @@ test('v0.2 maintainer documentation stays aligned with the shipped adapter workf
   const releaseNotes = await text('docs/releases/v0.2.0.md');
   const checklist = await text('docs/releases/v0.1.4-checklist.md');
   const changelog = await text('CHANGELOG.md');
+  const adapterInit = await text('apps/lab-cli/src/adapter-init.ts');
 
   assert.match(readme, /\[v0\.2\.0 release notes\]\(docs\/releases\/v0\.2\.0\.md\)/u);
   assert.match(readme, /wallet-doctor collect/u);
@@ -124,6 +125,9 @@ test('v0.2 maintainer documentation stays aligned with the shipped adapter workf
   );
   assert.match(releaseNotes, /wallet[- ]doctor/iu);
   assert.match(changelog, /^## 0\.1\.4 — 2026-08-03$/mu);
+  assert.doesNotMatch(adapterInit, /cashu-fault-lab@0\.1\.4/u);
+  assert.match(adapterInit, /cashu-fault-lab@0\.2\.0 adapter preflight/u);
+  assert.match(adapterInit, /cashu-fault-lab@0\.2\.0 adapter preview/u);
 });
 
 test('checked-in demo artifacts are valid, deterministic, and secret-free', async () => {
