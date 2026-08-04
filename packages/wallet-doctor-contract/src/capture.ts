@@ -82,6 +82,10 @@ interface CaptureBudget {
   contentBytes: number;
 }
 
+type CollectedRelay =
+  | { readonly ok: true; readonly url: string; readonly events: readonly Event[] }
+  | { readonly ok: false; readonly url: string; readonly error: string };
+
 function consumeEventBudget(events: readonly Event[], budget: CaptureBudget): void {
   for (const event of events) {
     budget.eventCount += 1;
@@ -91,6 +95,42 @@ function consumeEventBudget(events: readonly Event[], budget: CaptureBudget): vo
     }
     if (budget.contentBytes > MAXIMUM_CAPTURE_CONTENT_BYTES) {
       throw new Error(`capture encrypted content exceeds ${MAXIMUM_CAPTURE_CONTENT_BYTES} bytes`);
+    }
+  }
+}
+
+function decryptEvent(event: Event, conversationKey: Uint8Array | null): string | null {
+  if (conversationKey === null) return null;
+  try {
+    return nip44.v2.decrypt(event.content, conversationKey);
+  } catch {
+    return null;
+  }
+}
+
+function preflightProofCandidates(
+  relays: readonly CollectedRelay[],
+  conversationKey: Uint8Array | null,
+  budget: CaptureBudget,
+): void {
+  for (const relay of relays) {
+    if (!relay.ok) continue;
+    for (const event of relay.events) {
+      if (event.kind !== 7375) continue;
+      const plaintext = decryptEvent(event, conversationKey);
+      if (plaintext === null) continue;
+      const payload = parseJson(plaintext);
+      const candidateCount =
+        typeof payload === 'object' &&
+        payload !== null &&
+        !Array.isArray(payload) &&
+        Array.isArray((payload as { proofs?: unknown }).proofs)
+          ? (payload as { proofs: unknown[] }).proofs.length
+          : 0;
+      budget.proofCandidates += candidateCount;
+      if (budget.proofCandidates > MAXIMUM_CAPTURE_PROOFS) {
+        throw new Error(`capture proof candidate count exceeds ${MAXIMUM_CAPTURE_PROOFS}`);
+      }
     }
   }
 }
@@ -106,39 +146,27 @@ function normalizeRelayEvents(
   url: string,
   events: readonly Event[],
   conversationKey: Uint8Array | null,
-  budget: CaptureBudget,
 ): NormalizedRelay {
-  const uniqueEvents = [...new Map(events.map((event) => [event.id, event])).values()];
-  consumeEventBudget(uniqueEvents, budget);
   const wallet: WalletEventView[] = [];
   const tokens: TokenEventView[] = [];
   const history: HistoryEventView[] = [];
   const quotes: QuoteEventView[] = [];
   const malformed: MalformedEventView[] = [];
-  const deletions = uniqueEvents
+  const deletions = events
     .filter((event) => event.kind === 5)
     .flatMap((event) => {
       const result = normalizeDeletionEvent(event, [url]);
       return result.ok ? [result.view] : [];
     });
 
-  const decrypt = (event: Event): string | null => {
-    if (conversationKey === null) return null;
-    try {
-      return nip44.v2.decrypt(event.content, conversationKey);
-    } catch {
-      return null;
-    }
-  };
-
-  for (const event of uniqueEvents) {
+  for (const event of events) {
     if (event.kind === 5) continue;
     if (event.kind === 7374) {
       const quote = normalizeQuoteEvent(event, [url]);
       if (quote.ok) quotes.push(quote.view);
       continue;
     }
-    const plaintext = decrypt(event);
+    const plaintext = decryptEvent(event, conversationKey);
     if (plaintext === null) {
       malformed.push({
         eventId: event.id,
@@ -160,17 +188,6 @@ function normalizeRelayEvents(
           seenOn: [url],
         });
     } else if (event.kind === 7375) {
-      const candidateCount =
-        typeof payload === 'object' &&
-        payload !== null &&
-        !Array.isArray(payload) &&
-        Array.isArray((payload as { proofs?: unknown }).proofs)
-          ? ((payload as { proofs: unknown[] }).proofs.length ?? 0)
-          : 0;
-      budget.proofCandidates += candidateCount;
-      if (budget.proofCandidates > MAXIMUM_CAPTURE_PROOFS) {
-        throw new Error(`capture proof candidate count exceeds ${MAXIMUM_CAPTURE_PROOFS}`);
-      }
       const result = normalizeTokenPayload(event, payload, [url]);
       if (result.ok) tokens.push(result.view);
       else
@@ -210,7 +227,7 @@ function normalizeRelayEvents(
       url,
       status: 'ok',
       error: null,
-      eventIds: uniqueEvents.map((event) => event.id).sort(),
+      eventIds: events.map((event) => event.id).sort(),
     },
   };
 }
@@ -257,8 +274,7 @@ export async function captureWallet(options: CaptureOptions): Promise<Nip60Captu
       ? nip44.v2.utils.getConversationKey(options.subjectSecretKey, subject)
       : null;
 
-  const relays: RelayObservation[] = [];
-  const relayEvidence: RelayCaptureEvidence[] = [];
+  const collectedRelays: CollectedRelay[] = [];
   const budget: CaptureBudget = {
     eventCount: 0,
     proofCandidates: 0,
@@ -278,10 +294,29 @@ export async function captureWallet(options: CaptureOptions): Promise<Nip60Captu
       });
     } catch (error) {
       const message = (error instanceof Error ? error.message : 'relay query failed').slice(0, 512);
-      relays.push({
+      collectedRelays.push({
+        ok: false,
         url,
-        status: 'error',
         error: message,
+      });
+      continue;
+    }
+    const uniqueEvents = [...new Map(events.map((event) => [event.id, event])).values()];
+    consumeEventBudget(uniqueEvents, budget);
+    collectedRelays.push({ ok: true, url, events: uniqueEvents });
+  }
+
+  // Reject aggregate proof work before hash-to-curve normalization begins.
+  preflightProofCandidates(collectedRelays, conversationKey, budget);
+
+  const relays: RelayObservation[] = [];
+  const relayEvidence: RelayCaptureEvidence[] = [];
+  for (const relay of collectedRelays) {
+    if (!relay.ok) {
+      relays.push({
+        url: relay.url,
+        status: 'error',
+        error: relay.error,
         wallet: [],
         tokens: [],
         deletions: [],
@@ -289,10 +324,15 @@ export async function captureWallet(options: CaptureOptions): Promise<Nip60Captu
         quotes: [],
         malformed: [],
       });
-      relayEvidence.push({ url, status: 'error', error: message, eventIds: [] });
+      relayEvidence.push({
+        url: relay.url,
+        status: 'error',
+        error: relay.error,
+        eventIds: [],
+      });
       continue;
     }
-    const normalized = normalizeRelayEvents(url, events, conversationKey, budget);
+    const normalized = normalizeRelayEvents(relay.url, relay.events, conversationKey);
     relays.push(normalized.observation);
     relayEvidence.push(normalized.evidence);
   }
