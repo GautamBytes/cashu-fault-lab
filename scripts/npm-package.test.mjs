@@ -60,6 +60,42 @@ test('publishing is blocked until the runtime images support anonymous pulls', a
   assert.match(workflow, /CFL_NPM_E2E_DEMO: '1'/u);
 });
 
+test('release images use native runners, isolated caches, and verified digest manifests', async () => {
+  const workflow = await readFile(new URL('.github/workflows/publish.yml', root), 'utf8');
+
+  assert.doesNotMatch(workflow, /docker\/setup-qemu-action/u);
+  assert.match(workflow, /^\s{2}runtime-preflight:/mu);
+  assert.match(workflow, /^\s{2}runtime-platforms:/mu);
+  assert.match(workflow, /^\s{2}runtime-manifests:/mu);
+  assert.match(
+    workflow,
+    /runner: ubuntu-24\.04\s+platform: linux\/amd64\s+arch: amd64/u,
+  );
+  assert.match(
+    workflow,
+    /runner: ubuntu-24\.04-arm\s+platform: linux\/arm64\s+arch: arm64/u,
+  );
+  assert.doesNotMatch(workflow, /platforms:\s*linux\/amd64,linux\/arm64/u);
+  assert.match(workflow, /platforms: \$\{\{ matrix\.platform \}\}/u);
+  assert.match(workflow, /push-by-digest=true/u);
+  assert.match(workflow, /actions\/upload-artifact@/u);
+  assert.match(workflow, /actions\/download-artifact@/u);
+  assert.match(workflow, /docker buildx imagetools create/u);
+  assert.match(workflow, /linux\/amd64\\nlinux\/arm64/u);
+  assert.match(
+    workflow,
+    /cache-from: type=registry,ref=ghcr\.io\/gautambytes\/\$\{\{ matrix\.image \}\}:buildcache-\$\{\{ matrix\.arch \}\}/u,
+  );
+  assert.match(
+    workflow,
+    /cache-to: type=registry,ref=ghcr\.io\/gautambytes\/\$\{\{ matrix\.image \}\}:buildcache-\$\{\{ matrix\.arch \}\},mode=max/u,
+  );
+  assert.match(workflow, /org\.opencontainers\.image\.revision/u);
+  assert.match(workflow, /missing-images/u);
+  assert.match(workflow, /refusing to overwrite/u);
+  assert.match(workflow, /^\s{4}needs: runtime-manifests$/mu);
+});
+
 test('the npm README stays concise and sends developers to the full website', async () => {
   const readme = await readFile(new URL('apps/npm-cli/README.md', root), 'utf8');
   const words = readme.trim().split(/\s+/u);
