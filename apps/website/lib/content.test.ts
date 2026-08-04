@@ -44,8 +44,8 @@ describe('canonical content', () => {
     expect(
       DOCUMENTATION_DESTINATIONS.find((item) => item.slug === 'release-checklist'),
     ).toMatchObject({
-      sourcePath: 'docs/releases/v0.1.4-checklist.md',
-      description: expect.stringContaining('0.1.4'),
+      sourcePath: 'docs/releases/v0.2.0-checklist.md',
+      description: expect.stringContaining('0.2.0'),
     });
   });
 

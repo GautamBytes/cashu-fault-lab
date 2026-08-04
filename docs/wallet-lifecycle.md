@@ -162,6 +162,6 @@ required scenarios, missing replay digests, failed artifact secret scans, fewer 
 wallet languages, fewer than two mint implementations, or adapter-claimed invariant evidence.
 Repository fixtures use development identities, so passing local tests is strong implementation
 evidence but is not an external certification claim. See the
-[v0.1.4 maintainer-preview checklist](releases/v0.1.4-checklist.md).
+[v0.2.0 maintainer-preview checklist](releases/v0.2.0-checklist.md).
 
 The normative contract is [the lifecycle OpenAPI document](../spec/lifecycle-openapi.yaml).

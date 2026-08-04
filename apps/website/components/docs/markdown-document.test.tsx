@@ -18,7 +18,7 @@ describe('repository Markdown links', () => {
   });
 
   it('resolves canonical documents relative to a nested source file', () => {
-    expect(resolveMarkdownHref('v0.1.4-checklist.md', 'docs/releases/v0.1.4.md')).toBe(
+    expect(resolveMarkdownHref('v0.2.0-checklist.md', 'docs/releases/v0.2.0.md')).toBe(
       '/docs/release-checklist',
     );
   });
@@ -37,8 +37,8 @@ describe('repository Markdown links', () => {
     );
     expect(
       resolveMarkdownHref(
-        'v0.1.4-checklist.md#external-validation-blockers',
-        'docs/releases/v0.1.4.md',
+        'v0.2.0-checklist.md#external-validation-blockers',
+        'docs/releases/v0.2.0.md',
       ),
     ).toBe('/docs/release-checklist#external-validation-blockers');
   });

@@ -111,9 +111,9 @@ test('home is accessible, has one visible title, and fits the viewport', async (
   await quickstartAction.evaluate((element) => element.blur());
   const demoCommand = page.getByLabel('Demo command', { exact: true });
   const copyCommand = demoCommand.getByRole('button', { name: 'Copy demo command' });
-  await expect(demoCommand.getByText('npx cashu-fault-lab@0.2.0 demo')).toBeVisible();
+  await expect(demoCommand.getByText('npx --yes cashu-fault-lab@0.2.0 demo')).toBeVisible();
   await expect(copyCommand).toBeVisible();
-  await expect(demoCommand.getByText('npx cashu-fault-lab@0.2.0 demo')).toHaveCSS(
+  await expect(demoCommand.getByText('npx --yes cashu-fault-lab@0.2.0 demo')).toHaveCSS(
     'white-space',
     'nowrap',
   );

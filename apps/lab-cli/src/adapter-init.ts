@@ -444,8 +444,8 @@ Development identities are not release provenance. Replace them with produced-ar
 ## Validate with Cashu Fault Lab
 
 \`\`\`bash
-${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.4 adapter preflight --adapters adapter-manifest.json
-${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.4 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.2.0 adapter preflight --adapters adapter-manifest.json
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.2.0 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
 \`\`\`
 
 Preflight is read-only. Preview requires funded wallet operations and remains a maintainer diagnostic, not release qualification.
@@ -481,7 +481,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null
-          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.1.4 adapter preflight --adapters adapter-manifest.json
+          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.2.0 adapter preflight --adapters adapter-manifest.json
       - run: docker build .
 `,
   };
@@ -866,8 +866,8 @@ Development identities are not release provenance. Replace them with produced-ar
 ## Validate with Cashu Fault Lab
 
 \`\`\`bash
-${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.4 adapter preflight --adapters adapter-manifest.json
-${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.4 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.2.0 adapter preflight --adapters adapter-manifest.json
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.2.0 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
 \`\`\`
 
 Preflight is read-only. Preview requires funded wallet operations and remains a maintainer diagnostic, not release qualification.
@@ -903,7 +903,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null
-          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.1.4 adapter preflight --adapters adapter-manifest.json
+          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.2.0 adapter preflight --adapters adapter-manifest.json
       - run: docker build .
 `,
   };
@@ -1196,8 +1196,8 @@ The scaffold uses Python 3.12+, FastAPI, and Pydantic-ready type hints. It expos
 ## Validate with Cashu Fault Lab
 
 \`\`\`bash
-${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.4 adapter preflight --adapters adapter-manifest.json
-${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.1.4 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.2.0 adapter preflight --adapters adapter-manifest.json
+${context.tokenEnv}=local-token npx --yes cashu-fault-lab@0.2.0 adapter preview --adapters adapter-manifest.json --sender ${context.name} --receiver ${context.name} --output-dir cashu-fault-results
 \`\`\`
 
 Preflight is read-only. Preview requires funded wallet operations and remains a maintainer diagnostic, not release qualification.
@@ -1234,7 +1234,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:4100/healthz > /dev/null
-          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.1.4 adapter preflight --adapters adapter-manifest.json
+          ${context.tokenEnv}=adapter-ci-local-token npx --yes cashu-fault-lab@0.2.0 adapter preflight --adapters adapter-manifest.json
       - run: docker build .
 `,
   };
