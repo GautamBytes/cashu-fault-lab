@@ -32,19 +32,33 @@ jobs:
             cashu-fault-lab-netns
           do
             reference="ghcr.io/gautambytes/${image}:${version}"
-            if ! docker manifest inspect "${reference}" >/dev/null 2>&1
+            if ! manifest="$(docker manifest inspect "${reference}" 2>/dev/null)"
             then
               missing_images="$(jq --compact-output --arg image "${image}" '. + [$image]' <<< "${missing_images}")"
               continue
             fi
 
-            for platform in linux/amd64 linux/arm64
+            repository="${reference%:*}"
+            for architecture in amd64 arm64
             do
-              docker pull --platform "${platform}" "${reference}"
-              revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${reference}")"
+              mapfile -t platform_digests < <(
+                jq --raw-output \
+                  --arg architecture "${architecture}" \
+                  '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $architecture) | .digest' \
+                  <<< "${manifest}"
+              )
+              if [ "${#platform_digests[@]}" -ne 1 ]
+              then
+                echo "expected one linux/${architecture} manifest for ${reference}"
+                exit 1
+              fi
+              platform_digest="${platform_digests[0]}"
+              platform_reference="${repository}@${platform_digest}"
+              docker pull "${platform_reference}"
+              revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${platform_reference}")"
               if [ "${revision}" != "${GITHUB_SHA}" ]
               then
-                echo "refusing to overwrite ${reference}, whose ${platform} image belongs to ${revision}"
+                echo "refusing to overwrite ${reference}, whose linux/${architecture} image belongs to ${revision}"
                 exit 1
               fi
             done

@@ -85,6 +85,9 @@ test('release images use native runners, isolated caches, and verified digest ma
     /cache-to: type=registry,ref=ghcr\.io\/gautambytes\/\$\{\{ matrix\.image \}\}:buildcache-\$\{\{ matrix\.arch \}\},mode=max/u,
   );
   assert.match(workflow, /org\.opencontainers\.image\.revision/u);
+  assert.doesNotMatch(workflow, /docker pull --platform/u);
+  assert.match(workflow, /platform_digest=/u);
+  assert.match(workflow, /platform_reference="\$\{repository\}@\$\{platform_digest\}"/u);
   assert.match(workflow, /missing-images/u);
   assert.match(workflow, /refusing to overwrite/u);
   assert.match(workflow, /^\s{4}needs: runtime-manifests$/mu);

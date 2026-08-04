@@ -21,6 +21,7 @@
 ### Task 1: Specify the native release topology in tests
 
 **Files:**
+
 - Modify: `scripts/npm-package.test.mjs`
 
 - [ ] Add a test that reads `.github/workflows/publish.yml` and requires `ubuntu-24.04` for amd64 plus `ubuntu-24.04-arm` for arm64.
@@ -34,6 +35,7 @@
 ### Task 2: Implement native image builds and manifest assembly
 
 **Files:**
+
 - Modify: `.github/workflows/publish.yml`
 
 - [ ] Add `runtime-preflight` to check every version tag once, reuse only same-revision tags, reject conflicting revisions, and output the missing-image JSON list.
@@ -50,6 +52,7 @@
 ### Task 3: Specify the CDK dependency cache boundary
 
 **Files:**
+
 - Modify: `scripts/npm-package.test.mjs`
 
 - [ ] Add a Dockerfile contract test requiring cargo-chef version `0.1.77`, a planner recipe, and a cook layer.
@@ -61,6 +64,7 @@
 ### Task 4: Cache the locked Rust dependency graph
 
 **Files:**
+
 - Modify: `infra/docker/wallet-adapters.Dockerfile`
 
 - [ ] Add a Rust chef base stage and install `cargo-chef` pinned to `0.1.77` with `--locked`.
@@ -74,6 +78,7 @@
 ### Task 5: Verify the complete change
 
 **Files:**
+
 - Verify only unless a check exposes a scoped defect.
 
 - [ ] Run `pnpm format:check`.
@@ -87,6 +92,7 @@
 ### Task 6: Publish the pull request
 
 **Files:**
+
 - No additional source changes expected.
 
 - [ ] Push `codex/optimize-release-builds` to origin.
