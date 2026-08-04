@@ -133,7 +133,7 @@ describe('captureWallet against live in-process relays', () => {
 
   it('rejects aggregate proof candidates before repeated proofs can bypass the unique-Y cap', async () => {
     const fixture = makeFixture();
-    const events = Array.from({ length: 101 }, (_, eventIndex) =>
+    const events = Array.from({ length: 2 }, (_, eventIndex) =>
       finalizeEvent(
         {
           kind: 7375,
@@ -142,7 +142,7 @@ describe('captureWallet against live in-process relays', () => {
           content: nip44.v2.encrypt(
             JSON.stringify({
               mint: MINT,
-              proofs: Array.from({ length: 100 }, () => ({
+              proofs: Array.from({ length: 5_001 }, () => ({
                 id: '00ad268c4d1f5826',
                 amount: 1,
                 secret: 'same-proof-secret',
