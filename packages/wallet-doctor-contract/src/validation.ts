@@ -94,7 +94,7 @@ export const NIP60_CAPTURE_SCHEMA = {
       additionalProperties: false,
       required: ['keysetId', 'amount', 'y'],
       properties: {
-        keysetId: { type: 'string', maxLength: 64 },
+        keysetId: { type: 'string', maxLength: 66 },
         amount: { type: 'integer', minimum: 1, maximum: SAFE_INTEGER },
         y: { type: 'string', pattern: COMPRESSED_POINT },
       },

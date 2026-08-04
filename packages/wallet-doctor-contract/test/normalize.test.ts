@@ -48,6 +48,31 @@ describe('normalizeTokenPayload', () => {
     expect(result.view.del).toEqual(['a'.repeat(64)]);
   });
 
+  it('accepts NUT-02 v2 keyset IDs and rejects longer identifiers', () => {
+    const event = fakeEvent(7375);
+    const v2KeysetId = `01${'a'.repeat(64)}`;
+    expect(
+      normalizeTokenPayload(
+        event,
+        {
+          mint: 'https://mint.example',
+          proofs: [{ id: v2KeysetId, amount: 1, secret: 'v2-keyset-secret' }],
+        },
+        SEEN,
+      ).ok,
+    ).toBe(true);
+    expect(
+      normalizeTokenPayload(
+        event,
+        {
+          mint: 'https://mint.example',
+          proofs: [{ id: `${v2KeysetId}a`, amount: 1, secret: 'oversized-keyset-secret' }],
+        },
+        SEEN,
+      ).ok,
+    ).toBe(false);
+  });
+
   it('rejects payloads without proofs or with bad amounts', () => {
     const event = fakeEvent(7375);
     expect(normalizeTokenPayload(event, { mint: 'http://m' }, SEEN).ok).toBe(false);

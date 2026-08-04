@@ -1,7 +1,7 @@
 //! Generated Cashu Fault Lab wallet-doctor artifact contract.
-//! specDigest: sha256:d9cd1c5bfc03e2a3b590b98ff2691d59257fcb842243cf66cd0a9c6b0431dd3a
+//! specDigest: sha256:2e972596094411d00ec09a3f2a0233f99cbfd69ab027a93e83e0409bab5a5e46
 
-pub const SPEC_DIGEST: &str = "sha256:d9cd1c5bfc03e2a3b590b98ff2691d59257fcb842243cf66cd0a9c6b0431dd3a";
+pub const SPEC_DIGEST: &str = "sha256:2e972596094411d00ec09a3f2a0233f99cbfd69ab027a93e83e0409bab5a5e46";
 pub const CAPTURE_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

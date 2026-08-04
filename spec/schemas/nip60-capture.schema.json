@@ -119,7 +119,7 @@
       "properties": {
         "keysetId": {
           "type": "string",
-          "maxLength": 64
+          "maxLength": 66
         },
         "amount": {
           "type": "integer",

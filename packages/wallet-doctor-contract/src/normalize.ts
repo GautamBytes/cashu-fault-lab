@@ -13,7 +13,8 @@ import type { Event } from 'nostr-tools';
 const MAXIMUM_MINT_URL_LENGTH = 2048;
 const MAXIMUM_PROOFS_PER_EVENT = 10_000;
 const MAXIMUM_SECRET_LENGTH = 8192;
-const MAXIMUM_KEYSET_ID_LENGTH = 64;
+// NUT-02 v2 IDs are a 1-byte version plus a 32-byte digest (66 hex chars).
+const MAXIMUM_KEYSET_ID_LENGTH = 66;
 const MAXIMUM_DELETION_REFERENCES = 10_000;
 const MAXIMUM_WALLET_MINTS = 1024;
 const MAXIMUM_WALLET_FIELDS = 2048;

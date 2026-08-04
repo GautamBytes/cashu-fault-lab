@@ -134,6 +134,21 @@ describe('validateNip60Capture', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('accepts NUT-02 v2 keyset IDs in capture artifacts', () => {
+    const capture = withDigest();
+    const relays = (
+      capture.observation as {
+        relays: Array<{ tokens: Array<{ proofs: Array<{ keysetId: string }> }> }>;
+      }
+    ).relays;
+    const proof = relays[0]?.tokens[0]?.proofs[0];
+    if (proof === undefined) throw new Error('expected proof fixture');
+    proof.keysetId = `01${'a'.repeat(64)}`;
+    const { digest: _digest, ...bundle } = capture;
+    capture.digest = captureDigest(bundle as never);
+    expect(validateNip60Capture(capture).ok).toBe(true);
+  });
+
   it('rejects schema violations with readable errors', () => {
     const broken = validCapture();
     (broken.observation as Record<string, unknown>).mint = [{ mint: MINT, y: 'zz', state: 'GONE' }];
