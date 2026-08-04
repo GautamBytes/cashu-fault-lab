@@ -95,16 +95,24 @@ test('the CDK image cooks locked Rust dependencies before copying live sources',
     new URL('infra/docker/wallet-adapters.Dockerfile', root),
     'utf8',
   );
+  const workspacePath = new URL('infra/docker/cdk-workspace.Cargo.toml', root);
 
   assert.match(dockerfile, /AS cdk-chef/u);
   assert.match(dockerfile, /cargo install cargo-chef --version 0\.1\.77 --locked/u);
+  assert.match(dockerfile, /ENV CARGO_TARGET_DIR=\/app\/adapters\/cdk\/target/u);
   assert.match(dockerfile, /FROM cdk-chef AS cdk-planner/u);
+  assert.equal(existsSync(workspacePath), true);
+  const workspace = await readFile(workspacePath, 'utf8');
+  assert.match(workspace, /"adapters\/cdk"/u);
+  assert.match(workspace, /"packages\/wallet-lifecycle-contract\/generated\/rust"/u);
+  assert.match(dockerfile, /COPY infra\/docker\/cdk-workspace\.Cargo\.toml \.\/Cargo\.toml/u);
   assert.match(dockerfile, /cargo chef prepare --recipe-path recipe\.json/u);
   assert.match(dockerfile, /FROM cdk-chef AS cdk-build/u);
   assert.match(dockerfile, /cargo chef cook --locked --release --recipe-path recipe\.json/u);
 
   const cook = dockerfile.indexOf('cargo chef cook --locked --release --recipe-path recipe.json');
   const liveAdapter = dockerfile.lastIndexOf('COPY adapters/cdk ./adapters/cdk');
+  const liveLock = dockerfile.lastIndexOf('COPY adapters/cdk/Cargo.lock ./Cargo.lock');
   const liveContract = dockerfile.lastIndexOf(
     'COPY packages/wallet-lifecycle-contract/generated/rust ./packages/wallet-lifecycle-contract/generated/rust',
   );
@@ -112,6 +120,7 @@ test('the CDK image cooks locked Rust dependencies before copying live sources',
 
   assert.ok(cook >= 0, 'missing cargo-chef cook step');
   assert.ok(liveAdapter > cook, 'live CDK adapter source must be copied after dependency cooking');
+  assert.ok(liveLock > cook, 'the real lockfile must replace cargo-chef dummy package versions');
   assert.ok(liveContract > cook, 'live generated contract must be copied after dependency cooking');
   assert.ok(liveOpenApi > cook, 'live OpenAPI input must be copied after dependency cooking');
   assert.match(
