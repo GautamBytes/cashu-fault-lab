@@ -23,6 +23,15 @@ test('the public npm package exposes only the bundled CLI and runtime assets', a
   assert.deepEqual(packageManifest.dependencies, {});
 });
 
+test('Turbo restores every generated npm package artifact on a build cache hit', async () => {
+  const turbo = await manifest('turbo.json');
+  const outputs = turbo.tasks.build.outputs;
+
+  assert.ok(outputs.includes('dist/**'));
+  assert.ok(outputs.includes('runtime/**'));
+  assert.ok(outputs.includes('LICENSE'));
+});
+
 test('the npm demo compose file pulls versioned runtime images instead of building the repository', async () => {
   const path = new URL('infra/compose/npm-runtime.compose.yml', root);
   assert.equal(existsSync(path), true);
