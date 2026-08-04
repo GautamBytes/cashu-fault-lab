@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "release": "v0.2.0",
+  "releaseCommit": "515bd19e4d2fd8dbaf6e5058d81bdfefe74e30ba",
+  "releaseUrl": "https://github.com/GautamBytes/cashu-fault-lab/releases/tag/v0.2.0",
+  "publicationRunUrl": "https://github.com/GautamBytes/cashu-fault-lab/actions/runs/30937256267",
+  "package": "cashu-fault-lab@0.2.0",
+  "npmIntegrity": "sha512-X5G5lTrKABcSxOubNUC/9w1qSsf7VWtT5PcwZl8j/g/KHauBkSqgivFgnlbMjg1q+MuFkJpYHane88FEnZCtuQ==",
+  "evidenceType": "first-party-reproducible",
+  "doctorCommand": "npx --yes cashu-fault-lab@0.2.0 doctor",
+  "command": "npx --yes cashu-fault-lab@0.2.0 demo",
+  "executedAt": "2026-08-04T20:34:47Z",
+  "environment": {
+    "platform": "Darwin 25.5.0 arm64",
+    "node": "v24.18.1",
+    "dockerClient": "29.1",
+    "dockerServer": "29.1.3"
+  },
+  "results": {
+    "doctor": {
+      "checks": 10,
+      "failed": 0,
+      "warned": 0
+    },
+    "demo": {
+      "status": "passed",
+      "scenarioId": "http-response-lost",
+      "seed": "cashu-fault-lab-v0.1.0-demo",
+      "fault": "drop_response",
+      "deliveryAttempts": 2,
+      "redemptionStarts": 1,
+      "merchantCredits": 1,
+      "invariants": {
+        "passed": 15,
+        "failed": 0,
+        "notObservable": 0,
+        "notApplicable": 3
+      }
+    },
+    "cleanup": {
+      "containers": 0,
+      "networks": 0,
+      "volumes": 0
+    }
+  },
+  "artifacts": {
+    "json": {
+      "path": "docs/examples/v0.2.0-demo.json",
+      "generatedSha256": "e9aa90be3fb66125c2a5b7e286827eed499afa8ca2f7328e05337c177ab6e58e",
+      "sha256": "e83dd680662d4a8811e585700a64aa22c3a9d1160999d24f23c764f9221f95e1",
+      "normalization": "Prettier 3.9.5 formatting only"
+    },
+    "html": {
+      "path": "docs/examples/v0.2.0-demo.html",
+      "generatedSha256": "090c31c1816ba654c9b58d0c108adb25da9f5f056be2fc5c4dccef33fb199cdf",
+      "sha256": "f53e2a562b707732df69575d579e2d3c3db85e0e3aa1a0d65b3a97fd0339a5d7",
+      "normalization": "Prettier 3.9.5 formatting only"
+    },
+    "terminalScreenshot": {
+      "path": "apps/website/public/evidence/v0.2.0-terminal.png",
+      "sha256": "427134e9ec3f4a18b4b0968be3795dbdc684e85bd307dafe1ff5e8882be246a0",
+      "capture": "sanitized transcript rendered from the verified public-package run"
+    },
+    "reportScreenshot": {
+      "path": "apps/website/public/evidence/v0.2.0-report.png",
+      "sha256": "ab7d1f35a534b9347021295d9a930358589ad8dc9bfd16403d44dd51327988aa",
+      "capture": "1440x960 viewport of the generated HTML report"
+    }
+  },
+  "boundary": "First-party reproducible evidence is not independent wallet validation or certification."
+}

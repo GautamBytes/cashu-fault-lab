@@ -12,6 +12,34 @@ export interface DemoInvariant {
   reason?: string;
 }
 
+interface EvidenceCheckCounts {
+  checks: number;
+  failed: number;
+  warned: number;
+}
+
+interface EvidenceCleanupCounts {
+  containers: number;
+  networks: number;
+  volumes: number;
+}
+
+export interface DemoVerification {
+  release: string;
+  package: string;
+  command: string;
+  evidenceType: string;
+  executedAt: string;
+  environment: {
+    platform: string;
+    node: string;
+    dockerClient: string;
+    dockerServer: string;
+  };
+  doctor: EvidenceCheckCounts;
+  cleanup: EvidenceCleanupCounts;
+}
+
 export interface DemoSummary {
   scenarioId: string;
   seed: string;
@@ -21,6 +49,10 @@ export interface DemoSummary {
   invariantCount: number;
   invariantCounts: Record<InvariantStatus, number>;
   invariants: DemoInvariant[];
+  deliveryAttemptCount: number;
+  redemptionStartCount: number;
+  merchantCreditCount: number;
+  verification: DemoVerification;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -47,6 +79,22 @@ function requiredArray(record: Record<string, unknown>, key: string): unknown[] 
   return value;
 }
 
+function requiredRecord(record: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = record[key];
+  if (!isRecord(value)) {
+    throw new Error(`Demo artifact ${key} must be an object`);
+  }
+  return value;
+}
+
+function requiredCount(record: Record<string, unknown>, key: string): number {
+  const value = record[key];
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new Error(`Demo artifact ${key} must be a non-negative integer`);
+  }
+  return value as number;
+}
+
 function parseInvariant(value: unknown): DemoInvariant {
   if (!isRecord(value) || !isInvariantStatus(value.status)) {
     throw new Error('Demo artifact contains an invalid invariant');
@@ -65,9 +113,51 @@ function parseInvariant(value: unknown): DemoInvariant {
   };
 }
 
+function countTimelineEvent(timeline: unknown[], event: string): number {
+  return timeline.filter((entry) => isRecord(entry) && entry.event === event).length;
+}
+
+function parseVerification(value: unknown): DemoVerification {
+  if (!isRecord(value)) {
+    throw new Error('Demo provenance must be an object');
+  }
+  const environment = requiredRecord(value, 'environment');
+  const results = requiredRecord(value, 'results');
+  const doctor = requiredRecord(results, 'doctor');
+  const cleanup = requiredRecord(results, 'cleanup');
+
+  return {
+    release: requiredString(value, 'release'),
+    package: requiredString(value, 'package'),
+    command: requiredString(value, 'command'),
+    evidenceType: requiredString(value, 'evidenceType'),
+    executedAt: requiredString(value, 'executedAt'),
+    environment: {
+      platform: requiredString(environment, 'platform'),
+      node: requiredString(environment, 'node'),
+      dockerClient: requiredString(environment, 'dockerClient'),
+      dockerServer: requiredString(environment, 'dockerServer'),
+    },
+    doctor: {
+      checks: requiredCount(doctor, 'checks'),
+      failed: requiredCount(doctor, 'failed'),
+      warned: requiredCount(doctor, 'warned'),
+    },
+    cleanup: {
+      containers: requiredCount(cleanup, 'containers'),
+      networks: requiredCount(cleanup, 'networks'),
+      volumes: requiredCount(cleanup, 'volumes'),
+    },
+  };
+}
+
 export async function getDemoSummary(): Promise<DemoSummary> {
-  const source = await readFile(resolveRepositoryPath('docs/examples/v0.1.4-demo.json'), 'utf8');
+  const [source, provenanceSource] = await Promise.all([
+    readFile(resolveRepositoryPath('docs/examples/v0.2.0-demo.json'), 'utf8'),
+    readFile(resolveRepositoryPath('docs/examples/v0.2.0-provenance.json'), 'utf8'),
+  ]);
   const artifact: unknown = JSON.parse(source);
+  const verification = parseVerification(JSON.parse(provenanceSource) as unknown);
 
   if (!isRecord(artifact) || artifact.schemaVersion !== 2) {
     throw new Error('Demo artifact must use schema version 2');
@@ -96,5 +186,9 @@ export async function getDemoSummary(): Promise<DemoSummary> {
     invariantCount: invariants.length,
     invariantCounts,
     invariants,
+    deliveryAttemptCount: countTimelineEvent(timeline, 'delivery_attempted'),
+    redemptionStartCount: countTimelineEvent(timeline, 'redemption_started'),
+    merchantCreditCount: countTimelineEvent(timeline, 'merchant_credited'),
+    verification,
   };
 }

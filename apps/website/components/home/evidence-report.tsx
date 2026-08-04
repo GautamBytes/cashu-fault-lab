@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import type { DemoInvariant, DemoSummary, InvariantStatus } from '../../lib/demo';
 import styles from './home.module.css';
 
@@ -87,13 +88,17 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
     >
       <div aria-label="Reviewed evidence summary" className={styles.evidenceOverview} role="group">
         <div className={styles.sectionHeading}>
-          <p className={styles.eyebrow}>Reviewed demo artifact</p>
+          <p className={styles.eyebrow}>First-party reproducible evidence</p>
           <h2 id="evidence-report-title">Evidence, not a success boolean.</h2>
           <p>
-            This report is retained from the reviewed v0.1.4 demo. Commands, proof secrets, and
-            arbitrary evidence payloads never reach this page. It is example evidence, not a v0.1.4
-            qualification result.
+            We ran the public npm package in a clean directory with Node 24 and Docker, exactly as a
+            new user would. First-party reproducible evidence is not independent wallet validation
+            or certification.
           </p>
+          <div className={styles.evidenceCommand}>
+            <span>Exact public command</span>
+            <code>{summary.verification.command}</code>
+          </div>
         </div>
 
         <div className={styles.reportMeta}>
@@ -130,10 +135,98 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
               <dd>{summary.invariantCount}</dd>
             </div>
           </dl>
+          <p className={styles.seedNote}>
+            Package {summary.verification.package}; the CLI&apos;s deterministic default seed
+            identifier remains <code>{summary.seed}</code>.
+          </p>
         </div>
       </div>
 
       <div className={styles.reportShell}>
+        <ul aria-label="Verified v0.2.0 user results" className={styles.verificationGrid}>
+          <li>
+            <span className={styles.verificationStep}>01</span>
+            <div>
+              <strong>Public package</strong>
+              <p>{summary.verification.package} downloaded from npm</p>
+            </div>
+          </li>
+          <li>
+            <span className={styles.verificationStep}>02</span>
+            <div>
+              <strong>Environment doctor</strong>
+              <p>
+                {summary.verification.doctor.checks} checks · {summary.verification.doctor.failed}{' '}
+                failed · {summary.verification.doctor.warned} warned
+              </p>
+            </div>
+          </li>
+          <li>
+            <span className={styles.verificationStep}>03</span>
+            <div>
+              <strong>Fault and recovery</strong>
+              <p>
+                {summary.deliveryAttemptCount} attempts · {summary.redemptionStartCount} redemption
+                start · {summary.merchantCreditCount} merchant credit
+              </p>
+            </div>
+          </li>
+          <li>
+            <span className={styles.verificationStep}>04</span>
+            <div>
+              <strong>Oracle evaluation</strong>
+              <p>
+                {summary.invariantCounts.passed} passed · {summary.invariantCounts.failed} failed ·{' '}
+                {summary.invariantCounts.not_applicable} not applicable
+              </p>
+            </div>
+          </li>
+          <li>
+            <span className={styles.verificationStep}>05</span>
+            <div>
+              <strong>Evidence artifacts</strong>
+              <p>Secret-scanned JSON and HTML reports retained</p>
+            </div>
+          </li>
+          <li>
+            <span className={styles.verificationStep}>06</span>
+            <div>
+              <strong>Docker cleanup</strong>
+              <p>
+                {summary.verification.cleanup.containers} containers ·{' '}
+                {summary.verification.cleanup.networks} networks ·{' '}
+                {summary.verification.cleanup.volumes} volumes
+              </p>
+            </div>
+          </li>
+        </ul>
+
+        <div className={styles.evidenceGallery}>
+          <figure className={styles.evidenceFigure}>
+            <Image
+              alt="v0.2.0 terminal showing the public doctor and demo passing"
+              height={900}
+              src="/evidence/v0.2.0-terminal.png"
+              width={1440}
+            />
+            <figcaption>
+              The real user path: public <code>npx</code> commands, environment checks, and the
+              final Docker demo result.
+            </figcaption>
+          </figure>
+          <figure className={styles.evidenceFigure}>
+            <Image
+              alt="v0.2.0 generated evidence report showing the passed response-loss scenario"
+              height={960}
+              src="/evidence/v0.2.0-report.png"
+              width={1440}
+            />
+            <figcaption>
+              The generated HTML report is a human view of the same machine-readable artifact.
+            </figcaption>
+          </figure>
+        </div>
+
         <ul aria-label="Invariant status counts" className={styles.statusGrid}>
           {(Object.keys(statusLabels) as InvariantStatus[]).map((status) => (
             <li className={`${styles.statusCard} ${statusStyles[status]}`} key={status}>
@@ -194,11 +287,35 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           </a>
           <a
             className={styles.reportLink}
-            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.1.4-demo.json"
+            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.2.0-demo.json"
             rel="noreferrer noopener"
             target="_blank"
           >
-            Inspect the reviewed artifact <span aria-hidden="true">↗</span>
+            Machine-readable evidence <span aria-hidden="true">↗</span>
+          </a>
+          <a
+            className={styles.reportLink}
+            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.2.0-demo.html"
+            rel="noreferrer noopener"
+            target="_blank"
+          >
+            Full HTML report <span aria-hidden="true">↗</span>
+          </a>
+          <a
+            className={styles.reportLink}
+            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.2.0-provenance.json"
+            rel="noreferrer noopener"
+            target="_blank"
+          >
+            Provenance record <span aria-hidden="true">↗</span>
+          </a>
+          <a
+            className={styles.reportLink}
+            href="https://github.com/GautamBytes/cashu-fault-lab/releases/tag/v0.2.0"
+            rel="noreferrer noopener"
+            target="_blank"
+          >
+            v0.2.0 release <span aria-hidden="true">↗</span>
           </a>
         </div>
       </div>
