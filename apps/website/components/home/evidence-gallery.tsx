@@ -92,9 +92,14 @@ export function EvidenceGallery() {
           <div className={styles.evidenceDialogPanel} data-testid="evidence-dialog-panel">
             <header>
               <h3 id="evidence-dialog-title">{selectedImage.title}</h3>
-              <button aria-label="Close image preview" onClick={closePreview} type="button">
-                <span aria-hidden="true">×</span>
-              </button>
+              <div className={styles.evidenceDialogActions}>
+                <a href={selectedImage.src} rel="noreferrer noopener" target="_blank">
+                  Open original image
+                </a>
+                <button aria-label="Close image preview" onClick={closePreview} type="button">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
             </header>
             <Image
               alt={selectedImage.alt}

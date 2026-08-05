@@ -100,15 +100,15 @@ test('home is accessible, has one visible title, and fits the viewport', async (
 }, testInfo) => {
   await page.goto('/');
 
-  const quickstartAction = page.getByRole('link', { name: 'Open in Codespaces' });
-  await expect(quickstartAction).toBeVisible();
-  await expect(quickstartAction).toHaveAttribute(
+  const codespacesAction = page.getByRole('link', { name: 'Open in Codespaces' });
+  await expect(codespacesAction).toBeVisible();
+  await expect(codespacesAction).toHaveAttribute(
     'href',
     'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
   );
-  await quickstartAction.focus();
-  await expect(quickstartAction).toBeFocused();
-  await quickstartAction.evaluate((element) => element.blur());
+  await codespacesAction.focus();
+  await expect(codespacesAction).toBeFocused();
+  await codespacesAction.evaluate((element) => element.blur());
   const demoCommand = page.getByLabel('Demo command', { exact: true });
   const copyCommand = demoCommand.getByRole('button', { name: 'Copy demo command' });
   await expect(demoCommand.getByText('npx --yes cashu-fault-lab@0.2.0 demo')).toBeVisible();
@@ -126,7 +126,8 @@ test('home is accessible, has one visible title, and fits the viewport', async (
       level: 1,
       name: 'Make Cashu delivery fail safely.',
     });
-    const primaryAction = quickstartAction;
+    const primaryAction = hero.getByRole('link', { name: 'Run the verified demo' });
+    await expect(primaryAction).toHaveAttribute('href', '#verified-run');
     const githubAction = hero.getByRole('link', { name: /View on GitHub/ });
     const commandBlock = hero.getByLabel('Demo command', { exact: true });
     const runPanel = hero.getByRole('complementary', { name: 'Deterministic demo run' });
@@ -158,10 +159,10 @@ test('home is accessible, has one visible title, and fits the viewport', async (
   await expectNoPageOverflow(page);
 
   if (testInfo.project.name === 'mobile-chromium') {
-    const securityHeading = page.getByRole('heading', {
-      name: 'The implementation does not judge itself.',
+    const integrationHeading = page.getByRole('heading', {
+      name: 'Integrate and validate without changing implementation behavior.',
     });
-    const headingWidth = await securityHeading.evaluate((heading) => ({
+    const headingWidth = await integrationHeading.evaluate((heading) => ({
       clientWidth: heading.clientWidth,
       scrollWidth: heading.scrollWidth,
     }));
@@ -175,7 +176,9 @@ test('home is accessible, has one visible title, and fits the viewport', async (
   );
 });
 
-test('evidence screenshots open clearly and support every close path', async ({ page }) => {
+test('evidence screenshots open clearly and support every close path', async ({
+  page,
+}, testInfo) => {
   await page.goto('/');
   const trigger = page.getByRole('button', {
     name: 'Enlarge terminal verification screenshot',
@@ -185,7 +188,31 @@ test('evidence screenshots open clearly and support every close path', async ({ 
   const dialog = page.getByRole('dialog', { name: 'Terminal verification output' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('img')).toHaveAttribute('src', '/evidence/v0.2.0-terminal.png');
+  await expect(dialog.getByRole('link', { name: 'Open original image' })).toHaveAttribute(
+    'href',
+    '/evidence/v0.2.0-terminal.png',
+  );
+  if (testInfo.project.name === 'mobile-chromium') {
+    const panel = dialog.getByTestId('evidence-dialog-panel');
+    const dimensions = await panel.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+
+    expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.clientWidth);
+    await expectNoPageOverflow(page);
+  }
   await expectNoSeriousAccessibilityViolations(page);
+  await mkdir(screenshotDirectory, { recursive: true });
+  await dialog.screenshot({
+    animations: 'disabled',
+    path: path.join(
+      screenshotDirectory,
+      testInfo.project.name === 'mobile-chromium'
+        ? 'evidence-modal-mobile.png'
+        : 'evidence-modal-desktop.png',
+    ),
+  });
 
   await dialog.getByRole('button', { name: 'Close image preview' }).click();
   await expect(dialog).toBeHidden();
@@ -215,6 +242,7 @@ test('user laptop viewport shows the complete hero and next section cue', async 
   const requiredElements = [
     hero.getByRole('heading', { level: 1, name: 'Make Cashu delivery fail safely.' }),
     hero.locator('h1 + p'),
+    hero.getByRole('link', { name: 'Run the verified demo' }),
     hero.getByRole('link', { name: 'Open in Codespaces' }),
     hero.getByRole('link', { name: /View on GitHub/ }),
     hero.getByLabel('Demo command', { exact: true }),
@@ -232,19 +260,17 @@ test('user laptop viewport shows the complete hero and next section cue', async 
     }
   }
 
-  const traceCue = hero.getByText('Next / deterministic fault trace');
-  await expect(traceCue).toBeVisible();
-  const traceCueBox = await traceCue.boundingBox();
-  expect(traceCueBox).not.toBeNull();
-  expect(traceCueBox?.y).toBeGreaterThanOrEqual(Math.max(...requiredElementBottoms) + 12);
-  expect((traceCueBox?.y ?? 0) + (traceCueBox?.height ?? 0)).toBeLessThanOrEqual(781);
+  const evidenceCue = hero.getByText('Next / verified run evidence');
+  await expect(evidenceCue).toBeVisible();
+  const evidenceCueBox = await evidenceCue.boundingBox();
+  expect(evidenceCueBox).not.toBeNull();
+  expect(evidenceCueBox?.y).toBeGreaterThanOrEqual(Math.max(...requiredElementBottoms) + 12);
+  expect((evidenceCueBox?.y ?? 0) + (evidenceCueBox?.height ?? 0)).toBeLessThanOrEqual(781);
 
-  const trace = page.getByRole('region', {
-    name: 'A lost response is not a lost result.',
-  });
-  const traceBox = await trace.boundingBox();
+  const verifiedRun = page.getByRole('group', { name: 'Verified public-package run' });
+  const verifiedRunBox = await verifiedRun.boundingBox();
 
-  expect(traceBox?.y).toBeLessThan(781);
+  expect(verifiedRunBox?.y).toBeLessThan(781);
   await expect(page.getByLabel('Six-stage response-loss recovery flow')).toHaveAttribute(
     'data-motion',
     'reduced',
@@ -285,6 +311,30 @@ test('documentation is accessible and wide code scrolls locally', async ({ page 
   );
 });
 
+test('release status assigns every open gate to an external validator', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/release-status');
+
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Awaiting independent validation.' }),
+  ).toBeVisible();
+  await expect(page.getByText('Independent wallet maintainer')).toBeVisible();
+  await expect(page.getByText('Cashu protocol reviewer')).toBeVisible();
+  const validationWork = page.getByText('Independent validation work').locator('..');
+  await expect(validationWork.getByText('Check', { exact: true })).toHaveCount(5);
+  await expect(validationWork.getByText('Expected artifact', { exact: true })).toHaveCount(5);
+  await expectNoSeriousAccessibilityViolations(page);
+  await expectNoPageOverflow(page);
+
+  await saveScreenshot(
+    page,
+    testInfo.project.name === 'mobile-chromium'
+      ? 'release-status-mobile.png'
+      : 'release-status-desktop.png',
+  );
+});
+
 test('Architecture participates in docs navigation, search, and pagination', async ({
   page,
 }, testInfo) => {
@@ -319,7 +369,7 @@ test('Architecture participates in docs navigation, search, and pagination', asy
     await page.getByText('Browse documentation', { exact: true }).click();
   }
 
-  await expect(page.getByRole('link', { name: 'Architecture', exact: true })).toHaveAttribute(
+  await expect(page.locator('header summary').filter({ hasText: 'Explore' })).toHaveAttribute(
     'aria-current',
     'page',
   );
@@ -379,7 +429,7 @@ test('tablet hero stacks without clipping the command or run evidence', async ({
     level: 1,
     name: 'Make Cashu delivery fail safely.',
   });
-  const primaryAction = hero.getByRole('link', { name: 'Open in Codespaces' });
+  const primaryAction = hero.getByRole('link', { name: 'Run the verified demo' });
   const actions = primaryAction.locator('..');
   const command = hero.getByLabel('Demo command', { exact: true });
   const copyButton = command.getByRole('button', { name: 'Copy demo command' });
@@ -464,8 +514,11 @@ test('mobile menu exposes compact navigation and 44px controls', async ({ page }
   await menu.click();
   await expect(page.getByRole('link', { name: 'Home', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Docs', exact: true })).toBeVisible();
+  const explore = page.locator('header summary').filter({ hasText: 'Explore' });
+  await expect(explore).toBeVisible();
+  await explore.click();
   await expect(page.getByRole('link', { name: 'Release status', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Scenarios', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Scenarios', exact: true })).toBeVisible();
   await expectMinimumTouchTargets(page, 'header a, header button');
   await page.getByRole('link', { name: 'Docs', exact: true }).click();
   await expect(page).toHaveURL(/\/docs\/getting-started$/);

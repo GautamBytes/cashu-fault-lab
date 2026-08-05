@@ -137,6 +137,22 @@ export default function ArchitecturePage() {
               safety or liveness claim is accepted.
             </p>
           </header>
+          <div aria-label="Architecture legend" className={styles.architectureLegend} role="group">
+            <dl className={styles.architectureLegendList}>
+              <div>
+                <dt>Implementation-owned</dt>
+                <dd>Wallet persistence, retry, recovery, and receiver credit behavior.</dd>
+              </div>
+              <div>
+                <dt>Lab-controlled</dt>
+                <dd>Transport timing, fault injection, orchestration, and evidence collection.</dd>
+              </div>
+              <div>
+                <dt>Independently evaluated</dt>
+                <dd>Safety, liveness, provenance, and release qualification claims.</dd>
+              </div>
+            </dl>
+          </div>
           <figure
             aria-describedby="topology-caption"
             aria-labelledby="flow-title"

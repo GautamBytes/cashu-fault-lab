@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { PortalShell } from '../components/portal-shell';
 import { SiteHeader } from '../components/site-header';
@@ -47,8 +48,9 @@ function contrastRatio(left: string, right: string): number {
 }
 
 describe('SiteHeader', () => {
-  it('exposes the compact primary navigation', () => {
-    render(<SiteHeader />);
+  it('exposes direct entry points and an Explore disclosure', async () => {
+    const user = userEvent.setup();
+    render(<SiteHeader currentPath="/" />);
     const brand = screen.getByRole('link', { name: 'Cashu Fault Lab' });
     expect(brand).toHaveAttribute('href', '/');
     expect(brand.querySelector('img')).toHaveAttribute('src', '/cashu-fault-lab.png');
@@ -57,15 +59,41 @@ describe('SiteHeader', () => {
       'href',
       '/docs/getting-started',
     );
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+    const explore = screen.getByText('Explore').closest('summary');
+    expect(explore).toBeVisible();
+    if (!explore) throw new Error('Expected Explore disclosure');
+    expect(explore).not.toHaveAttribute('aria-current');
+    expect(explore.closest('details')).not.toHaveAttribute('open');
+    await user.click(explore);
+    expect(screen.getByRole('link', { name: 'Scenarios' })).toHaveAttribute('href', '/scenarios');
+    expect(screen.getByRole('link', { name: 'Architecture' })).toHaveAttribute(
+      'href',
+      '/architecture',
+    );
+    expect(screen.getByRole('link', { name: 'Evidence' })).toHaveAttribute(
+      'href',
+      '/#verified-run',
+    );
     expect(screen.getByRole('link', { name: 'Release status' })).toHaveAttribute(
       'href',
       '/release-status',
     );
     expect(screen.queryByRole('link', { name: 'CLI' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Scenarios' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Architecture' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'GitHub' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Toggle color theme' })).toBeVisible();
+  });
+
+  it('marks an Explore destination and its parent as current', () => {
+    render(<SiteHeader currentPath="/architecture" />);
+
+    expect(screen.getByRole('link', { name: 'Architecture' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    const explore = screen.getByText('Explore').closest('summary');
+    expect(explore).toHaveAttribute('aria-current', 'page');
+    expect(explore?.closest('details')).not.toHaveAttribute('open');
   });
 
   it('spaces primary navigation labels consistently', () => {

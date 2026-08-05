@@ -12,7 +12,7 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
     kind: 'markdown',
     slug: 'getting-started',
     href: '/docs/getting-started',
-    sourcePath: 'README.md',
+    sourcePath: 'docs/getting-started.md',
     title: 'Getting started',
     description: 'Install Cashu Fault Lab and run the deterministic delivery demo.',
     group: 'Start',

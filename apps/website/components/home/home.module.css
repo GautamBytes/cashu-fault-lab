@@ -22,6 +22,86 @@
   width: min(100%, var(--shell-width));
 }
 
+.verifiedRunStrip {
+  align-items: stretch;
+  background: var(--elevated-surface);
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(13rem, 0.7fr) minmax(0, 2fr) auto;
+  scroll-margin-top: 5rem;
+  width: min(100%, var(--shell-width));
+}
+
+.verifiedRunLead {
+  align-content: center;
+  border-right: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem clamp(1rem, 2vw, 2rem);
+}
+
+.verifiedRunLead > span,
+.verifiedRunFacts dt {
+  color: var(--purple-electric);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.verifiedRunLead strong {
+  color: var(--success);
+  font-family: 'IBM Plex Mono', monospace;
+  text-transform: capitalize;
+}
+
+.verifiedRunFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.verifiedRunFacts > div {
+  border-right: 1px solid var(--hairline);
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.verifiedRunFacts dd {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.verifiedRunLinks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(7rem, 1fr));
+}
+
+.verifiedRunLinks a {
+  align-items: center;
+  display: flex;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+}
+
+.verifiedRunLinks a + a {
+  border-left: 1px solid var(--hairline);
+}
+
+.verifiedRunLinks a::after {
+  content: '↗';
+  margin-left: auto;
+}
+
 .hero {
   background: var(--ink);
   border-bottom: 1px solid var(--hairline);
@@ -117,7 +197,7 @@
 .eyebrow {
   color: var(--purple-electric);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   margin: 0 0 1.2rem;
@@ -1009,7 +1089,10 @@
   margin: 0;
   max-height: none;
   max-width: none;
-  padding: clamp(0.75rem, 3vw, 2rem);
+  padding: max(clamp(0.75rem, 3vw, 2rem), env(safe-area-inset-top))
+    max(clamp(0.75rem, 3vw, 2rem), env(safe-area-inset-right))
+    max(clamp(0.75rem, 3vw, 2rem), env(safe-area-inset-bottom))
+    max(clamp(0.75rem, 3vw, 2rem), env(safe-area-inset-left));
   width: 100vw;
 }
 
@@ -1028,6 +1111,7 @@
   max-height: calc(100dvh - clamp(1.5rem, 6vw, 4rem));
   max-width: 1440px;
   overflow: auto;
+  overscroll-behavior: contain;
   width: 100%;
 }
 
@@ -1046,6 +1130,34 @@
 .evidenceDialogPanel h3 {
   font-size: clamp(0.82rem, 2vw, 1rem);
   margin: 0;
+}
+
+.evidenceDialogActions {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.evidenceDialogActions a {
+  align-items: center;
+  border: 1px solid var(--hairline);
+  display: inline-flex;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+}
+
+.evidenceDialogActions a::after {
+  content: '↗';
+  margin-left: 0.5rem;
+}
+
+.evidenceDialogActions a:hover,
+.evidenceDialogActions a:focus-visible {
+  background: var(--elevated-surface);
 }
 
 .evidenceDialogPanel header button {
@@ -1076,7 +1188,8 @@
 .evidenceDialogPanel img {
   display: block;
   height: auto;
-  width: 100%;
+  max-width: none;
+  width: auto;
 }
 
 .statusGrid {
@@ -1545,6 +1658,61 @@
   border-bottom-style: double;
 }
 
+.integrationSection {
+  background: var(--control-surface);
+  color: var(--sand-100);
+}
+
+.integrationGrid {
+  border-bottom: 1px solid var(--hairline);
+  border-top: 1px solid var(--hairline);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 2.5rem;
+}
+
+.integrationGrid article {
+  display: flex;
+  flex-direction: column;
+  min-height: 20rem;
+  padding: clamp(1.2rem, 2.5vw, 2rem);
+}
+
+.integrationGrid article + article {
+  border-left: 1px solid var(--hairline);
+}
+
+.integrationIndex {
+  color: var(--sand-500);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.integrationGrid h3 {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(1.45rem, 2.5vw, 2rem);
+  letter-spacing: 0;
+  line-height: 1.05;
+  margin: 2.6rem 0 1rem;
+}
+
+.integrationGrid p {
+  color: var(--sand-300);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.integrationGrid .textLink:first-of-type {
+  margin-top: auto;
+}
+
+.integrationGrid .textLink + .textLink {
+  margin-top: 0.45rem;
+}
+
 .coverageSection {
   background: var(--control-surface);
   color: var(--sand-100);
@@ -1854,6 +2022,33 @@
 }
 
 @media (max-width: 900px) {
+  .integrationGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .integrationGrid article {
+    min-height: 0;
+  }
+
+  .integrationGrid article + article {
+    border-left: 0;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .integrationGrid .textLink:first-of-type {
+    margin-top: 2rem;
+  }
+
+  .verifiedRunStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .verifiedRunLead,
+  .verifiedRunFacts {
+    border-bottom: 1px solid var(--hairline);
+    border-right: 0;
+  }
+
   .hero {
     min-height: auto;
   }
@@ -2144,6 +2339,19 @@
 }
 
 @media (max-width: 520px) {
+  .verifiedRunFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .verifiedRunFacts > div {
+    border-bottom: 1px solid var(--hairline);
+    border-right: 0;
+  }
+
+  .verifiedRunFacts > div:last-child {
+    border-bottom: 0;
+  }
+
   .hero,
   .section {
     padding-block: 3.5rem;

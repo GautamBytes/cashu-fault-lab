@@ -33,7 +33,7 @@ export function HeroRunPanel({ summary }: HeroRunPanelProps) {
           <dd>{summary.scenarioId}</dd>
         </div>
         <div className={styles.runPanelSeed}>
-          <dt>Seed</dt>
+          <dt>Stable seed ID</dt>
           <dd>{summary.seed}</dd>
         </div>
         <div>

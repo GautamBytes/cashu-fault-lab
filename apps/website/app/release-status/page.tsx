@@ -9,6 +9,34 @@ export const metadata: Metadata = {
     'The checked-in Cashu Fault Lab release policy, current evidence, and open blockers.',
 };
 
+const validationTasks = [
+  {
+    actor: 'Independent wallet maintainer',
+    check: 'Run the 13-scenario release suite with an independently implemented receiver.',
+    artifact: 'Signed qualifying matrix entry with receiver evidence references.',
+  },
+  {
+    actor: 'Independent mint operator',
+    check: 'Provide mint and ledger observations from authorities outside the wallet under test.',
+    artifact: 'Signed mint and ledger evidence linked to the qualifying run.',
+  },
+  {
+    actor: 'Second implementation team',
+    check: 'Complete the release suite with a distinct, cross-implementation sender/receiver pair.',
+    artifact: 'A second signed qualifying matrix entry from a distinct build.',
+  },
+  {
+    actor: 'Second mint operator',
+    check: 'Repeat qualifying coverage against a mint identity not used by the first pair.',
+    artifact: 'Evidence bundle identifying the second independent mint authority.',
+  },
+  {
+    actor: 'Cashu protocol reviewer',
+    check: 'Review the matrix, evidence provenance, unsupported claims, and release-policy result.',
+    artifact: 'Signed review decision referencing the qualifying evidence digest.',
+  },
+] as const;
+
 export default async function ReleaseStatusPage() {
   const status = await getReleaseStatus();
 
@@ -19,10 +47,10 @@ export default async function ReleaseStatusPage() {
           <p className={styles.eyebrow}>
             Release status / policy schema {status.policySchemaVersion}
           </p>
-          <h1>Blocked by design.</h1>
+          <h1>Awaiting independent validation.</h1>
           <p className={styles.lede}>
-            Cashu Fault Lab is an experimental developer preview. Its deterministic demo is useful
-            evidence, but it is not certification and it does not satisfy the strict release gate.
+            The deterministic demo passes. Cashu Fault Lab remains an experimental developer preview
+            until independent implementations, mints, and reviewers satisfy the strict release gate.
           </p>
         </div>
         <div className={styles.statusStamp}>
@@ -83,12 +111,27 @@ export default async function ReleaseStatusPage() {
           </p>
         </div>
         <div>
-          <p className={styles.listLabel}>Open blockers</p>
+          <p className={styles.listLabel}>Independent validation work</p>
           <ul className={styles.blockerList}>
-            {status.blockers.map((blocker) => (
-              <li key={blocker}>
+            {validationTasks.map((task, index) => (
+              <li key={task.actor}>
                 <span aria-hidden="true">×</span>
-                {blocker}
+                <article>
+                  <header>
+                    <strong>{task.actor}</strong>
+                    <small>{status.blockers[index]}</small>
+                  </header>
+                  <dl>
+                    <div>
+                      <dt>Check</dt>
+                      <dd>{task.check}</dd>
+                    </div>
+                    <div>
+                      <dt>Expected artifact</dt>
+                      <dd>{task.artifact}</dd>
+                    </div>
+                  </dl>
+                </article>
               </li>
             ))}
           </ul>

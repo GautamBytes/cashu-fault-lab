@@ -85,7 +85,7 @@
 
 .eyebrow {
   color: var(--purple-electric);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 700;
   margin: 0 0 1rem;
 }
@@ -436,6 +436,42 @@
   font-size: 1rem;
   line-height: 1.6;
   margin: 1.4rem 0 0;
+}
+
+.architectureLegend {
+  border-bottom: 1px solid var(--hairline);
+  border-top: 1px solid var(--hairline);
+  margin: 2rem 0 0;
+}
+
+.architectureLegendList {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.architectureLegendList > div {
+  padding: 1rem;
+}
+
+.architectureLegendList > div + div {
+  border-left: 1px solid var(--hairline);
+}
+
+.architectureLegend dt {
+  color: var(--sand-100);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.architectureLegend dd {
+  color: var(--sand-500);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0.55rem 0 0;
 }
 
 .topologyFigure {
@@ -938,16 +974,16 @@
 }
 
 .blockerList li {
-  align-items: center;
+  align-items: start;
   border-top: 1px solid var(--purple-500);
   display: grid;
   gap: 1rem;
   grid-template-columns: auto 1fr;
   line-height: 1.4;
-  padding: 1rem 0;
+  padding: 1.25rem 0;
 }
 
-.blockerList span {
+.blockerList li > span {
   align-items: center;
   border: 1px solid var(--sand-500);
   color: var(--sand-500);
@@ -956,6 +992,59 @@
   height: 1.6rem;
   justify-content: center;
   width: 1.6rem;
+}
+
+.blockerList article,
+.blockerList header,
+.blockerList dl,
+.blockerList dd {
+  margin: 0;
+}
+
+.blockerList header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.blockerList header strong {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+
+.blockerList header small {
+  color: var(--sand-500);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.blockerList dl {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.blockerList dl div {
+  border-top: 1px solid var(--purple-border-soft);
+  padding-top: 0.7rem;
+}
+
+.blockerList dt {
+  color: var(--sand-500);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.blockerList dd {
+  color: var(--sand-300);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  margin-top: 0.35rem;
 }
 
 .sourceRail {
@@ -1086,6 +1175,16 @@
   .qualificationGrid,
   .sourceRail {
     grid-template-columns: 1fr;
+  }
+
+  .architectureLegendList,
+  .blockerList dl {
+    grid-template-columns: 1fr;
+  }
+
+  .architectureLegendList > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--hairline);
   }
 
   .scenarioCard {

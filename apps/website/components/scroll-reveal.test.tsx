@@ -113,13 +113,11 @@ describe('ScrollReveal', () => {
     expect(belowFold).toHaveAttribute('data-scroll-reveal', 'visible');
   });
 
-  it('uses a perceptible blur-to-focus reveal without animating layout', () => {
+  it('never hides whole sections while waiting for intersection', () => {
     expect(globalsCss).toMatch(
-      /\[data-scroll-reveal='pending'\]\s*\{[^}]*filter:\s*blur\(10px\);[^}]*opacity:\s*0;[^}]*transform:\s*translate3d\(0, 1\.75rem, 0\)/s,
+      /\[data-scroll-reveal='pending'\]\s*\{[^}]*filter:\s*none;[^}]*opacity:\s*1;[^}]*transform:\s*none;/s,
     );
-    expect(globalsCss).toMatch(
-      /\[data-scroll-reveal='visible'\]\s*\{[^}]*filter:\s*blur\(0\);[\s\S]*filter 600ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
-    );
+    expect(globalsCss).not.toMatch(/\[data-scroll-reveal='pending'\]\s*\{[^}]*opacity:\s*0/s);
   });
 
   it('shows every section immediately when reduced motion is requested', () => {

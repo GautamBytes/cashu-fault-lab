@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EvidenceGallery } from './evidence-gallery';
 
+const homeCss = readFileSync(resolve(process.cwd(), 'components/home/home.module.css'), 'utf8');
+
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
     this.setAttribute('open', '');
@@ -50,6 +52,10 @@ describe('EvidenceGallery', () => {
       const dialog = screen.getByRole('dialog', { name: dialogName });
       expect(dialog).toBeVisible();
       expect(within(dialog).getByRole('img', { name: imageName })).toHaveAttribute('src', imageSrc);
+      expect(within(dialog).getByRole('link', { name: 'Open original image' })).toHaveAttribute(
+        'href',
+        imageSrc,
+      );
     },
   );
 
@@ -86,4 +92,19 @@ describe('EvidenceGallery', () => {
 
     expect(dialog).toHaveAttribute('open');
   });
+
+  it('keeps original-resolution evidence scrollable and contained on narrow screens', () => {
+    expect(homeCss).toMatch(
+      /\.evidenceDialogPanel\s*\{[^}]*overflow:\s*auto;[^}]*overscroll-behavior:\s*contain;/s,
+    );
+    expect(homeCss).toMatch(
+      /\.evidenceDialogPanel img\s*\{[^}]*height:\s*auto;[^}]*max-width:\s*none;[^}]*width:\s*auto;/s,
+    );
+    expect(homeCss).toContain('env(safe-area-inset-top)');
+    expect(homeCss).toContain('env(safe-area-inset-right)');
+    expect(homeCss).toContain('env(safe-area-inset-bottom)');
+    expect(homeCss).toContain('env(safe-area-inset-left)');
+  });
 });
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
