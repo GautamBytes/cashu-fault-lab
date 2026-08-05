@@ -37,12 +37,12 @@
   margin-bottom: 0;
 }
 
-.navigationGroup h2,
+.navigationGroupLabel,
 .desktopToc > p,
 .mobileToc > p {
   color: var(--sand-500);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   margin: 0 0 0.35rem;
@@ -132,7 +132,7 @@
 .eyebrow {
   color: var(--purple-electric);
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   margin: 0 0 0.75rem;

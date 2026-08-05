@@ -127,8 +127,8 @@ describe('canonical content', () => {
     expect(documents[0]).toMatchObject({
       slug: 'getting-started',
       next: { slug: 'contributing' },
-      viewUrl: 'https://github.com/GautamBytes/cashu-fault-lab/blob/main/README.md',
-      editUrl: 'https://github.com/GautamBytes/cashu-fault-lab/edit/main/README.md',
+      viewUrl: 'https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/getting-started.md',
+      editUrl: 'https://github.com/GautamBytes/cashu-fault-lab/edit/main/docs/getting-started.md',
     });
     expect(documents[0]).not.toHaveProperty('previous');
   });

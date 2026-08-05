@@ -24,7 +24,9 @@ function DocumentationNavigation({
 
         return (
           <section className={styles.navigationGroup} key={group}>
-            <h2>{group}</h2>
+            <p className={styles.navigationGroupLabel} data-navigation-group>
+              {group}
+            </p>
             <ul>
               {groupDocuments.map((item) => (
                 <li key={item.slug}>

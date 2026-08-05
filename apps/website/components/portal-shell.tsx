@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import type { SearchRecord } from '../lib/content-types';
 import { ScrollReveal } from './scroll-reveal';
 import { SearchDialog } from './search/search-dialog';
@@ -20,6 +21,7 @@ function isEditingTarget(target: EventTarget | null): boolean {
 
 export function PortalShell({ children, records }: PortalShellProps) {
   const [open, setOpen] = useState(false);
+  const currentPath = usePathname();
 
   useEffect(() => {
     function openWithKeyboard(event: KeyboardEvent) {
@@ -52,7 +54,7 @@ export function PortalShell({ children, records }: PortalShellProps) {
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
-      <SiteHeader onOpenSearch={() => setOpen(true)} />
+      <SiteHeader currentPath={currentPath} onOpenSearch={() => setOpen(true)} />
       <SearchDialog onOpenChange={setOpen} open={open} records={records} />
       <main id="main-content">{children}</main>
       <ScrollReveal />

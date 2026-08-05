@@ -63,7 +63,7 @@ afterEach(() => {
 });
 
 describe('home components', () => {
-  it('keeps GitHub in the hero and promotes scenario discovery', async () => {
+  it('makes the verified public run the primary hero journey', async () => {
     stubMotionPreference();
     const groups = await getScenarioGroups();
     const expectedScenarioCount = groups.reduce(
@@ -77,6 +77,10 @@ describe('home components', () => {
     expect(
       within(hero).getByText('Cashu delivery fault injection and recovery evidence'),
     ).toBeVisible();
+    expect(within(hero).getByRole('link', { name: 'Run the verified demo' })).toHaveAttribute(
+      'href',
+      '#verified-run',
+    );
     expect(within(hero).getByRole('link', { name: 'Open in Codespaces' })).toHaveAttribute(
       'href',
       'https://codespaces.new/GautamBytes/cashu-fault-lab?quickstart=1',
@@ -87,8 +91,22 @@ describe('home components', () => {
       'https://github.com/GautamBytes/cashu-fault-lab',
     );
     expect(
-      within(hero).getByRole('link', { name: 'Next / deterministic fault trace' }),
-    ).toHaveAttribute('href', '#fault-trace');
+      within(hero).getByRole('link', { name: 'Next / verified run evidence' }),
+    ).toHaveAttribute('href', '#verified-run');
+
+    const verifiedRun = screen.getByRole('group', { name: 'Verified public-package run' });
+    expect(verifiedRun).toHaveAttribute('id', 'verified-run');
+    expect(within(verifiedRun).getByText('cashu-fault-lab@0.2.0')).toBeVisible();
+    expect(within(verifiedRun).getByText('15 passed · 3 not applicable')).toBeVisible();
+    expect(within(verifiedRun).getByText('0 containers · 0 networks · 0 volumes')).toBeVisible();
+    expect(within(verifiedRun).getByRole('link', { name: 'Terminal output' })).toHaveAttribute(
+      'href',
+      '/evidence/v0.2.0-terminal.png',
+    );
+    expect(within(verifiedRun).getByRole('link', { name: 'HTML report' })).toHaveAttribute(
+      'href',
+      '/evidence/v0.2.0-report.png',
+    );
     expect(screen.getByRole('heading', { name: 'Explore fault scenarios' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Explore all scenarios' })).toHaveAttribute(
       'href',
@@ -107,6 +125,16 @@ describe('home components', () => {
     const explorer = screen.getByRole('region', { name: 'Explore fault scenarios' });
     expect(within(explorer).getAllByRole('listitem')).toHaveLength(4);
     expect(within(explorer).getByText(String(expectedScenarioCount))).toBeVisible();
+  });
+
+  it('labels the historical default seed as a stable identifier', async () => {
+    stubMotionPreference();
+    const summary = await getDemoSummary();
+    render(await HomePage());
+
+    const runPanel = screen.getByRole('complementary', { name: 'Deterministic demo run' });
+    expect(within(runPanel).getByText('Stable seed ID')).toBeVisible();
+    expect(within(runPanel).getByText(summary.seed)).toBeVisible();
   });
 
   it('copies the single-line demo command without release metadata', async () => {
@@ -181,6 +209,36 @@ describe('home components', () => {
       expect(section).toHaveAttribute('data-trace-step', step);
       expect(section).toHaveAttribute('data-trace-label', label);
     }
+  });
+
+  it('keeps the landing journey to five focused narratives', async () => {
+    stubMotionPreference();
+    render(await HomePage());
+
+    expect(
+      screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual([
+      'A lost response is not a lost result.',
+      'Evidence, not a success boolean.',
+      'Explore fault scenarios',
+      'Integrate and validate without changing implementation behavior.',
+      'Add an adapter. Break a delivery. Improve the evidence.',
+    ]);
+    const integrate = screen.getByRole('region', {
+      name: 'Integrate and validate without changing implementation behavior.',
+    });
+    expect(within(integrate).getByRole('link', { name: 'Adapter guide' })).toHaveAttribute(
+      'href',
+      '/docs/adapters',
+    );
+    expect(within(integrate).getByRole('link', { name: 'Architecture' })).toHaveAttribute(
+      'href',
+      '/architecture',
+    );
+    expect(within(integrate).getByRole('link', { name: 'Validation status' })).toHaveAttribute(
+      'href',
+      '/release-status',
+    );
   });
 
   it('keeps full-width home bands on the dark surface baseline', async () => {

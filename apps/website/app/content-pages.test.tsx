@@ -52,6 +52,10 @@ describe('generated content pages', () => {
     expect(architectureLink).toHaveAttribute('aria-current', 'page');
     expect(architectureArticle).not.toBeNull();
     expect(screen.getByRole('complementary', { name: 'Trust boundary' })).toBeVisible();
+    const legend = screen.getByRole('group', { name: 'Architecture legend' });
+    expect(within(legend).getByText('Implementation-owned')).toBeVisible();
+    expect(within(legend).getByText('Lab-controlled')).toBeVisible();
+    expect(within(legend).getByText('Independently evaluated')).toBeVisible();
 
     const deliveryPath = screen.getByRole('list', { name: 'Primary delivery path' });
     expect(architectureArticle).toContainElement(deliveryPath);
@@ -143,7 +147,7 @@ describe('generated content pages', () => {
     expect(screen.getByRole('link', { name: 'View source' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Edit on GitHub' })).toHaveAttribute(
       'href',
-      'https://github.com/GautamBytes/cashu-fault-lab/edit/main/README.md',
+      'https://github.com/GautamBytes/cashu-fault-lab/edit/main/docs/getting-started.md',
     );
     expect(
       screen.getAllByRole('link', { name: 'Contribution guide' }).some((link) => {
@@ -175,17 +179,25 @@ describe('generated content pages', () => {
     })[0];
     if (!documentationNavigation) throw new Error('Expected documentation navigation');
     expect(
-      within(documentationNavigation)
-        .getAllByRole('heading', { level: 2 })
-        .map((heading) => heading.textContent),
+      [...documentationNavigation.querySelectorAll('[data-navigation-group]')].map(
+        (label) => label.textContent,
+      ),
     ).toEqual(['Release', 'Start', 'Operate', 'Integrate', 'Understand']);
+    expect(within(documentationNavigation).queryByRole('heading')).not.toBeInTheDocument();
   });
 
-  it('shows the blocked gate and links to every governing release source', async () => {
+  it('turns every release blocker into actionable independent validation work', async () => {
     render(await ReleaseStatusPage());
 
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Awaiting independent validation.' }),
+    ).toBeVisible();
     expect(screen.getAllByText('0 of 2', { selector: 'strong' })).toHaveLength(2);
     expect(screen.getByText('A failing strict gate is a safety feature.')).toBeInTheDocument();
+    expect(screen.getByText('Independent wallet maintainer')).toBeVisible();
+    expect(screen.getByText('Cashu protocol reviewer')).toBeVisible();
+    expect(screen.getAllByText('Check')).toHaveLength(5);
+    expect(screen.getAllByText('Expected artifact')).toHaveLength(5);
     expect(screen.getByRole('link', { name: 'Release notes' })).toHaveAttribute(
       'href',
       '/docs/release-notes',
