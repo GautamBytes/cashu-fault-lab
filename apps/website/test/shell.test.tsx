@@ -96,6 +96,16 @@ describe('SiteHeader', () => {
     expect(explore?.closest('details')).not.toHaveAttribute('open');
   });
 
+  it('opens the published npm package from the header', () => {
+    render(<SiteHeader />);
+
+    const npmLink = screen.getByRole('link', { name: 'Install from npm' });
+    expect(npmLink).toHaveAttribute('href', 'https://www.npmjs.com/package/cashu-fault-lab');
+    expect(npmLink).toHaveAttribute('target', '_blank');
+    expect(npmLink).toHaveAttribute('rel', 'noreferrer noopener');
+    expect(npmLink.className).toContain('npmAction');
+  });
+
   it('spaces primary navigation labels consistently', () => {
     expect(headerCss).toMatch(/\.links\s*\{[^}]*column-gap:\s*1\.25rem/s);
     expect(headerCss).toMatch(/\.links a\s*\{[^}]*min-width:\s*auto;[^}]*padding:\s*0 0\.25rem/s);
