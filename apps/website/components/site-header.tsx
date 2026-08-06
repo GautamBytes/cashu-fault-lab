@@ -89,6 +89,14 @@ export function SiteHeader({ currentPath = '/', onOpenSearch }: SiteHeaderProps)
             </details>
           </div>
           <div className={styles.headerActions}>
+            <a
+              className={styles.npmAction}
+              href="https://www.npmjs.com/package/cashu-fault-lab"
+              rel="noreferrer noopener"
+              target="_blank"
+            >
+              Install from npm <span aria-hidden="true">↗</span>
+            </a>
             <ThemeToggle />
             <button
               aria-haspopup="dialog"

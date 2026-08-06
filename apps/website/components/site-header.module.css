@@ -133,6 +133,7 @@
 }
 
 .searchButton,
+.npmAction,
 .themeToggle,
 .menuButton {
   align-items: center;
@@ -147,6 +148,23 @@
   min-height: 44px;
   min-width: 44px;
   padding: 0.45rem 0.7rem;
+}
+
+.npmAction {
+  background: linear-gradient(180deg, var(--control-glint), transparent), var(--control-surface);
+  border-color: var(--purple-500);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+  white-space: nowrap;
 }
 
 .searchButton {
@@ -166,10 +184,24 @@
 }
 
 .searchButton:hover,
+.npmAction:hover,
+.npmAction:focus-visible,
 .themeToggle:hover,
 .menuButton:hover {
   background: var(--elevated-surface);
   border-color: var(--purple-500);
+}
+
+.npmAction:hover,
+.npmAction:focus-visible {
+  box-shadow: 0 0.5rem 1.5rem var(--shadow-color);
+  color: var(--sand-100);
+  transform: translateY(-1px);
+}
+
+.npmAction:active {
+  box-shadow: none;
+  transform: translateY(0);
 }
 
 .searchButton:hover {
