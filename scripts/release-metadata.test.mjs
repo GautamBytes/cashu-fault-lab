@@ -132,6 +132,23 @@ test('v0.2 maintainer documentation stays aligned with the shipped adapter workf
   assert.match(adapterInit, /cashu-fault-lab@0\.2\.0 adapter preview/u);
 });
 
+test('workspace security policy prevents vulnerable nanoid resolutions', async () => {
+  const workspace = await text('pnpm-workspace.yaml');
+
+  assert.match(workspace, /^  nanoid@<3\.3\.18: 3\.3\.18$/mu);
+});
+
+test('v0.2 publication checklist records completed provenance and public evidence', async () => {
+  const checklist = await text('docs/releases/v0.2.0-checklist.md');
+
+  assert.match(
+    checklist,
+    /- \[x\] npm provenance and the GitHub Release bind v0\.2\.0 to the tagged source commit\./u,
+  );
+  assert.match(checklist, /- \[x\] \*\*First-party reproducible evidence:\*\*/u);
+  assert.match(checklist, /Publication requirements are complete\./u);
+});
+
 test('checked-in demo artifacts are valid, deterministic, and secret-free', async () => {
   const json = await text('docs/examples/v0.1.0-demo.json');
   const html = await text('docs/examples/v0.1.0-demo.html');
