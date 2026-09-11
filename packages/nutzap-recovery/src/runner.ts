@@ -8,6 +8,7 @@ import type { MintPort } from './types.js';
 import { createNutzapSession } from './session.js';
 import { observeNutzap } from './observation.js';
 import { runIndependentScenario } from './independent.js';
+import { runCdkScenario } from './cdk.js';
 export { verifyNutzapEvidence } from './evidence.js';
 export const SCENARIOS = [
   'duplicate-relays',
@@ -19,11 +20,18 @@ export const SCENARIOS = [
   'independent-crash-after-swap',
   'independent-relay-outage',
 ] as const;
+export const CDK_SCENARIOS = [
+  'cdk-concurrent',
+  'cdk-crash-after-swap',
+  'cdk-peer-crash-after-swap',
+] as const;
 export interface NutzapRunOptions {
   mintUrl?: string;
+  cdkReceiver?: string;
 }
 export function validateRun(id: string, seed: string): void {
-  if (!SCENARIOS.some((s) => s === id)) throw Error('Unknown NIP-61 recovery scenario');
+  if (![...SCENARIOS, ...CDK_SCENARIOS].some((s) => s === id))
+    throw Error('Unknown NIP-61 recovery scenario');
   if (typeof seed !== 'string' || seed.length < 1 || seed.length > 256)
     throw Error('Nutzap seed must contain 1-256 characters');
 }
@@ -33,6 +41,7 @@ export async function runNutzapScenario(
   options: NutzapRunOptions = {},
 ): Promise<NutzapReport> {
   validateRun(id, seed);
+  if (id.startsWith('cdk-')) return runCdkScenario(id, seed, options.mintUrl, options.cdkReceiver);
   if (id.startsWith('independent-')) return runIndependentScenario(id, seed, options.mintUrl);
   const session = await createNutzapSession(seed, options.mintUrl);
   const { key, backend, proofs, directory, relayObjects, relays, info, event, zap, inboxes } =
