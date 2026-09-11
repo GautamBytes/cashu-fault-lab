@@ -1,5 +1,6 @@
 import type { Event } from 'nostr-tools';
 import { receiveNutzap } from './receiver.js';
+import { queryEvents } from './relay.js';
 import type { MintPort } from './types.js';
 export interface WorkerInput {
   database: string;
@@ -8,6 +9,7 @@ export interface WorkerInput {
   event: Event;
   relays: string[];
   pauseAfterSwap: boolean;
+  syncPeers?: boolean;
 }
 let sequence = 0;
 const pending = new Map<
@@ -48,6 +50,7 @@ process.on('message', (raw: unknown) => {
     swap: (zap, plan) => rpc('swap', [zap, plan]),
     restore: (zap, plan) => rpc('restore', [zap, plan]),
     states: (proofs) => rpc('states', [proofs]),
+    verify: (proofs) => rpc('verify', [proofs]),
   };
   void receiveNutzap(input.event, {
     database: input.database,
@@ -56,6 +59,7 @@ process.on('message', (raw: unknown) => {
     relays: input.relays,
     mint,
     publish: (relay, event) => rpc('publish', [relay, event]),
+    ...(input.syncPeers ? { query: queryEvents } : {}),
     ...(input.pauseAfterSwap
       ? {
           afterSwap: async () => {

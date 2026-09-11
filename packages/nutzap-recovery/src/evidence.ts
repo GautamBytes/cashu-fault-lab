@@ -17,6 +17,18 @@ export interface NutzapEvidence {
   faultObserved: boolean;
   killedAfterSwap: boolean;
   completed: boolean;
+  independent?: {
+    databasesDistinct: boolean;
+    plansDistinct: boolean;
+    swapAttempts: number;
+    successfulSwaps: number;
+    localCredits: number[];
+    replicatedWallets: number;
+    walletBalances: number[];
+    walletEventsAgree: boolean;
+    awaitingPeerObserved: boolean;
+    relayOutageObserved: boolean;
+  };
 }
 export function verifyNutzapEvidence(
   e: NutzapEvidence,
@@ -46,10 +58,31 @@ export function verifyNutzapEvidence(
       e.relayEventsAgree === true &&
       e.historyReferencesMatch === true,
     'fault-exercised': e.faultObserved === true,
-    'crash-confirmed': scenarioId !== 'crash-after-swap' || e.killedAfterSwap === true,
+    'crash-confirmed':
+      !['crash-after-swap', 'independent-crash-after-swap'].includes(scenarioId ?? '') ||
+      e.killedAfterSwap === true,
     'wallet-payloads-match': e.walletPayloadsMatch === true,
     recovered: e.completed === true,
   };
+  if (scenarioId?.startsWith('independent-')) {
+    const i = e.independent;
+    checks['independent-wallets'] =
+      !!i &&
+      i.databasesDistinct === true &&
+      i.plansDistinct === true &&
+      i.swapAttempts === 2 &&
+      i.successfulSwaps === 1 &&
+      i.replicatedWallets === 1 &&
+      Array.isArray(i.localCredits) &&
+      JSON.stringify([...i.localCredits].sort()) === '[0,1]' &&
+      Array.isArray(i.walletBalances) &&
+      i.walletBalances.length === 2 &&
+      i.walletBalances.every((n) => n === e.outputAmount) &&
+      i.walletEventsAgree === true &&
+      i.awaitingPeerObserved === true;
+    checks['relay-outage'] =
+      scenarioId !== 'independent-relay-outage' || i?.relayOutageObserved === true;
+  }
   const failures = Object.entries(checks)
     .filter(([, ok]) => !ok)
     .map(([id]) => id);

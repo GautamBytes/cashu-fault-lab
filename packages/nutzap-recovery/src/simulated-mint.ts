@@ -42,4 +42,16 @@ export class SimulatedMint implements MintPort {
   async states(proofs: NutzapProof[]): Promise<('UNSPENT' | 'SPENT')[]> {
     return proofs.map((p) => (this.#spent.has(p.secret) ? 'SPENT' : 'UNSPENT'));
   }
+  async verify(proofs: NutzapProof[]): Promise<void> {
+    const issued = [...this.#outputs.values()].flat();
+    if (
+      proofs.some(
+        (p) =>
+          !issued.some(
+            (q) => q.id === p.id && q.secret === p.secret && q.amount === p.amount && q.C === p.C,
+          ),
+      )
+    )
+      throw Error('Unknown simulated output');
+  }
 }

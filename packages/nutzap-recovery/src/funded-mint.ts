@@ -85,6 +85,12 @@ export class FundedMint implements MintPort {
     });
     return (await this.#wallet.completeMint(preview)).map(portable);
   }
+  async initialize(): Promise<void> {
+    await this.#wallet.loadMint();
+  }
+  async verify(proofs: NutzapProof[]): Promise<void> {
+    this.#verified(normalizeProofAmounts(proofs));
+  }
   async prepare(zap: Nutzap): Promise<PreparedRedemption> {
     const preview = await this.#wallet.prepareSwapToReceive(normalizeProofAmounts(zap.proofs), {
       requireDleq: true,

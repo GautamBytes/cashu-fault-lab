@@ -81,3 +81,19 @@ test('the bundled CLI resolves its package-owned scenarios', async () => {
   assert.equal(validated.exitCode, 0, validated.stderr);
   assert.match(validated.stdout, /^ok http-response-lost/u);
 });
+
+test('the bundled CLI synchronizes independent wallet databases', async () => {
+  const result = await run([
+    'nutzap',
+    'run',
+    'independent-crash-after-swap',
+    '--seed',
+    'package-independent',
+  ]);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, 'passed');
+  assert.equal(report.evidence.independent.databasesDistinct, true);
+  assert.equal(report.evidence.independent.successfulSwaps, 1);
+  assert.deepEqual(report.evidence.independent.localCredits, [0, 1]);
+});

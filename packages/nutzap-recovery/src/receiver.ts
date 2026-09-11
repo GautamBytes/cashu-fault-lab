@@ -1,5 +1,6 @@
 import { finalizeEvent, getPublicKey, nip44, type Event } from 'nostr-tools';
 import { Journal } from './journal.js';
+import { recoverFromPeer } from './peer.js';
 import { validateNutzap, type NutzapProof } from './protocol.js';
 import type { ReceiverOptions, ReceiveResult, RedemptionRecord } from './types.js';
 
@@ -91,17 +92,25 @@ export async function receiveNutzap(
           }
           if (proofs.length > 0) await options.afterSwap?.();
         } else proofs = await options.mint.restore(record.zap, record.plan);
-        if (proofs.length === 0) return 'recovery-blocked';
       }
-      validateOutputs(record, proofs);
-      const outputStates = await options.mint.states(proofs);
-      if (outputStates.length !== proofs.length || outputStates.some((s) => s !== 'UNSPENT'))
-        return 'recovery-blocked';
-      record = db.credit(
-        zap.id,
-        zap.amount - record.plan.fee,
-        eventsFor(record, proofs, options.key),
-      );
+      if (proofs.length === 0) {
+        if (!options.query) return 'recovery-blocked';
+        const peer = await recoverFromPeer(record, options);
+        if (!peer) return 'awaiting-peer';
+        // This replicates an existing wallet balance; it is not a new mint credit.
+        record = db.credit(zap.id, zap.amount - record.plan.fee, peer.events, peer.proofs, 'relay');
+      } else {
+        validateOutputs(record, proofs);
+        const outputStates = await options.mint.states(proofs);
+        if (outputStates.length !== proofs.length || outputStates.some((s) => s !== 'UNSPENT'))
+          return 'recovery-blocked';
+        record = db.credit(
+          zap.id,
+          zap.amount - record.plan.fee,
+          eventsFor(record, proofs, options.key),
+          proofs,
+        );
+      }
     }
     for (const relay of options.relays) {
       for (const out of record.events) {

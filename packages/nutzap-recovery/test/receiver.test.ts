@@ -59,6 +59,7 @@ async function fixture() {
     spent = false,
     pending = false;
   const port: MintPort = {
+    verify: async () => {},
     prepare: async () => plan,
     swap: async () => {
       if (spent) throw Error('spent');

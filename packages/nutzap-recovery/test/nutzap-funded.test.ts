@@ -27,15 +27,21 @@ describe('funded NIP-61 recovery', () => {
       proofs: proofs.map((p) => ({ ...p, dleq: { ...p.dleq!, e: '00'.repeat(32) } })),
     } as Nutzap;
     await expect(mint.prepare(zap)).rejects.toThrow();
+    await expect(mint.verify(proofs)).resolves.toBeUndefined();
+    await expect(mint.verify(zap.proofs)).rejects.toThrow();
     expect(await mint.states(proofs)).toEqual(proofs.map(() => 'UNSPENT'));
     expect(mint.successfulSwaps).toBe(0);
   }, 90_000);
-  it('replays funded crash evidence with fresh proofs', async () => {
-    const mintUrl = process.env.CFL_NUTZAP_MINT_URL;
-    if (!mintUrl) throw Error('Run pnpm test:nutzap:funded with a disposable mint');
-    const report = await runNutzapScenario('crash-after-swap', 'funded-replay', { mintUrl });
-    const replay = await replayNutzapReport(report, 'funded-replay', { mintUrl });
-    expect(replay.status).toBe('passed');
-    expect(replay.fingerprint).toBe(report.fingerprint);
-  }, 90_000);
+  it.each(['crash-after-swap', 'independent-crash-after-swap'])(
+    'replays funded %s evidence with fresh proofs',
+    async (scenario) => {
+      const mintUrl = process.env.CFL_NUTZAP_MINT_URL;
+      if (!mintUrl) throw Error('Run pnpm test:nutzap:funded with a disposable mint');
+      const report = await runNutzapScenario(scenario, 'funded-replay', { mintUrl });
+      const replay = await replayNutzapReport(report, 'funded-replay', { mintUrl });
+      expect(replay.status).toBe('passed');
+      expect(replay.fingerprint).toBe(report.fingerprint);
+    },
+    90_000,
+  );
 });

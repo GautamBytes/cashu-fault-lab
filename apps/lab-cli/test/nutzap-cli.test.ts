@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runCli, type CliIo } from '../src/index.js';
 describe('nutzap commands', () => {
-  it('lists the five bounded recovery scenarios', async () => {
+  it('lists shared-journal and independent-wallet recovery scenarios', async () => {
     let out = '';
     const io: CliIo = {
       stdout: (s) => {
@@ -13,7 +13,8 @@ describe('nutzap commands', () => {
       writeText: async () => {},
     };
     expect((await runCli(['node', 'lab', 'nutzap', 'list'], { io })).exitCode).toBe(0);
-    expect(JSON.parse(out)).toContain('crash-after-swap');
+    expect(JSON.parse(out)).toHaveLength(8);
+    expect(JSON.parse(out)).toContain('independent-crash-after-swap');
   });
   it('rejects an unknown case before running or writing a report', async () => {
     let writes = 0;
