@@ -6,7 +6,7 @@ Global diagnostic option: `--json` before a command emits machine-readable diagn
 
 ## `cashu-fault-lab nutzap list`
 
-Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.
+Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.
 
 Modes: `json`
 Environment: None
@@ -25,7 +25,7 @@ Examples:
 
 ## `cashu-fault-lab nutzap run <scenario>`
 
-Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.
+Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.
 
 Arguments:
 
@@ -54,7 +54,7 @@ Examples:
 
 ## `cashu-fault-lab nutzap matrix`
 
-Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.
+Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.
 
 Options:
 
@@ -79,7 +79,7 @@ Examples:
 
 ## `cashu-fault-lab nutzap replay <artifact>`
 
-Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.
+Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.
 
 Arguments:
 

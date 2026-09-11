@@ -68,6 +68,8 @@ export async function runReceiverProcess(
             return mint.restore(a as Nutzap, b as PreparedRedemption);
           case 'states':
             return mint.states(a as NutzapProof[]);
+          case 'verify':
+            return mint.verify(a as NutzapProof[]);
           case 'publish':
             return publish(a as string, b as Event);
           default:

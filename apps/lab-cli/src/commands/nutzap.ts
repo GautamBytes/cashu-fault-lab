@@ -44,20 +44,20 @@ export function registerNutzapCommands(
     );
     await output([report], options, false);
   });
-  configure(parent.command('matrix').description('Run all five NIP-61 recovery scenarios')).action(
-    async (options: Options) => {
-      const reports: NutzapReport[] = [];
-      for (const id of SCENARIOS)
-        reports.push(
-          await runNutzapScenario(
-            id,
-            options.seed,
-            options.mintUrl ? { mintUrl: options.mintUrl } : {},
-          ),
-        );
-      await output(reports, options, true);
-    },
-  );
+  configure(
+    parent.command('matrix').description('Run all bounded NIP-61 recovery scenarios'),
+  ).action(async (options: Options) => {
+    const reports: NutzapReport[] = [];
+    for (const id of SCENARIOS)
+      reports.push(
+        await runNutzapScenario(
+          id,
+          options.seed,
+          options.mintUrl ? { mintUrl: options.mintUrl } : {},
+        ),
+      );
+    await output(reports, options, true);
+  });
   configure(
     parent
       .command('replay <artifact>')

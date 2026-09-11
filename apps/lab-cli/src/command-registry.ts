@@ -40,7 +40,7 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
       name: `nutzap ${action}`,
       usage: `cashu-fault-lab nutzap ${action}${action === 'run' ? ' <scenario>' : action === 'replay' ? ' <artifact>' : ''}`,
       summary:
-        'Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.',
+        'Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.',
       arguments:
         action === 'run'
           ? [{ value: 'scenario', description: 'A packaged NIP-61 scenario ID.' }]

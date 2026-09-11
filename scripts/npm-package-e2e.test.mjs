@@ -84,17 +84,24 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     assert.equal(version.exitCode, 0, version.stderr);
     assert.equal(version.stdout.trim(), packageVersion);
 
-    const nutzap = await run(
-      process.execPath,
-      [cli, 'nutzap', 'run', 'crash-after-swap', '--seed', 'installed-nutzap'],
-      { cwd: installRoot },
-    );
-    assert.equal(nutzap.exitCode, 0, nutzap.stderr);
-    const nutzapReport = JSON.parse(nutzap.stdout);
-    assert.equal(nutzapReport.status, 'passed');
-    assert.equal(nutzapReport.mode, 'simulated');
-    assert.equal(nutzapReport.evidence.killedAfterSwap, true);
-    assert.equal(nutzapReport.evidence.credits, 1);
+    for (const scenario of ['crash-after-swap', 'independent-crash-after-swap']) {
+      const nutzap = await run(
+        process.execPath,
+        [cli, 'nutzap', 'run', scenario, '--seed', 'installed-nutzap'],
+        { cwd: installRoot },
+      );
+      assert.equal(nutzap.exitCode, 0, nutzap.stderr);
+      const nutzapReport = JSON.parse(nutzap.stdout);
+      assert.equal(nutzapReport.status, 'passed');
+      assert.equal(nutzapReport.mode, 'simulated');
+      assert.equal(nutzapReport.evidence.killedAfterSwap, true);
+      assert.equal(nutzapReport.evidence.credits, 1);
+      if (scenario.startsWith('independent-')) {
+        assert.equal(nutzapReport.evidence.independent.databasesDistinct, true);
+        assert.equal(nutzapReport.evidence.independent.successfulSwaps, 1);
+        assert.deepEqual(nutzapReport.evidence.independent.localCredits, [0, 1]);
+      }
+    }
 
     const scenarios = await run(process.execPath, [cli, 'ls', '--json'], { cwd: installRoot });
     assert.equal(scenarios.exitCode, 0, scenarios.stderr);

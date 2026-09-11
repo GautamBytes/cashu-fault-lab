@@ -4,12 +4,17 @@ The opt-in `nip61-recovery-v1` suite exercises actual Nostr WebSocket delivery a
 durable receiver subprocesses. It tests duplicate relay delivery, two concurrent
 receiver workers, SIGKILL after a successful swap before local credit/history,
 swap response loss, and a lost relay acknowledgement after history publication.
+It also tests two independent wallet databases racing to redeem the same nutzap,
+including recovery after a process crash or both relays going offline.
 
 ```bash
 pnpm lab nutzap list
 pnpm lab nutzap matrix --seed demo --output artifacts/nutzap-matrix.json
 pnpm lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json
 pnpm lab nutzap replay artifacts/nutzap.json --seed demo
+pnpm lab nutzap run independent-crash-after-swap --seed demo \
+  --output artifacts/nutzap-independent.json
+pnpm lab nutzap replay artifacts/nutzap-independent.json --seed demo
 ```
 
 The default uses a simulated mint and is explicitly labeled `simulated`. The real
@@ -25,7 +30,7 @@ pnpm test:nutzap:funded
 
 Requires Node 24 and Docker. The script starts a uniquely named stack using the
 repository's pinned Nutshell and Redis images, selects a loopback port, runs all
-five cases, and removes only that stack and its volumes. Nutshell uses FakeWallet
+eight scenarios, and removes only that stack and its volumes. Nutshell uses FakeWallet
 Lightning funding; no real sats are required. Missing infrastructure fails the lane.
 The funded mode uses cashu-ts 4.7.2 for actual P2PK proof creation, DLEQ validation,
 swap, NUT-09 output recovery, and NUT-07 proof states.
@@ -53,18 +58,49 @@ recipient `#p` and mint `#u` filters, not the recipient as event author.
 
 Before any mint mutation, a SQLite transaction reserves each mint/proof identity
 and persists the exact prepared output secrets, blinding data and fees. Concurrent
-workers adopt the same saved plan. After a crash or ambiguous response, the receiver
+workers sharing a journal adopt the same saved plan. After a crash or ambiguous response, the receiver
 restores those outputs. It checks their identities and value before atomically
 committing one credit and an immutable NIP-60 token/history outbox. Publication
 acknowledgements are recorded individually; retries use identical signed event IDs.
-PENDING inputs remain pending. SPENT inputs with no recoverable saved outputs remain
-blocked, never credited. Partial publication remains incomplete until retry succeeds.
+PENDING inputs remain pending. SPENT inputs alone never establish a successful
+redemption. Partial publication remains incomplete until retry succeeds.
 
-Concurrency covers two processes sharing **one wallet journal**, as cooperating
-workers do. Independent devices with separate databases, upstream wallet adoption,
-public-relay discovery, key rotation, NIP-65 sender read-relay discovery and custom
-external adapters are future work. The five scenarios are lab receiver evidence,
-not external wallet certification. The existing wallet doctor remains read-only.
+## Independent wallet databases
+
+These cases run two receiver subprocesses with separate private SQLite files and
+separately prepared output secrets. Both use the same wallet identity and P2PK key.
+The funded lane creates separate cashu-ts wallet instances; the crashed winner is
+restarted with a fresh instance and its surviving journal.
+
+| Scenario                       | Injected failure                                                   | Required recovery                                                                     |
+| ------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `independent-concurrent`       | Both clients attempt the same swap before either publishes history | One swap succeeds; the other client imports the verified wallet transition            |
+| `independent-crash-after-swap` | SIGKILL the successful receiver before local credit or publication | Restart restores its prepared outputs, then both journals converge                    |
+| `independent-relay-outage`     | Both relay servers stop before concurrent redemption               | Restart the relays; retry publishes the durable outbox and synchronizes both journals |
+
+The losing client remains `awaiting-peer` until it can retrieve the complete signed
+kind:7375 token and kind:7376 redemption history. It verifies the wallet author,
+signature, NIP-44 payloads, nutzap/token references, sender, mint, sat unit, amount
+after fees, unique output proofs, spent source inputs and unspent outputs. The
+funded mint port also checks output DLEQ. Conflicting histories, incomplete evidence
+and relay failures cannot create a balance. A journal transaction prevents the same
+output proofs from being counted again under another nutzap receipt.
+
+Importing this transition replicates an existing balance: `credits` counts local
+redemptions, while `balance` includes imported proofs. Reports require local credit
+counts `[0, 1]` and equal balances in both journals. Those balances are two views of
+the same money and must not be added together. Retries publish the original signed
+events; they do not create another receipt.
+
+This is a bounded recovery lab using fresh, disposable journals, two configured
+loopback relays and one receiver implementation. It does not implement general
+wallet synchronization after further spending or migrate existing wallet databases.
+Recovery requires the winner's private journal to survive the crash: permanent loss
+of unpublished output secrets is outside the guarantee. The scenarios provide lab
+receiver evidence, not certification of independently developed wallet products.
+Upstream wallet adoption, public-relay discovery, key rotation, NIP-65 sender
+read-relay discovery and custom external adapters remain future work. The existing
+wallet doctor remains read-only.
 
 ## Evidence
 
@@ -87,6 +123,11 @@ single-scenario report with `nutzap replay`.
 
 The tests include canaries for duplicate credit, changed value, missing relay history,
 invalid recovered outputs, pending inputs, report tampering, and incorrect seeds.
+Independent-wallet evidence additionally requires distinct database files and output
+plans, two swap attempts with exactly one success, one imported balance, matching
+wallet event IDs, and an observed wait for peer evidence. The outage case requires
+failed network probes while both servers are stopped. Tests also reject forged or
+conflicting peer events, spent/invalid outputs and duplicate output accounting.
 Run the Docker-free lane with `pnpm test:nutzap`. The funded lane also checks invalid
 input DLEQ rejection without spending and replay with fresh proofs.
 

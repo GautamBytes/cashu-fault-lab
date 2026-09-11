@@ -64,18 +64,22 @@ qualification or certification.
 ## Test NIP-61 nutzap recovery
 
 The opt-in NIP-61 suite tests duplicate relay delivery, concurrent receiver processes,
-SIGKILL after mint redemption, and lost swap/publication responses. It checks one
-economic credit, conserved value after fees, and converged NIP-60 token/history events.
+SIGKILL after mint redemption, and lost swap/publication responses. Three additional
+cases use two separate wallet databases to test simultaneous redemption, recovery
+after SIGKILL, and a relay outage. It checks one economic credit, conserved value
+after fees, and converged NIP-60 balances and token/history events.
 
 ```bash
 pnpm lab nutzap matrix --seed demo --output artifacts/nutzap-matrix.json
+pnpm lab nutzap run independent-crash-after-swap --seed demo
 pnpm test:nutzap:funded
 ```
 
 The default matrix labels its mint as simulated. The funded test starts pinned
 Nutshell with fake Lightning funding and runs real cashu-ts P2PK/DLEQ swaps and
-NUT-09 restoration. Concurrent workers share a durable wallet journal; independent
-wallet implementations are outside this initial profile. See [nutzap recovery](docs/nutzap-recovery.md).
+NUT-09 restoration. The independent-database cases use separate SDK instances for
+the same wallet identity and synchronize through signed, encrypted relay events.
+Independent wallet implementations are outside this profile. See [nutzap recovery](docs/nutzap-recovery.md).
 
 ## Diagnose NIP-60 wallet state across relays
 

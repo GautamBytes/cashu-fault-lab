@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, closeSync, openSync } from 'node:fs';
 import type { Event } from 'nostr-tools';
-import { proofY, type Nutzap } from './protocol.js';
+import { proofY, type Nutzap, type NutzapProof } from './protocol.js';
 import type { PreparedRedemption, RedemptionRecord } from './types.js';
 
 /** Private, disposable single-wallet journal. Transactions never span network calls. */
@@ -15,6 +15,7 @@ export class Journal {
     this.#db
       .exec(`CREATE TABLE IF NOT EXISTS redemptions(id TEXT PRIMARY KEY, record TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS inputs(mint TEXT, y TEXT, redemption TEXT NOT NULL, PRIMARY KEY(mint,y));
+      CREATE TABLE IF NOT EXISTS outputs(mint TEXT, y TEXT, redemption TEXT NOT NULL, PRIMARY KEY(mint,y));
       CREATE TABLE IF NOT EXISTS acknowledgements(id TEXT, target TEXT, PRIMARY KEY(id,target));`);
   }
   get(id: string): RedemptionRecord | undefined {
@@ -53,13 +54,25 @@ export class Journal {
       throw error;
     }
   }
-  credit(id: string, amount: number, events: Event[]): RedemptionRecord {
+  credit(
+    id: string,
+    amount: number,
+    events: Event[],
+    proofs: NutzapProof[],
+    origin: 'local' | 'relay' = 'local',
+  ): RedemptionRecord {
     this.#db.exec('BEGIN IMMEDIATE');
     try {
       const record = this.get(id);
       if (!record) throw Error('Missing prepared nutzap');
       if (record.credit === null) {
+        // A second receipt must not turn the same bearer proofs into a second balance.
+        for (const proof of proofs)
+          this.#db
+            .prepare('INSERT INTO outputs VALUES(?,?,?)')
+            .run(record.zap.mint, proofY(proof), id);
         record.credit = amount;
+        record.origin = origin;
         record.events = events;
         this.#db
           .prepare('UPDATE redemptions SET record=? WHERE id=?')
@@ -81,7 +94,7 @@ export class Journal {
       .all()
       .map((r) => JSON.parse(String(r.record)) as RedemptionRecord);
     return {
-      credits: records.filter((r) => r.credit !== null).length,
+      credits: records.filter((r) => r.credit !== null && r.origin !== 'relay').length,
       balance: records.reduce((sum, r) => sum + (r.credit ?? 0), 0),
     };
   }
