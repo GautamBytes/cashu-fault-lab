@@ -461,3 +461,21 @@ jobs:
       - name: Stop ${{ matrix.mint.name }} fake-wallet mint
         if: always()
         run: docker compose -f "${{ matrix.mint.compose_file }}" down -v
+
+  funded-nutzap-recovery:
+    name: Funded NIP-61 nutzap recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:nutzap:funded

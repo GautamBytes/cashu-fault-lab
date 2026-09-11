@@ -28,6 +28,7 @@ import { createAdapterPreviewArtifacts, validateLocalFaultGateway } from './adap
 import { registerAdapterCommands } from './commands/adapter.js';
 import { registerLifecycleCommands } from './commands/lifecycle.js';
 import { registerWalletDoctorCommands } from './commands/wallet-doctor.js';
+import { registerNutzapCommands } from './commands/nutzap.js';
 import { createEnvironmentLifecycleRuntime } from './lifecycle-runtime.js';
 import {
   LabDiagnosticError,
@@ -316,6 +317,9 @@ export async function runCli(
     .exitOverride()
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr });
 
+  registerNutzapCommands(program, io, (code) => {
+    exitCode = code;
+  });
   registerLifecycleCommands(program, {
     io,
     runtime,
