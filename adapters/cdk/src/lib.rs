@@ -6,6 +6,7 @@ pub mod http_transport;
 pub mod lifecycle;
 pub mod lifecycle_store;
 pub mod lightning_probe;
+pub mod nutzap;
 pub mod server;
 
 pub use contract::{

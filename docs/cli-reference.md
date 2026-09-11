@@ -35,6 +35,7 @@ Options:
 
 - `--seed <seed>`: Reproduction seed; only the hash is reported. Default: `nutzap-demo`.
 - `--mint-url <url>`: Disposable HTTP mint on 127.0.0.1; omitted means simulated evidence.
+- `--cdk-receiver <path>`: Native CDK receiver binary; requires --mint-url and adds cross-language matrix scenarios.
 - `--output <path>`: Write redacted JSON evidence.
 
 Modes: `json`
@@ -60,6 +61,7 @@ Options:
 
 - `--seed <seed>`: Reproduction seed; only the hash is reported. Default: `nutzap-demo`.
 - `--mint-url <url>`: Disposable HTTP mint on 127.0.0.1; omitted means simulated evidence.
+- `--cdk-receiver <path>`: Native CDK receiver binary; requires --mint-url and adds cross-language matrix scenarios.
 - `--output <path>`: Write redacted JSON evidence.
 
 Modes: `json`
@@ -89,6 +91,7 @@ Options:
 
 - `--seed <seed>`: Reproduction seed; only the hash is reported. Default: `nutzap-demo`.
 - `--mint-url <url>`: Disposable HTTP mint on 127.0.0.1; omitted means simulated evidence.
+- `--cdk-receiver <path>`: Native CDK receiver binary; requires --mint-url and adds cross-language matrix scenarios.
 - `--output <path>`: Write redacted JSON evidence.
 
 Modes: `json`

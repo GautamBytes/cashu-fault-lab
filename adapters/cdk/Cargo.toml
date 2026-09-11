@@ -1,5 +1,6 @@
 [package]
 name = "cashu-fault-lab-cdk-adapter"
+default-run = "cashu-fault-lab-cdk-adapter"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
@@ -15,11 +16,14 @@ cdk-sqlite = { version = "=0.17.3", features = ["sqlcipher"] }
 ciborium = "=0.2.2"
 getrandom = "=0.3.4"
 hex = "=0.4.3"
+futures-util = "=0.3.33"
+nostr = { version = "=0.45.5", features = ["nip44", "os-rng"] }
 reqwest = { version = "=0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "=0.31.0", features = ["bundled-sqlcipher"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.150"
 tokio = { version = "=1.53.0", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-tungstenite = "=0.26.2"
 url = "=2.5.8"
 cashu_fault_lab_wallet_lifecycle_contract = { path = "../../packages/wallet-lifecycle-contract/generated/rust" }
 

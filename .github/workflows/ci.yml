@@ -465,7 +465,7 @@ jobs:
   funded-nutzap-recovery:
     name: Funded NIP-61 nutzap recovery
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
@@ -478,4 +478,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Pin Rust toolchain for native nutzap receiver
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          rustup override set 1.97.0
       - run: pnpm test:nutzap:funded

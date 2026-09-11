@@ -17,6 +17,12 @@ export interface NutzapEvidence {
   faultObserved: boolean;
   killedAfterSwap: boolean;
   completed: boolean;
+  crossLanguage?: {
+    receivers: string[];
+    cdkProcessObserved: boolean;
+    crashedReceiver: 'none' | 'cashu-ts' | 'cdk';
+    privateJournals: boolean;
+  };
   independent?: {
     databasesDistinct: boolean;
     plansDistinct: boolean;
@@ -59,12 +65,16 @@ export function verifyNutzapEvidence(
       e.historyReferencesMatch === true,
     'fault-exercised': e.faultObserved === true,
     'crash-confirmed':
-      !['crash-after-swap', 'independent-crash-after-swap'].includes(scenarioId ?? '') ||
-      e.killedAfterSwap === true,
+      ![
+        'crash-after-swap',
+        'independent-crash-after-swap',
+        'cdk-crash-after-swap',
+        'cdk-peer-crash-after-swap',
+      ].includes(scenarioId ?? '') || e.killedAfterSwap === true,
     'wallet-payloads-match': e.walletPayloadsMatch === true,
     recovered: e.completed === true,
   };
-  if (scenarioId?.startsWith('independent-')) {
+  if (scenarioId?.startsWith('independent-') || scenarioId?.startsWith('cdk-')) {
     const i = e.independent;
     checks['independent-wallets'] =
       !!i &&
@@ -82,6 +92,20 @@ export function verifyNutzapEvidence(
       i.awaitingPeerObserved === true;
     checks['relay-outage'] =
       scenarioId !== 'independent-relay-outage' || i?.relayOutageObserved === true;
+  }
+  if (scenarioId?.startsWith('cdk-')) {
+    const c = e.crossLanguage;
+    checks['cross-language-receivers'] =
+      !!c &&
+      c.cdkProcessObserved === true &&
+      c.privateJournals === true &&
+      JSON.stringify(c.receivers) === '["cashu-ts/4.7.2","cdk/0.17.3 + nostr/0.45.5"]' &&
+      c.crashedReceiver ===
+        (scenarioId === 'cdk-crash-after-swap'
+          ? 'cdk'
+          : scenarioId === 'cdk-peer-crash-after-swap'
+            ? 'cashu-ts'
+            : 'none');
   }
   const failures = Object.entries(checks)
     .filter(([, ok]) => !ok)

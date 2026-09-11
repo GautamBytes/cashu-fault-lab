@@ -79,7 +79,10 @@ The default matrix labels its mint as simulated. The funded test starts pinned
 Nutshell with fake Lightning funding and runs real cashu-ts P2PK/DLEQ swaps and
 NUT-09 restoration. The independent-database cases use separate SDK instances for
 the same wallet identity and synchronize through signed, encrypted relay events.
-Independent wallet implementations are outside this profile. See [nutzap recovery](docs/nutzap-recovery.md).
+The funded lane also runs a separately implemented Rust/CDK receiver against
+cashu-ts, including crashes in both directions and replay. It requires Rust 1.97;
+these are lab receivers, not certification of external wallet products.
+See [nutzap recovery](docs/nutzap-recovery.md).
 
 ## Diagnose NIP-60 wallet state across relays
 

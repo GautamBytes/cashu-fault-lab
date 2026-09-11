@@ -60,6 +60,11 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
                 flags: '--mint-url <url>',
                 description: 'Disposable HTTP mint on 127.0.0.1; omitted means simulated evidence.',
               },
+              {
+                flags: '--cdk-receiver <path>',
+                description:
+                  'Native CDK receiver binary; requires --mint-url and adds cross-language matrix scenarios.',
+              },
               { flags: '--output <path>', description: 'Write redacted JSON evidence.' },
             ],
       examples: [

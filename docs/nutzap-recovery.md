@@ -28,9 +28,10 @@ interoperability evidence.
 pnpm test:nutzap:funded
 ```
 
-Requires Node 24 and Docker. The script starts a uniquely named stack using the
-repository's pinned Nutshell and Redis images, selects a loopback port, runs all
-eight scenarios, and removes only that stack and its volumes. Nutshell uses FakeWallet
+Requires Node 24, Rust 1.97 and Docker on macOS or Linux. The script builds the native
+CDK receiver, starts a uniquely named stack using the repository's pinned Nutshell
+and Redis images, selects a loopback port, runs all eleven scenarios, and removes
+only that stack and its volumes. Nutshell uses FakeWallet
 Lightning funding; no real sats are required. Missing infrastructure fails the lane.
 The funded mode uses cashu-ts 4.7.2 for actual P2PK proof creation, DLEQ validation,
 swap, NUT-09 output recovery, and NUT-07 proof states.
@@ -92,8 +93,9 @@ counts `[0, 1]` and equal balances in both journals. Those balances are two view
 the same money and must not be added together. Retries publish the original signed
 events; they do not create another receipt.
 
-This is a bounded recovery lab using fresh, disposable journals, two configured
-loopback relays and one receiver implementation. It does not implement general
+The `independent-*` cases use one receiver implementation. All cases are bounded
+recovery tests using fresh, disposable journals and two configured loopback relays.
+They do not implement general
 wallet synchronization after further spending or migrate existing wallet databases.
 Recovery requires the winner's private journal to survive the crash: permanent loss
 of unpublished output secrets is outside the guarantee. The scenarios provide lab
@@ -101,6 +103,53 @@ receiver evidence, not certification of independently developed wallet products.
 Upstream wallet adoption, public-relay discovery, key rotation, NIP-65 sender
 read-relay discovery and custom external adapters remain future work. The existing
 wallet doctor remains read-only.
+
+## Native CDK interoperability
+
+The funded `cdk-*` cases pair the TypeScript/cashu-ts receiver with a separately
+implemented Rust receiver. Rust owns its SQLite journal, HTTP mint requests, CDK
+0.17.3 blinding/P2PK/DLEQ operations, NUT-09 restoration, WebSocket connections, and
+NIP-60 signing/encryption through nostr 0.45.5. It does not call the TypeScript
+receiver or ask the harness to redeem or publish on its behalf. The harness controls
+checkpoint ordering and observes results; it reads both journals without modifying
+them and independently queries the mint and relays.
+
+| Scenario                    | Required behavior                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `cdk-concurrent`            | Both implementations prepare separate outputs and race; exactly one swap succeeds and both journals converge |
+| `cdk-crash-after-swap`      | Force CDK to win, SIGKILL it before credit/history, then recover from its saved blinding data                |
+| `cdk-peer-crash-after-swap` | Force cashu-ts to win and crash; CDK waits for and verifies the recovered wallet transition                  |
+
+Both crash directions and the concurrent case are replayed with fresh proofs in the
+funded test lane. That lane also checks native DLEQ rejection without spending and
+CDK crash/replay through the npm-installed CLI outside the repository.
+Evidence requires the expected crashed process, separate private
+journals/output plans, one economic credit, matching NIP-60 events and conserved
+value. Receiver keys enter the Rust process through stdin; reports contain no keys,
+proof secrets or blinding data. Mint/relay responses and process messages are bounded.
+
+To run against an already-running disposable, automatically funded mint:
+
+```bash
+cargo build --locked --manifest-path adapters/cdk/Cargo.toml --bin cdk-nutzap-receiver
+pnpm lab nutzap run cdk-crash-after-swap --seed demo \
+  --mint-url http://127.0.0.1:3358 \
+  --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver" \
+  --output artifacts/nutzap-cdk.json
+pnpm lab nutzap replay artifacts/nutzap-cdk.json --seed demo \
+  --mint-url http://127.0.0.1:3358 \
+  --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver"
+```
+
+`nutzap list` includes all eleven cases. The default `nutzap matrix` still runs the
+eight cases that support simulation. Supplying `--cdk-receiver` and `--mint-url`
+adds the three native cases. Missing native infrastructure fails explicitly; it
+never falls back to simulation. The npm CLI requires a separately built receiver
+binary. `CFL_NUTZAP_CDK_RECEIVER` can select an existing binary for the funded test
+script; otherwise that script builds it and respects `CARGO_TARGET_DIR`.
+
+These are two lab-maintained receivers built on different SDKs. They are not evidence
+of upstream wallet adoption or certification of an external wallet application.
 
 ## Evidence
 

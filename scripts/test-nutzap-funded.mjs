@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 const compose = [
   'compose',
   '-p',
@@ -19,6 +20,9 @@ const env = {
   ...process.env,
   CFL_NUTSHELL_PORT: String(port),
   CFL_NUTZAP_MINT_URL: `http://127.0.0.1:${port}`,
+  CFL_NUTZAP_CDK_RECEIVER:
+    process.env.CFL_NUTZAP_CDK_RECEIVER ??
+    resolve(process.env.CARGO_TARGET_DIR ?? 'adapters/cdk/target', 'debug/cdk-nutzap-receiver'),
 };
 async function run(command, args, timeout = 180000) {
   await new Promise((resolve, reject) => {
@@ -36,6 +40,19 @@ async function run(command, args, timeout = 180000) {
 }
 let started = false;
 try {
+  if (!process.env.CFL_NUTZAP_CDK_RECEIVER)
+    await run(
+      'cargo',
+      [
+        'build',
+        '--locked',
+        '--manifest-path',
+        'adapters/cdk/Cargo.toml',
+        '--bin',
+        'cdk-nutzap-receiver',
+      ],
+      600000,
+    );
   await run('docker', ['info', '--format', '{{.ServerVersion}}'], 10000);
   started = true;
   await run('docker', [...compose, 'up', '-d', '--wait'], 300000);
@@ -48,6 +65,7 @@ try {
     'run',
     'test/nutzap-funded.test.ts',
   ]);
+  await run('pnpm', ['test:npm-package']);
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;
