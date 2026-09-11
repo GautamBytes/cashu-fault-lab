@@ -61,6 +61,22 @@ automatically manages its local fault gateway and writes redacted JSON, HTML, JU
 replay evidence to `cashu-fault-results/`. Share the bundle for developer feedback, not as release
 qualification or certification.
 
+## Test NIP-61 nutzap recovery
+
+The opt-in NIP-61 suite tests duplicate relay delivery, concurrent receiver processes,
+SIGKILL after mint redemption, and lost swap/publication responses. It checks one
+economic credit, conserved value after fees, and converged NIP-60 token/history events.
+
+```bash
+pnpm lab nutzap matrix --seed demo --output artifacts/nutzap-matrix.json
+pnpm test:nutzap:funded
+```
+
+The default matrix labels its mint as simulated. The funded test starts pinned
+Nutshell with fake Lightning funding and runs real cashu-ts P2PK/DLEQ swaps and
+NUT-09 restoration. Concurrent workers share a durable wallet journal; independent
+wallet implementations are outside this initial profile. See [nutzap recovery](docs/nutzap-recovery.md).
+
 ## Diagnose NIP-60 wallet state across relays
 
 The NIP-60 wallet doctor is an opt-in diagnostic lane: it collects one wallet's events from

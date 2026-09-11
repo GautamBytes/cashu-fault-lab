@@ -59,6 +59,7 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     const paths = packResult.files.map(({ path }) => path);
     assert.ok(paths.includes('LICENSE'));
     assert.ok(paths.includes('dist/bin.js'));
+    assert.ok(paths.includes('dist/nutzap-worker.js'));
     assert.ok(paths.includes('runtime/scenarios/retry/response-lost.json'));
     assert.ok(paths.includes('runtime/spec/maintainer-preview-suite.json'));
     assert.ok(paths.includes('runtime/compose/wallet-adapters.compose.yml'));
@@ -82,6 +83,18 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     const version = await run(process.execPath, [cli, '--version'], { cwd: installRoot });
     assert.equal(version.exitCode, 0, version.stderr);
     assert.equal(version.stdout.trim(), packageVersion);
+
+    const nutzap = await run(
+      process.execPath,
+      [cli, 'nutzap', 'run', 'crash-after-swap', '--seed', 'installed-nutzap'],
+      { cwd: installRoot },
+    );
+    assert.equal(nutzap.exitCode, 0, nutzap.stderr);
+    const nutzapReport = JSON.parse(nutzap.stdout);
+    assert.equal(nutzapReport.status, 'passed');
+    assert.equal(nutzapReport.mode, 'simulated');
+    assert.equal(nutzapReport.evidence.killedAfterSwap, true);
+    assert.equal(nutzapReport.evidence.credits, 1);
 
     const scenarios = await run(process.execPath, [cli, 'ls', '--json'], { cwd: installRoot });
     assert.equal(scenarios.exitCode, 0, scenarios.stderr);

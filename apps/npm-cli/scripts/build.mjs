@@ -45,6 +45,19 @@ await build({
 });
 await chmod(`${dist}/bin.js`, 0o755);
 
+// Child receiver entrypoint must remain available outside the monorepo.
+await build({
+  entryPoints: [`${repositoryRoot}/packages/nutzap-recovery/src/nutzap-worker.ts`],
+  outfile: `${dist}/nutzap-worker.js`,
+  platform: 'node',
+  format: 'esm',
+  target: 'node24',
+  bundle: true,
+  banner: {
+    js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
+  },
+});
+
 await Promise.all([
   cp(`${repositoryRoot}/LICENSE`, license),
   cp(`${repositoryRoot}/scenarios`, `${runtime}/scenarios`, { recursive: true }),

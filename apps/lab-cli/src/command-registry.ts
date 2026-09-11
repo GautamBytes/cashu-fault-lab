@@ -36,6 +36,41 @@ const COMMON_EXIT_CODES: readonly CliExitCodeDefinition[] = [
 
 export function createCommandRegistry(): readonly CliCommandDefinition[] {
   return [
+    ...(['list', 'run', 'matrix', 'replay'] as const).map((action): CliCommandDefinition => ({
+      name: `nutzap ${action}`,
+      usage: `cashu-fault-lab nutzap ${action}${action === 'run' ? ' <scenario>' : action === 'replay' ? ' <artifact>' : ''}`,
+      summary:
+        'Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.',
+      arguments:
+        action === 'run'
+          ? [{ value: 'scenario', description: 'A packaged NIP-61 scenario ID.' }]
+          : action === 'replay'
+            ? [{ value: 'artifact', description: 'Single-scenario redacted JSON report.' }]
+            : [],
+      options:
+        action === 'list'
+          ? []
+          : [
+              {
+                flags: '--seed <seed>',
+                description: 'Reproduction seed; only the hash is reported.',
+                defaultValue: 'nutzap-demo',
+              },
+              {
+                flags: '--mint-url <url>',
+                description: 'Disposable HTTP mint on 127.0.0.1; omitted means simulated evidence.',
+              },
+              { flags: '--output <path>', description: 'Write redacted JSON evidence.' },
+            ],
+      examples: [
+        'cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json',
+        'cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo',
+      ],
+      env: [],
+      modes: ['json'],
+      artifacts: action === 'list' ? [] : ['--output JSON report'],
+      exitCodes: COMMON_EXIT_CODES,
+    })),
     {
       name: 'up',
       usage: 'cashu-fault-lab up',

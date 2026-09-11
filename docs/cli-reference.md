@@ -4,6 +4,108 @@
 
 Global diagnostic option: `--json` before a command emits machine-readable diagnostics for command-level failures.
 
+## `cashu-fault-lab nutzap list`
+
+Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.
+
+Modes: `json`
+Environment: None
+Artifacts: None
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
+- `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
+
+## `cashu-fault-lab nutzap run <scenario>`
+
+Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.
+
+Arguments:
+
+- `scenario`: A packaged NIP-61 scenario ID.
+
+Options:
+
+- `--seed <seed>`: Reproduction seed; only the hash is reported. Default: `nutzap-demo`.
+- `--mint-url <url>`: Disposable HTTP mint on 127.0.0.1; omitted means simulated evidence.
+- `--output <path>`: Write redacted JSON evidence.
+
+Modes: `json`
+Environment: None
+Artifacts: `--output JSON report`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
+- `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
+
+## `cashu-fault-lab nutzap matrix`
+
+Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.
+
+Options:
+
+- `--seed <seed>`: Reproduction seed; only the hash is reported. Default: `nutzap-demo`.
+- `--mint-url <url>`: Disposable HTTP mint on 127.0.0.1; omitted means simulated evidence.
+- `--output <path>`: Write redacted JSON evidence.
+
+Modes: `json`
+Environment: None
+Artifacts: `--output JSON report`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
+- `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
+
+## `cashu-fault-lab nutzap replay <artifact>`
+
+Exercise NIP-61 duplicate delivery, concurrent redemption and durable crash recovery.
+
+Arguments:
+
+- `artifact`: Single-scenario redacted JSON report.
+
+Options:
+
+- `--seed <seed>`: Reproduction seed; only the hash is reported. Default: `nutzap-demo`.
+- `--mint-url <url>`: Disposable HTTP mint on 127.0.0.1; omitted means simulated evidence.
+- `--output <path>`: Write redacted JSON evidence.
+
+Modes: `json`
+Environment: None
+Artifacts: `--output JSON report`
+
+Exit Codes:
+
+- `0`: Command completed successfully.
+- `1`: The lab operation completed with a failed scenario or gate.
+- `2`: Command input, configuration, or environment was invalid.
+
+Examples:
+
+- `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
+- `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
+
 ## `cashu-fault-lab up`
 
 Start the local lab services

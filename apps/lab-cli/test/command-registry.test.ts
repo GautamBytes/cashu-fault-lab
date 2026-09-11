@@ -9,6 +9,10 @@ describe('CLI command registry', () => {
     const byName = new Map(registry.map((command) => [command.name, command]));
 
     expect([...byName.keys()]).toEqual([
+      'nutzap list',
+      'nutzap run',
+      'nutzap matrix',
+      'nutzap replay',
       'up',
       'down',
       'adapter init',

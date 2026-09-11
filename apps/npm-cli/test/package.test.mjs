@@ -6,6 +6,17 @@ import { fileURLToPath } from 'node:url';
 
 const packageRoot = new URL('../', import.meta.url);
 
+test('bundled nutzap worker survives crash recovery outside the workspace CLI', async () => {
+  const result = await run(['nutzap', 'run', 'crash-after-swap', '--seed', 'package-regression']);
+  assert.equal(result.exitCode, 0, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, 'passed');
+  assert.equal(report.mode, 'simulated');
+  assert.equal(report.evidence.killedAfterSwap, true);
+  assert.equal(report.evidence.credits, 1);
+  assert.doesNotMatch(result.stdout, /package-regression|"secret"|"keyHex"|"material"/);
+});
+
 function run(args) {
   return new Promise((resolve, reject) => {
     const child = spawn(

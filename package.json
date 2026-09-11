@@ -13,7 +13,7 @@
     "quickstart": "./scripts/quickstart",
     "test": "pnpm test:unit",
     "test:unit": "node --test scripts/test-tiers.test.mjs scripts/developer-environment.test.mjs scripts/docker-context.test.mjs scripts/quickstart.test.mjs scripts/release-metadata.test.mjs scripts/npm-package.test.mjs && pnpm test:unit:packages",
-    "test:unit:packages": "turbo run test -- --exclude 'test/postgres-state.test.ts' --exclude 'test/postgres-store.test.ts' --exclude 'test/crash-recovery.test.ts' --exclude 'test/postgres-receiver-store.test.ts' --exclude 'test/docker-mint-e2e.test.ts' --exclude 'test/docker-funded-e2e.test.ts' --exclude 'test/nostr-relay-e2e.test.ts' --exclude 'test/cross-language-docker.test.ts' --exclude 'test/funded-lifecycle.test.ts' --exclude 'test/regtest-melt.test.ts' --exclude 'test/wallet-doctor-cli-e2e.test.ts' --exclude 'test/funded-doctor.test.ts'",
+    "test:unit:packages": "turbo run test -- --exclude 'test/postgres-state.test.ts' --exclude 'test/postgres-store.test.ts' --exclude 'test/crash-recovery.test.ts' --exclude 'test/postgres-receiver-store.test.ts' --exclude 'test/docker-mint-e2e.test.ts' --exclude 'test/docker-funded-e2e.test.ts' --exclude 'test/nostr-relay-e2e.test.ts' --exclude 'test/cross-language-docker.test.ts' --exclude 'test/funded-lifecycle.test.ts' --exclude 'test/regtest-melt.test.ts' --exclude 'test/wallet-doctor-cli-e2e.test.ts' --exclude 'test/funded-doctor.test.ts' --exclude 'test/nutzap-funded.test.ts'",
     "test:integration": "node scripts/test-environment.mjs docker --skip-unavailable -- pnpm test:integration:run",
     "test:integration:run": "pnpm --filter @cashu-fault-lab/reference-sender exec vitest run test/postgres-state.test.ts && pnpm --filter @cashu-fault-lab/reference-receiver exec vitest run test/postgres-store.test.ts test/crash-recovery.test.ts && pnpm --filter @cashu-fault-lab/adapter-cashu-ts exec vitest run test/postgres-receiver-store.test.ts",
     "test:funded": "node scripts/test-environment.mjs funded -- pnpm test:funded:run",
@@ -42,7 +42,9 @@
     "website:test": "pnpm --filter @cashu-fault-lab/website test",
     "website:test:e2e": "pnpm --filter @cashu-fault-lab/website test:e2e",
     "format:check": "prettier --check .",
-    "audit": "pnpm audit --prod"
+    "audit": "pnpm audit --prod",
+    "test:nutzap:funded": "node scripts/test-nutzap-funded.mjs",
+    "test:nutzap": "pnpm exec turbo run build --filter=@cashu-fault-lab/nutzap-recovery && pnpm --filter @cashu-fault-lab/nutzap-recovery exec vitest run --exclude test/nutzap-funded.test.ts"
   },
   "devDependencies": {
     "@types/node": "26.1.1",

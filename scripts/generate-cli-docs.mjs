@@ -1,23 +1,18 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { Buffer } from 'node:buffer';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { stripTypeScriptTypes } from 'node:module';
 import { format } from 'prettier';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = fileURLToPath(new URL('..', import.meta.url));
 const registryPath = resolve(root, 'apps/lab-cli/src/command-registry.ts');
 const outputPath = resolve(root, 'docs/cli-reference.md');
 const check = process.argv.includes('--check');
 
 async function loadRegistry() {
   const source = await readFile(registryPath, 'utf8');
-  const executable = source
-    .replace(/export interface [\s\S]*?\n}\n/g, '')
-    .replace(/const COMMON_EXIT_CODES:[^=]+=/, 'const COMMON_EXIT_CODES =')
-    .replace(
-      /export function createCommandRegistry\(\): readonly CliCommandDefinition\[]/,
-      'function createCommandRegistry()',
-    )
-    .concat('\nexport { createCommandRegistry };\n');
+  const executable = stripTypeScriptTypes(source);
   const encoded = Buffer.from(executable, 'utf8').toString('base64');
   const mod = await import(`data:text/javascript;base64,${encoded}`);
   return mod.createCommandRegistry();
