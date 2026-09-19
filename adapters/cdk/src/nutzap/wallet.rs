@@ -11,13 +11,15 @@ pub(super) fn decrypt(event: &Event, keys: &Keys) -> Result<Value> {
     serde_json::from_str(&plain).map_err(|_| "invalid_wallet_payload")
 }
 
+type Candidate = (Event, Vec<Proof>, Vec<String>);
+
 // Only signature/shape checks here. Every returned candidate still needs DLEQ and mint states.
 fn candidates(
     record: &Record,
     keys: &Keys,
     events: Vec<Event>,
     retired: &mut BTreeSet<String>,
-) -> Result<Vec<(Event, Vec<Proof>, Vec<String>)>> {
+) -> Result<Vec<Candidate>> {
     let original = record
         .events
         .iter()
@@ -213,7 +215,7 @@ mod tests {
         let keys = Keys::parse(&config.key_hex).unwrap();
         let zap = protocol::validate(&config).unwrap();
         let proof = super::super::tests::output(&zap, "wallet-original");
-        let events = protocol::wallet_events(&zap, &[proof.clone()], &keys).unwrap();
+        let events = protocol::wallet_events(&zap, std::slice::from_ref(&proof), &keys).unwrap();
         let record = Record {
             zap,
             plan: super::super::Plan {

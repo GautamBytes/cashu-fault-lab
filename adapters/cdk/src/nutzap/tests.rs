@@ -234,7 +234,7 @@ fn spend_reservation_survives_stale_sync_and_keeps_original_credit() {
     let zap = protocol::validate(&f).unwrap();
     let keys = Keys::parse(&f.key_hex).unwrap();
     let proof = output(&zap, "reserved-output");
-    let events = protocol::wallet_events(&zap, &[proof.clone()], &keys).unwrap();
+    let events = protocol::wallet_events(&zap, std::slice::from_ref(&proof), &keys).unwrap();
     let path = std::env::temp_dir().join(format!("cdk-spend-{}.sqlite", uuid::Uuid::new_v4()));
     let record = Record {
         zap,
@@ -252,8 +252,13 @@ fn spend_reservation_survives_stale_sync_and_keeps_original_credit() {
     };
     let mut db = Journal::open(&path).unwrap();
     db.reserve(&record).unwrap();
-    db.credit(&record, &[proof.clone()], events.clone(), "local")
-        .unwrap();
+    db.credit(
+        &record,
+        std::slice::from_ref(&proof),
+        events.clone(),
+        "local",
+    )
+    .unwrap();
     let plan = SpendPlan {
         plan: Plan {
             material: "durable-blinding".into(),
