@@ -13,5 +13,11 @@ describe('nutzap replay evidence', () => {
       ),
     ).rejects.toThrow();
     await expect(replayNutzapReport(original, 'wrong')).rejects.toThrow();
+    await expect(
+      replayNutzapReport(
+        { ...original, implementations: { ...original.implementations, mint: 'other/1.0' } },
+        'replay-seed',
+      ),
+    ).rejects.toThrow('mint implementation mismatch');
   }, 30_000);
 });

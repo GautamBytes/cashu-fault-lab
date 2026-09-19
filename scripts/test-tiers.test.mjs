@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const root = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
@@ -67,7 +68,7 @@ test('strict funded preflight accepts a command without optional flags', () => {
   const result = spawnSync(
     process.execPath,
     [
-      new URL('./test-environment.mjs', import.meta.url).pathname,
+      fileURLToPath(new URL('./test-environment.mjs', import.meta.url)),
       'funded',
       '--',
       process.execPath,
@@ -142,4 +143,15 @@ test('lifecycle suites build the runner dependency graph before executing specs'
     root.scripts['test:lifecycle:regtest:run'],
     /vitest run test\/regtest-melt\.test\.ts$/,
   );
+});
+
+test('nutzap funded matrix rejects unknown mint selectors before starting infrastructure', () => {
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL('./test-nutzap-funded.mjs', import.meta.url)), '--mint', 'unsupported'],
+    { encoding: 'utf8', env: { PATH: '' } },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Usage:.*--mint nutshell\|mintd/);
+  assert.doesNotMatch(result.stderr, /spawn|ENOENT/);
 });

@@ -27,6 +27,7 @@ describe('canonical content', () => {
       'adapters',
       'wallet-lifecycle',
       'wallet-doctor',
+      'nutzap-recovery',
       'architecture',
       'delivery-profile',
       'invariants',

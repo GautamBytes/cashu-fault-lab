@@ -12,6 +12,12 @@ services:
       CDK_MINTD_DATABASE: sqlite
       CDK_MINTD_CACHE_BACKEND: memory
       CDK_MINTD_MNEMONIC: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+    healthcheck:
+      test:
+        ['CMD', 'wget', '--quiet', '--output-document=/dev/null', 'http://127.0.0.1:8085/v1/info']
+      interval: 2s
+      timeout: 2s
+      retries: 60
     ports:
       - '127.0.0.1:${CFL_CDK_MINT_PORT:-8085}:8085'
     networks: [cashu-fault-lab-mints]

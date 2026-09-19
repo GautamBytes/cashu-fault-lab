@@ -1,11 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { writeFile } from 'node:fs/promises';
 import {
   runNutzapScenario,
   SCENARIOS,
   CDK_SCENARIOS,
   verifyNutzapEvidence,
 } from '../src/runner.js';
-import { FundedMint } from '../src/funded-mint.js';
+import { FundedMint, readMintImplementation } from '../src/funded-mint.js';
+import type { NutzapReport } from '../src/evidence.js';
 import { replayNutzapReport } from '../src/replay.js';
 import { finalizeEvent, getPublicKey } from 'nostr-tools';
 import { join } from 'node:path';
@@ -13,6 +15,23 @@ import { createNutzapSession } from '../src/session.js';
 import { runCdkReceiver } from '../src/cdk-process.js';
 import type { Nutzap } from '../src/protocol.js';
 describe('funded NIP-61 recovery', () => {
+  const expectedMint = process.env.CFL_NUTZAP_EXPECTED_MINT;
+  beforeAll(async () => {
+    const mintUrl = process.env.CFL_NUTZAP_MINT_URL;
+    if (!mintUrl || !expectedMint) throw Error('Run pnpm test:nutzap:funded');
+    expect(await readMintImplementation(mintUrl)).toBe(expectedMint);
+  });
+  async function retain(report: NutzapReport) {
+    expect(report.implementations.mint).toBe(expectedMint);
+    const directory = process.env.CFL_NUTZAP_REPORT_DIR;
+    if (directory)
+      await writeFile(
+        join(directory, `${report.scenarioId}.json`),
+        `${JSON.stringify(report, null, 2)}\n`,
+        { mode: 0o600 },
+      );
+  }
+
   it('native CDK rejects forged DLEQ before any swap checkpoint or source spend', async () => {
     const mintUrl = process.env.CFL_NUTZAP_MINT_URL;
     const binary = process.env.CFL_NUTZAP_CDK_RECEIVER;
@@ -66,6 +85,7 @@ describe('funded NIP-61 recovery', () => {
       if (!mintUrl || !cdkReceiver) throw Error('Run pnpm test:nutzap:funded');
       const options = { mintUrl, cdkReceiver };
       const result = await runNutzapScenario(id, 'funded-native-cdk', options);
+      expect(result.implementations.mint).toBe(expectedMint);
       expect(result.mode).toBe('funded');
       expect(result.status, JSON.stringify(result)).toBe('passed');
       expect(result.evidence.crossLanguage?.cdkProcessObserved).toBe(true);
@@ -91,6 +111,7 @@ describe('funded NIP-61 recovery', () => {
       const replay = await replayNutzapReport(result, 'funded-native-cdk', options);
       expect(replay.status).toBe('passed');
       expect(replay.fingerprint).toBe(result.fingerprint);
+      await retain(result);
     },
     120_000,
   );
@@ -100,8 +121,12 @@ describe('funded NIP-61 recovery', () => {
       const mintUrl = process.env.CFL_NUTZAP_MINT_URL;
       if (!mintUrl) throw Error('Run pnpm test:nutzap:funded with a disposable mint');
       const result = await runNutzapScenario(id, 'funded-nip61', { mintUrl });
+      expect(result.implementations.mint).toBe(expectedMint);
       expect(result.mode).toBe('funded');
       expect(result.status, JSON.stringify(result)).toBe('passed');
+      const replay = await replayNutzapReport(result, 'funded-nip61', { mintUrl });
+      expect(replay.fingerprint).toBe(result.fingerprint);
+      await retain(result);
     },
     90_000,
   );
@@ -121,16 +146,4 @@ describe('funded NIP-61 recovery', () => {
     expect(await mint.states(proofs)).toEqual(proofs.map(() => 'UNSPENT'));
     expect(mint.successfulSwaps).toBe(0);
   }, 90_000);
-  it.each(['crash-after-swap', 'independent-crash-after-swap'])(
-    'replays funded %s evidence with fresh proofs',
-    async (scenario) => {
-      const mintUrl = process.env.CFL_NUTZAP_MINT_URL;
-      if (!mintUrl) throw Error('Run pnpm test:nutzap:funded with a disposable mint');
-      const report = await runNutzapScenario(scenario, 'funded-replay', { mintUrl });
-      const replay = await replayNutzapReport(report, 'funded-replay', { mintUrl });
-      expect(replay.status).toBe('passed');
-      expect(replay.fingerprint).toBe(report.fingerprint);
-    },
-    90_000,
-  );
 });

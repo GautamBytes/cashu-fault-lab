@@ -1,5 +1,6 @@
 import { evidenceFingerprint, verifyNutzapEvidence, type NutzapReport } from './evidence.js';
 import { digest } from './protocol.js';
+import { readMintImplementation } from './funded-mint.js';
 import { runNutzapScenario, validateRun, type NutzapRunOptions } from './runner.js';
 export async function replayNutzapReport(
   value: unknown,
@@ -30,7 +31,14 @@ export async function replayNutzapReport(
     JSON.stringify(report.failures) !== JSON.stringify(verification.failures)
   )
     throw Error('Nutzap replay outcome mismatch');
+  const mint = options.mintUrl
+    ? await readMintImplementation(options.mintUrl)
+    : 'simulated-mint/v1';
+  if (report.implementations?.mint !== mint)
+    throw Error('Nutzap replay mint implementation mismatch');
   const replay = await runNutzapScenario(report.scenarioId, seed, options);
+  if (replay.implementations.mint !== report.implementations.mint)
+    throw Error('Nutzap replay mint implementation changed during execution');
   if (replay.fingerprint !== report.fingerprint)
     throw Error('Nutzap replay semantic evidence changed');
   return replay;

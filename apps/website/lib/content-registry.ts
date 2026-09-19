@@ -69,6 +69,17 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
     order: 36,
   },
   {
+    kind: 'markdown',
+    slug: 'nutzap-recovery',
+    href: '/docs/nutzap-recovery',
+    sourcePath: 'docs/nutzap-recovery.md',
+    title: 'NIP-61 nutzap recovery',
+    description:
+      'Nutzap recovery across cashu-ts, native CDK, Nutshell and mintd, with replayable evidence.',
+    group: 'Integrate',
+    order: 37,
+  },
+  {
     kind: 'generated',
     slug: 'architecture',
     href: '/architecture',

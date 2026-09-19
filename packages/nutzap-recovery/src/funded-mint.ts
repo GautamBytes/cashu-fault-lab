@@ -44,6 +44,24 @@ function boundedRequest(origin: string): RequestFn {
     return JSONInt.parse(Buffer.concat(chunks).toString('utf8')) as T;
   };
 }
+function mintImplementation(version: unknown): string {
+  if (
+    typeof version !== 'string' ||
+    !/^[a-zA-Z][a-zA-Z0-9._-]{0,63}\/[0-9][a-zA-Z0-9.+_-]{0,63}$/.test(version)
+  )
+    throw Error('Invalid mint implementation');
+  return version;
+}
+
+/** Self-reported NUT-06 version, not authenticated build provenance. */
+export async function readMintImplementation(url: string): Promise<string> {
+  loopbackMint(url);
+  const info = await new Mint(url, {
+    customRequest: boundedRequest(new URL(url).origin),
+  }).getInfo();
+  return mintImplementation(info.version);
+}
+
 function portable(proof: Proof): NutzapProof {
   return JSON.parse(JSONInt.stringify(proof)!);
 }
@@ -67,8 +85,13 @@ export class FundedMint implements MintPort {
       new Mint(url, { customRequest: boundedRequest(new URL(url).origin) }),
     );
   }
+  get implementation(): string {
+    return mintImplementation(this.#wallet.getMintInfo().version);
+  }
   async source(lockingPubkey: string): Promise<NutzapProof[]> {
     await this.#wallet.loadMint();
+    // Validate public identity before any test funding or redemption.
+    this.implementation;
     for (const nut of [9, 11, 12] as const) {
       const support = this.#wallet.getMintInfo().isSupported(nut);
       if (!support.supported) throw Error('Mint lacks required restore, P2PK or DLEQ support');

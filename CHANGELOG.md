@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Run the eleven funded NIP-61 recovery scenarios and replay against both pinned Nutshell
+  and mintd, including native CDK/cashu-ts races and crashes in both directions.
+- Save redacted evidence per mint, record observed mint software versions, and reject
+  replay against a different mint implementation before funding. Older generic-label
+  funded reports must be regenerated.
+- Add separate CI lanes and a website docs entry for nutzap recovery.
+
 ## 0.2.0 — 2026-08-04
 
 - Prepare the breaking `0.2.0` wallet-doctor contract: capture v2 is redacted, content-addressed,

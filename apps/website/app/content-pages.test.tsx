@@ -123,11 +123,13 @@ describe('generated content pages', () => {
     const adaptersIndex = links.findIndex((link) => link.textContent === 'Adapter guide');
     const lifecycleIndex = links.findIndex((link) => link.textContent === 'Wallet lifecycle');
     const doctorIndex = links.findIndex((link) => link.textContent === 'NIP-60 wallet doctor');
+    const nutzapIndex = links.findIndex((link) => link.textContent === 'NIP-61 nutzap recovery');
     const architectureIndex = links.findIndex((link) => link.textContent === 'Architecture');
 
     expect(lifecycleIndex).toBe(adaptersIndex + 1);
     expect(doctorIndex).toBe(lifecycleIndex + 1);
-    expect(architectureIndex).toBe(doctorIndex + 1);
+    expect(nutzapIndex).toBe(doctorIndex + 1);
+    expect(architectureIndex).toBe(nutzapIndex + 1);
     const architectureLink = links[architectureIndex];
     if (!architectureLink) throw new Error('Expected Architecture navigation link');
     expect(architectureLink).toHaveAttribute('href', '/architecture');

@@ -13,6 +13,7 @@ const publicRoutes = [
   '/docs/contributing',
   '/docs/cli',
   '/docs/adapters',
+  '/docs/nutzap-recovery',
   '/docs/delivery-profile',
   '/docs/invariants',
   '/docs/threat-model',
@@ -358,7 +359,19 @@ test('Architecture participates in docs navigation, search, and pagination', asy
   await expect(
     doctorPagination.getByRole('link', { name: /Previous\s*Wallet lifecycle/ }),
   ).toHaveAttribute('href', '/docs/wallet-lifecycle');
-  await doctorPagination.getByRole('link', { name: /Next\s*Architecture/ }).click();
+  await doctorPagination.getByRole('link', { name: /Next\s*NIP-61 nutzap recovery/ }).click();
+  await expect(page).toHaveURL(/\/docs\/nutzap-recovery$/);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'NIP-61 nutzap recovery' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Two-mint funded matrix (unreleased)' }),
+  ).toBeVisible();
+  await expectNoPageOverflow(page);
+  await page
+    .getByRole('navigation', { name: 'Document pagination' })
+    .getByRole('link', { name: /Next\s*Architecture/ })
+    .click();
 
   await expect(page).toHaveURL(/\/architecture$/);
   await expect(
@@ -376,8 +389,8 @@ test('Architecture participates in docs navigation, search, and pagination', asy
 
   const pagination = page.getByRole('navigation', { name: 'Document pagination' });
   await expect(
-    pagination.getByRole('link', { name: /Previous\s*NIP-60 wallet doctor/ }),
-  ).toHaveAttribute('href', '/docs/wallet-doctor');
+    pagination.getByRole('link', { name: /Previous\s*NIP-61 nutzap recovery/ }),
+  ).toHaveAttribute('href', '/docs/nutzap-recovery');
   await expect(pagination.getByRole('link', { name: /Next\s*Delivery profile/ })).toHaveAttribute(
     'href',
     '/docs/delivery-profile',
