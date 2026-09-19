@@ -75,8 +75,16 @@ pub fn amount(proofs: &[Proof]) -> Result<u64> {
 }
 
 pub fn validate(config: &Config) -> Result<Zap> {
+    let zap = validate_for_info(config, &config.info)?;
+    let lock = Keys::parse(&config.lock_hex).map_err(|_| "invalid_lock_key")?;
+    if zap.locking_key != lock.public_key().to_hex() {
+        return Err("wrong_recipient_or_lock");
+    }
+    Ok(zap)
+}
+
+pub(super) fn validate_for_info(config: &Config, info: &Event) -> Result<Zap> {
     let event = &config.event;
-    let info = &config.info;
     event.verify().map_err(|_| "invalid_event_signature")?;
     info.verify().map_err(|_| "invalid_info_signature")?;
     if event.kind.as_u16() != 9321 || info.kind.as_u16() != 10019 {
@@ -89,10 +97,8 @@ pub fn validate(config: &Config) -> Result<Zap> {
     let locking_key = single(info, "pubkey")?;
     let mint = single(event, "u")?;
     let keys = Keys::parse(&config.key_hex).map_err(|_| "invalid_wallet_key")?;
-    let lock = Keys::parse(&config.lock_hex).map_err(|_| "invalid_lock_key")?;
     if recipient != info.pubkey.to_hex()
         || recipient != keys.public_key().to_hex()
-        || locking_key != lock.public_key().to_hex()
         || locking_key == recipient
     {
         return Err("wrong_recipient_or_lock");

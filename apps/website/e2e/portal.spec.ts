@@ -388,6 +388,9 @@ test('Architecture participates in docs navigation, search, and pagination', asy
   await expect(
     page.getByRole('cell', { name: 'key-rotation-missing-key', exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'cdk-key-rotation-missing-key', exact: true }),
+  ).toBeVisible();
   await expectNoPageOverflow(page);
   await page
     .getByRole('navigation', { name: 'Document pagination' })

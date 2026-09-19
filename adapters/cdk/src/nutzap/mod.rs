@@ -2,6 +2,7 @@
 mod journal;
 mod mint;
 mod protocol;
+mod receiving_keys;
 mod relay;
 mod spend;
 #[cfg(test)]
@@ -24,6 +25,8 @@ pub struct Config {
     pub database: PathBuf,
     pub key_hex: String,
     pub lock_hex: String,
+    #[serde(default)]
+    pub receiving_keys: Option<PathBuf>,
     pub info: Event,
     pub event: Event,
     pub relays: Vec<String>,
@@ -97,9 +100,18 @@ fn validate_outputs(record: &Record, proofs: &[Proof]) -> Result<()> {
 
 /// Checkpoints expose ordering only; the harness never performs CDK mint or relay operations.
 pub async fn receive(
-    config: Config,
+    mut config: Config,
     mut checkpoint: impl FnMut(&str) -> Result<()>,
 ) -> Result<&'static str> {
+    if config.receiving_keys.is_some() {
+        let Some((info, secret)) = receiving_keys::select(&config)? else {
+            checkpoint("missing-receiving-key")?;
+            return Ok("recovery-blocked");
+        };
+        config.info = info;
+        config.lock_hex = secret;
+        checkpoint("receiving-key-selected")?;
+    }
     let zap = protocol::validate(&config)?;
     let keys = Keys::parse(&config.key_hex).map_err(|_| "invalid_wallet_key")?;
     let mut db = Journal::open(&config.database)?;

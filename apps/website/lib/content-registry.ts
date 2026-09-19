@@ -75,7 +75,7 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
     sourcePath: 'docs/nutzap-recovery.md',
     title: 'NIP-61 nutzap recovery',
     description:
-      'NIP-65 sender relay recovery, an upstream Nutshell CLI wallet round trip, receiving-key rotation and cashu-ts/CDK recovery across two mints.',
+      'NIP-65 sender relay recovery, an upstream Nutshell CLI wallet round trip, cashu-ts and native CDK receiving-key rotation, and recovery across two mints.',
     group: 'Integrate',
     order: 37,
   },

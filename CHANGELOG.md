@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Extend receiving-key rotation to native Rust/CDK: retained-key selection, delayed nutzaps,
+  post-swap SIGKILL recovery and missing-key backup import, with two-mint replay and installed CLI checks.
+
 - Add durable NIP-65 sender read-relay discovery with stale-list, offline-relay and lost-OK recovery scenarios.
 - Verify a pinned upstream Nutshell CLI wallet round trip, including duplicate rejection, restart persistence and P2PK return through sender relay routing.
 

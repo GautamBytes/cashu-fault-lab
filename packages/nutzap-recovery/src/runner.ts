@@ -32,6 +32,9 @@ export const SCENARIOS = [
   'key-rotation-missing-key',
 ] as const;
 export const CDK_SCENARIOS = [
+  'cdk-key-rotation-delayed',
+  'cdk-key-rotation-crash-after-swap',
+  'cdk-key-rotation-missing-key',
   'cdk-concurrent',
   'cdk-crash-after-swap',
   'cdk-peer-crash-after-swap',
@@ -57,7 +60,8 @@ export async function runNutzapScenario(
 ): Promise<NutzapReport> {
   validateRun(id, seed);
   if (id.startsWith('sender-relay-')) return runSenderRoutingScenario(id, seed, options.mintUrl);
-  if (id.startsWith('key-rotation-')) return runKeyRotationScenario(id, seed, options.mintUrl);
+  if (id.includes('key-rotation-'))
+    return runKeyRotationScenario(id, seed, options.mintUrl, options.cdkReceiver);
   if (id.includes('post-spend-'))
     return runPostSpendScenario(id, seed, options.mintUrl, options.cdkReceiver);
   if (id.startsWith('cdk-')) return runCdkScenario(id, seed, options.mintUrl, options.cdkReceiver);

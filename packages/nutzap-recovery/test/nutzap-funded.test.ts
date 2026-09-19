@@ -146,7 +146,7 @@ describe('funded NIP-61 recovery', () => {
     }
   }, 90_000);
   it.each(CDK_SCENARIOS)(
-    '%s: native CDK and cashu-ts recover through signed relay events',
+    '%s: native CDK recovery through signed relay events',
     async (id) => {
       const mintUrl = process.env.CFL_NUTZAP_MINT_URL;
       const cdkReceiver = process.env.CFL_NUTZAP_CDK_RECEIVER;
@@ -156,62 +156,96 @@ describe('funded NIP-61 recovery', () => {
       expect(result.implementations.mint).toBe(expectedMint);
       expect(result.mode).toBe('funded');
       expect(result.status, JSON.stringify(result)).toBe('passed');
-      expect(result.evidence.crossLanguage?.cdkProcessObserved).toBe(true);
-      if (id.includes('post-spend-')) {
-        expect(result.evidence.postSpend?.credits).toBe(1);
-        expect(result.evidence.crossLanguage?.postSpend?.cdkSyncObserved).toBe(true);
+      if (id.includes('key-rotation-')) {
+        expect(result.evidence.rotation?.native).toEqual({
+          keySelections: 7,
+          swaps: 2,
+          blockedBeforeMint: id.endsWith('missing-key') ? 1 : 0,
+        });
         for (const patch of [
-          { cdkSyncObserved: false },
-          { cdkSpendObserved: id.startsWith('cdk-peer-') },
-          { databasesDistinct: false },
-        ]) {
+          { keySelections: 0 },
+          { swaps: 3 },
+          { blockedBeforeMint: id.endsWith('missing-key') ? 0 : 1 },
+        ])
           expect(
             verifyNutzapEvidence(
               {
                 ...result.evidence,
-                crossLanguage: {
-                  ...result.evidence.crossLanguage!,
-                  postSpend: { ...result.evidence.crossLanguage!.postSpend!, ...patch },
+                rotation: {
+                  ...result.evidence.rotation!,
+                  native: { ...result.evidence.rotation!.native!, ...patch },
                 },
               },
               id,
             ).ok,
           ).toBe(false);
-        }
+        const { rotation: _rotation, ...withoutRotation } = result.evidence;
+        expect(verifyNutzapEvidence(withoutRotation, id).ok).toBe(false);
+      } else {
+        expect(result.evidence.crossLanguage?.cdkProcessObserved).toBe(true);
+        if (id.includes('post-spend-')) {
+          expect(result.evidence.postSpend?.credits).toBe(1);
+          expect(result.evidence.crossLanguage?.postSpend?.cdkSyncObserved).toBe(true);
+          for (const patch of [
+            { cdkSyncObserved: false },
+            { cdkSpendObserved: id.startsWith('cdk-peer-') },
+            { databasesDistinct: false },
+          ]) {
+            expect(
+              verifyNutzapEvidence(
+                {
+                  ...result.evidence,
+                  crossLanguage: {
+                    ...result.evidence.crossLanguage!,
+                    postSpend: { ...result.evidence.crossLanguage!.postSpend!, ...patch },
+                  },
+                },
+                id,
+              ).ok,
+            ).toBe(false);
+          }
+          for (const patch of [
+            { credits: 2 },
+            { staleBalance: 1 },
+            { retiredTokenRejected: false },
+            { outboxStable: false },
+            { walletBalances: [999, 999] },
+            { publicationCrashObserved: !id.endsWith('publication-crash') },
+          ]) {
+            expect(
+              verifyNutzapEvidence(
+                { ...result.evidence, postSpend: { ...result.evidence.postSpend!, ...patch } },
+                id,
+              ).ok,
+            ).toBe(false);
+          }
+        } else expect(result.evidence.independent?.localCredits).toEqual([0, 1]);
         for (const patch of [
-          { credits: 2 },
-          { staleBalance: 1 },
-          { retiredTokenRejected: false },
-          { outboxStable: false },
-          { walletBalances: [999, 999] },
-          { publicationCrashObserved: !id.endsWith('publication-crash') },
+          { cdkProcessObserved: false },
+          { privateJournals: false },
+          { receivers: ['cashu-ts/4.7.2', 'cashu-ts/4.7.2'] },
         ]) {
           expect(
             verifyNutzapEvidence(
-              { ...result.evidence, postSpend: { ...result.evidence.postSpend!, ...patch } },
+              {
+                ...result.evidence,
+                crossLanguage: { ...result.evidence.crossLanguage!, ...patch },
+              },
               id,
             ).ok,
           ).toBe(false);
         }
-      } else expect(result.evidence.independent?.localCredits).toEqual([0, 1]);
-      for (const patch of [
-        { cdkProcessObserved: false },
-        { privateJournals: false },
-        { receivers: ['cashu-ts/4.7.2', 'cashu-ts/4.7.2'] },
-      ]) {
-        expect(
-          verifyNutzapEvidence(
-            { ...result.evidence, crossLanguage: { ...result.evidence.crossLanguage!, ...patch } },
-            id,
-          ).ok,
-        ).toBe(false);
+        if (id !== 'cdk-concurrent' && !id.includes('post-spend-')) {
+          expect(result.evidence.killedAfterSwap).toBe(true);
+          expect(verifyNutzapEvidence({ ...result.evidence, killedAfterSwap: false }, id).ok).toBe(
+            false,
+          );
+        }
       }
-      if (id !== 'cdk-concurrent' && !id.includes('post-spend-')) {
-        expect(result.evidence.killedAfterSwap).toBe(true);
+      if (id === 'cdk-key-rotation-crash-after-swap')
         expect(verifyNutzapEvidence({ ...result.evidence, killedAfterSwap: false }, id).ok).toBe(
           false,
         );
-      }
       const replay = await replayNutzapReport(result, 'funded-native-cdk', options);
       expect(replay.status).toBe('passed');
       expect(replay.fingerprint).toBe(result.fingerprint);
