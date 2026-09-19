@@ -162,6 +162,32 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     );
     assert.equal(rotationReplay.exitCode, 0, rotationReplay.stderr);
     assert.equal(JSON.parse(rotationReplay.stdout).fingerprint, rotationReport.fingerprint);
+    const routingArtifact = join(installRoot, 'sender-routing.json');
+    const routing = await run(
+      process.execPath,
+      [
+        cli,
+        'nutzap',
+        'run',
+        'sender-relay-response-lost',
+        ...spendOptions,
+        '--output',
+        routingArtifact,
+      ],
+      { cwd: installRoot },
+    );
+    assert.equal(routing.exitCode, 0, routing.stderr);
+    const routingReport = JSON.parse(routing.stdout);
+    assert.equal(routingReport.status, 'passed');
+    assert.deepEqual(routingReport.evidence.senderRelays.historyCounts, [1, 1]);
+    assert.deepEqual(routingReport.evidence.senderRelays.tokenCounts, [0, 0]);
+    const routingReplay = await run(
+      process.execPath,
+      [cli, 'nutzap', 'replay', routingArtifact, ...spendOptions],
+      { cwd: installRoot },
+    );
+    assert.equal(routingReplay.exitCode, 0, routingReplay.stderr);
+    assert.equal(JSON.parse(routingReplay.stdout).fingerprint, routingReport.fingerprint);
     if (process.env.CFL_NUTZAP_CDK_RECEIVER && process.env.CFL_NUTZAP_MINT_URL) {
       for (const scenario of [
         'cdk-crash-after-swap',

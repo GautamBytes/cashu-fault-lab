@@ -16,6 +16,7 @@ export class Journal {
       .exec(`CREATE TABLE IF NOT EXISTS redemptions(id TEXT PRIMARY KEY, record TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS inputs(mint TEXT, y TEXT, redemption TEXT NOT NULL, PRIMARY KEY(mint,y));
       CREATE TABLE IF NOT EXISTS outputs(mint TEXT, y TEXT, redemption TEXT NOT NULL, PRIMARY KEY(mint,y));
+      CREATE TABLE IF NOT EXISTS relay_lists(sender TEXT PRIMARY KEY, event TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS acknowledgements(id TEXT, target TEXT, PRIMARY KEY(id,target));`);
   }
   get(id: string): RedemptionRecord | undefined {
@@ -85,6 +86,35 @@ export class Journal {
       this.#db.exec('ROLLBACK');
       throw error;
     }
+  }
+  relayList(sender: string): Event | undefined {
+    const row = this.#db.prepare('SELECT event FROM relay_lists WHERE sender=?').get(sender);
+    return row ? (JSON.parse(String(row.event)) as Event) : undefined;
+  }
+  rememberRelayList(event: Event): Event {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const previous = this.relayList(event.pubkey);
+      const selected =
+        !previous ||
+        event.created_at > previous.created_at ||
+        (event.created_at === previous.created_at && event.id < previous.id)
+          ? event
+          : previous;
+      this.#db
+        .prepare('INSERT OR REPLACE INTO relay_lists VALUES(?,?)')
+        .run(event.pubkey, JSON.stringify(selected));
+      this.#db.exec('COMMIT');
+      return selected;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  historyRelays(id: string, relays: string[]): RedemptionRecord {
+    return this.#update(id, (record) => {
+      record.historyRelays ??= relays;
+    });
   }
   acknowledge(id: string, target: string): void {
     this.#db.prepare('INSERT OR IGNORE INTO acknowledgements VALUES(?,?)').run(id, target);
