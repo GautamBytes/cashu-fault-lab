@@ -37,7 +37,7 @@ swap, NUT-09 output recovery, and NUT-07 proof states.
 
 ## Two-mint funded matrix (unreleased)
 
-The source checkout runs all seventeen scenarios on each mint, including the cashu-ts/CDK
+The source checkout runs all twenty scenarios on each mint, including the cashu-ts/CDK
 race and crashes in both directions. Every scenario is replayed with fresh proofs.
 The existing installed-package check also runs CDK crash/recovery and replay against
 each mint outside the monorepo. Both lanes must pass; unavailable infrastructure or
@@ -48,7 +48,7 @@ an unexpected mint implementation fails the lane instead of becoming simulated e
 | Nutshell | 0.20.2         | `infra/compose/nutshell.compose.yml` |
 | mintd    | 0.17.3         | `infra/compose/cdk-mint.compose.yml` |
 
-Both images are digest-pinned in those files. The full command runs 26 scenario/mint
+Both images are digest-pinned in those files. The full command runs 40 scenario/mint
 combinations plus replay and invalid-DLEQ canaries. To select one lane:
 
 ```bash
@@ -66,7 +66,7 @@ Replay checks the target mint implementation before creating new proofs and comp
 it again after execution. The port can change between runs. Older funded artifacts
 with a generic mint label must be regenerated; simulated replay remains supported.
 This verifies recovery with two mint implementations, not transfers between mints or
-certification of external wallet products. The default simulated matrix is unchanged.
+certification of external wallet products. The default simulated matrix contains thirteen scenarios; seven native CDK cases require funded mode.
 
 For an already-running **disposable** mint, use:
 
@@ -132,7 +132,7 @@ receipt. This does not implement general wallet synchronization or migrate exist
 Recovery requires the winner's private journal to survive the crash: permanent loss
 of unpublished output secrets is outside the guarantee. The scenarios provide lab
 receiver evidence, not certification of independently developed wallet products.
-Upstream wallet adoption, public-relay discovery, key rotation, NIP-65 sender
+Upstream wallet adoption, public-relay discovery, NIP-65 sender
 read-relay discovery and custom external adapters remain future work. The existing
 wallet doctor remains read-only.
 
@@ -305,3 +305,47 @@ Sources: [NIP-61](https://github.com/nostr-protocol/nips/blob/master/61.md),
 [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md),
 [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md),
 [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md).
+
+## Receiving-key rotation (unreleased)
+
+These three cases rotate the recipient's separate P2PK receiving key once while retaining
+the same Nostr identity, mint and sat unit. They exercise cashu-ts receivers; native CDK
+key rotation and arbitrary key histories are outside this profile.
+
+| Scenario                        | Required recovery                                                                                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `key-rotation-delayed`          | Hide an old-key nutzap until after rotation, then redeem it with the retained key. Redeem a second payment locked to the newly advertised key.                      |
+| `key-rotation-crash-after-swap` | SIGKILL the old-key receiver after its swap succeeds but before credit/history. Reopen private state, restore outputs and credit once.                              |
+| `key-rotation-missing-key`      | Withhold the old private key. Require `recovery-blocked`, zero credit, no wallet publication and unspent inputs. Import the matching backup and retry successfully. |
+
+Every case gives the sender a newer signed kind:10019 advertisement followed by a stale
+relay answer after reopening its cache. The sender keeps the newest known advertisement;
+equal timestamps use the lowest event ID. A sender that has never seen the new advertisement
+cannot infer that rotation occurred. The receiver validates delayed payments against its
+retained signed advertisement, so the sender's current selection does not discard old keys.
+
+The private SQLite key store commits the new secret before its advertisement is published.
+Both the key store and wallet journal must survive a crash. Wrong private keys, invalid
+signatures, another recipient, changes to mint trust, unsupported units and a third key
+are rejected. A missing key blocks before mint access. Restoring a backup does not roll
+back the active advertisement. Private state uses mode 0600 inside a temporary directory
+and is removed after the run; reports contain no private keys, bearer proofs or output secrets.
+
+Each case retries both payments through receiver subprocesses. The report's base evidence
+captures the old-key redemption before the new payment; `rotation.newPayment` verifies
+the second payment separately. The oracle requires two total credits, the combined
+balance after both swap fees, unspent outputs, and identical token/history IDs after retries.
+All three cases run and replay with fresh proofs against Nutshell and mintd. The installed
+CLI also runs and replays the rotation crash case outside the monorepo on each mint.
+
+```bash
+pnpm lab nutzap run key-rotation-crash-after-swap --seed demo --output artifacts/key-rotation.json
+pnpm lab nutzap replay artifacts/key-rotation.json --seed demo
+pnpm lab nutzap run key-rotation-missing-key --seed demo
+pnpm test:nutzap:funded
+```
+
+This is a bounded lab recovery policy. [NIP-61](https://github.com/nostr-protocol/nips/blob/master/61.md)
+advertises a separate receiving key; it does not specify a complete rotation lifecycle.
+The private history here is not a new NIP-60 wire format or a production wallet key-backup
+service. Permanent loss of the old key before redemption remains unrecoverable in this profile.

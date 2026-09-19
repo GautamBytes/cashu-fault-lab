@@ -76,7 +76,7 @@ pnpm test:nutzap:funded
 ```
 
 The default matrix labels its mint as simulated. In the source checkout, the funded
-test runs all seventeen scenarios and replay against both pinned Nutshell and mintd,
+test runs all twenty scenarios and replay against both pinned Nutshell and mintd,
 using fake Lightning funding, real P2PK/DLEQ swaps and NUT-09 restoration. It saves
 redacted reports per mint under `artifacts/nutzap-funded/`. Select a single lane with
 `pnpm test:nutzap:funded --mint nutshell` or `--mint mintd`. This two-mint expansion
@@ -93,6 +93,16 @@ cases reverse those roles. Both directions run against each mint.
 
 ```bash
 pnpm lab nutzap run post-spend-publication-crash --seed demo
+```
+
+Three receiving-key rotation cases test delayed old-key payments, recovery after SIGKILL,
+and a missing old key that blocks until its backup is imported. A persisted sender cache
+rejects stale advertisements after seeing the new key. Both old and new payments must
+be credited once, with conserved value after fees. These cashu-ts cases run and replay
+against both mints; private keys remain in disposable local state.
+
+```bash
+pnpm lab nutzap run key-rotation-crash-after-swap --seed demo
 ```
 
 See [nutzap recovery](docs/nutzap-recovery.md).

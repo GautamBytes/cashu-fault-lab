@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add receiving-key rotation scenarios for delayed nutzaps, post-swap SIGKILL recovery,
+  stale advertisements and missing-key backup restoration, with private durable key history,
+  funded replay on Nutshell and mintd, and installed CLI coverage.
+
 - Extend NIP-60 post-spend recovery to native CDK and cashu-ts in both directions, including
   durable spend reservations, stale/deleted/reordered tokens, publication SIGKILL, and
   fresh-proof replay against Nutshell and mintd through the source and installed CLI.

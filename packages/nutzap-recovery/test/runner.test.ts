@@ -20,7 +20,7 @@ describe('NIP-61 process and relay suite', () => {
     30_000,
   );
   it('has a bounded corpus and rejects unknown cases before starting infrastructure', async () => {
-    expect(SCENARIOS).toHaveLength(10);
+    expect(SCENARIOS).toHaveLength(13);
     await expect(runNutzapScenario('../bad', 'seed')).rejects.toThrow();
   });
   it('detects duplicate credit and missing history rather than trusting receiver status', async () => {

@@ -1,5 +1,6 @@
 import type { Event } from 'nostr-tools';
 import { receiveNutzap } from './receiver.js';
+import { receiveWithReceivingKeys } from './rotating-receiver.js';
 import { queryEvents } from './relay.js';
 import { spendNutzap } from './spend.js';
 import { validateNutzap } from './protocol.js';
@@ -14,6 +15,7 @@ export interface WorkerInput {
   syncPeers?: boolean;
   spendAmount?: number;
   pauseAfterPublication?: boolean;
+  receivingKeys?: { database: string; funded: boolean };
 }
 let sequence = 0;
 const pending = new Map<
@@ -87,7 +89,14 @@ process.on('message', (raw: unknown) => {
               }
             : {}),
         })
-      : receiveNutzap(input.event, options);
+      : input.receivingKeys
+        ? receiveWithReceivingKeys(
+            input.event,
+            options,
+            input.receivingKeys.database,
+            input.receivingKeys.funded,
+          )
+        : receiveNutzap(input.event, options);
   void operation
     .then((result) => process.send?.({ type: 'result', result }, () => process.disconnect?.()))
     .catch(() => process.send?.({ type: 'error' }, () => process.disconnect?.()));
