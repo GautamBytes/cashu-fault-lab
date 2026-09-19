@@ -65,7 +65,7 @@ async fn exchange(url: &str, request: Value, event_id: Option<String>) -> Result
 pub async fn query(url: &str, author: &str) -> Result<Vec<Event>> {
     exchange(
         url,
-        json!(["REQ", "cdk-nutzap", {"kinds": [7375,7376],"authors": [author],"limit":128}]),
+        json!(["REQ", "cdk-nutzap", {"kinds": [7375,7376,5],"authors": [author],"limit":128}]),
         None,
     )
     .await

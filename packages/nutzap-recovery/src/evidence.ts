@@ -48,6 +48,12 @@ export interface NutzapEvidence {
     cdkProcessObserved: boolean;
     crashedReceiver: 'none' | 'cashu-ts' | 'cdk';
     privateJournals: boolean;
+    postSpend?: {
+      spender: 'cdk' | 'cashu-ts';
+      cdkSpendObserved: boolean;
+      cdkSyncObserved: boolean;
+      databasesDistinct: boolean;
+    };
   };
   independent?: {
     databasesDistinct: boolean;
@@ -100,7 +106,10 @@ export function verifyNutzapEvidence(
     'wallet-payloads-match': e.walletPayloadsMatch === true,
     recovered: e.completed === true,
   };
-  if (scenarioId?.startsWith('independent-') || scenarioId?.startsWith('cdk-')) {
+  if (
+    scenarioId?.startsWith('independent-') ||
+    (scenarioId?.startsWith('cdk-') && !scenarioId.includes('post-spend-'))
+  ) {
     const i = e.independent;
     checks['independent-wallets'] =
       !!i &&
@@ -127,13 +136,27 @@ export function verifyNutzapEvidence(
       c.privateJournals === true &&
       JSON.stringify(c.receivers) === '["cashu-ts/4.7.2","cdk/0.17.3 + nostr/0.45.5"]' &&
       c.crashedReceiver ===
-        (scenarioId === 'cdk-crash-after-swap'
-          ? 'cdk'
-          : scenarioId === 'cdk-peer-crash-after-swap'
+        (scenarioId.includes('post-spend-publication-crash')
+          ? scenarioId.startsWith('cdk-peer-')
             ? 'cashu-ts'
-            : 'none');
+            : 'cdk'
+          : scenarioId === 'cdk-crash-after-swap'
+            ? 'cdk'
+            : scenarioId === 'cdk-peer-crash-after-swap'
+              ? 'cashu-ts'
+              : 'none');
   }
-  if (scenarioId?.startsWith('post-spend-')) {
+  if (scenarioId?.startsWith('cdk-') && scenarioId.includes('post-spend-')) {
+    const p = e.crossLanguage?.postSpend;
+    const cdkSpends = !scenarioId.startsWith('cdk-peer-');
+    checks['native-post-spend'] =
+      !!p &&
+      p.spender === (cdkSpends ? 'cdk' : 'cashu-ts') &&
+      p.cdkSpendObserved === cdkSpends &&
+      p.cdkSyncObserved === true &&
+      p.databasesDistinct === true;
+  }
+  if (scenarioId?.includes('post-spend-')) {
     const p = e.postSpend;
     checks['post-spend-value'] =
       !!p &&
@@ -170,7 +193,7 @@ export function verifyNutzapEvidence(
       p.outboxStable === true &&
       p.relayEventsAgree === true;
     checks['post-spend-crash'] =
-      !!p && p.publicationCrashObserved === (scenarioId === 'post-spend-publication-crash');
+      !!p && p.publicationCrashObserved === scenarioId.endsWith('publication-crash');
   }
   const failures = Object.entries(checks)
     .filter(([, ok]) => !ok)

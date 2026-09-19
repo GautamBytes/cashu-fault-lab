@@ -9,7 +9,7 @@ fn signed(kind: u16, tags: Vec<Vec<String>>, keys: &Keys) -> Event {
         .finalize(keys)
         .unwrap()
 }
-fn fixture() -> Config {
+pub(super) fn fixture() -> Config {
     let key_hex = format!("{:064x}", 1);
     let lock_hex = format!("{:064x}", 2);
     let keys = Keys::parse(&key_hex).unwrap();
@@ -22,6 +22,8 @@ fn fixture() -> Config {
         "dleq":{"e":format!("{:064x}",3),"s":format!("{:064x}",4),"r":format!("{:064x}",5)}});
     Config {
         database: PathBuf::from("unused.sqlite"),
+        spend_amount: None,
+        sync_wallet: false,
         key_hex,
         lock_hex,
         info: signed(
@@ -44,7 +46,7 @@ fn fixture() -> Config {
         relays: vec!["ws://127.0.0.1:4400".into()],
     }
 }
-fn output(zap: &Zap, secret: &str) -> Proof {
+pub(super) fn output(zap: &Zap, secret: &str) -> Proof {
     let mut p = zap.proofs[0].clone();
     p.secret = secret.parse().unwrap();
     p
@@ -152,6 +154,8 @@ fn journal_survives_restart_and_atomically_rejects_duplicate_outputs() {
         },
         credit: None,
         origin: None,
+        wallet: None,
+        spend: None,
         events: vec![],
         published: vec![],
     };
@@ -176,6 +180,9 @@ fn journal_survives_restart_and_atomically_rejects_duplicate_outputs() {
             )
             .unwrap();
         assert_eq!(saved.credit, Some(16));
+        let state = serde_json::to_value(&saved).unwrap();
+        assert_eq!(state["wallet"]["proofs"][0]["amount"], json!(16));
+        assert_eq!(state["wallet"]["token"]["id"], json!(events[0].id.to_hex()));
         assert_eq!(
             db.credit(
                 &record,
@@ -219,4 +226,59 @@ fn rejects_timestamp_that_cannot_be_incremented_safely() {
         .finalize(&keys)
         .unwrap();
     assert!(protocol::validate(&f).is_err());
+}
+
+#[test]
+fn spend_reservation_survives_stale_sync_and_keeps_original_credit() {
+    let f = fixture();
+    let zap = protocol::validate(&f).unwrap();
+    let keys = Keys::parse(&f.key_hex).unwrap();
+    let proof = output(&zap, "reserved-output");
+    let events = protocol::wallet_events(&zap, std::slice::from_ref(&proof), &keys).unwrap();
+    let path = std::env::temp_dir().join(format!("cdk-spend-{}.sqlite", uuid::Uuid::new_v4()));
+    let record = Record {
+        zap,
+        plan: Plan {
+            material: "initial".into(),
+            outputs: vec![],
+            fee: 0,
+        },
+        credit: None,
+        origin: None,
+        events: vec![],
+        published: vec![],
+        wallet: None,
+        spend: None,
+    };
+    let mut db = Journal::open(&path).unwrap();
+    db.reserve(&record).unwrap();
+    db.credit(
+        &record,
+        std::slice::from_ref(&proof),
+        events.clone(),
+        "local",
+    )
+    .unwrap();
+    let plan = SpendPlan {
+        plan: Plan {
+            material: "durable-blinding".into(),
+            outputs: vec![],
+            fee: 0,
+        },
+        send_secrets: vec![],
+    };
+    db.prepare_spend(&record.zap.id, 4, plan.clone()).unwrap();
+    drop(db);
+    let mut db = Journal::open(&path).unwrap();
+    assert!(
+        !db.wallet(&record.zap.id, Some(events[0].clone()), vec![proof], vec![])
+            .unwrap()
+    );
+    let saved = db.get(&record.zap.id).unwrap().unwrap();
+    assert_eq!(saved.credit, Some(16));
+    assert!(saved.wallet.unwrap().proofs.is_empty());
+    assert_eq!(saved.spend.unwrap().plan.plan.material, "durable-blinding");
+    assert!(db.prepare_spend(&record.zap.id, 5, plan).is_err());
+    drop(db);
+    std::fs::remove_file(path).unwrap();
 }

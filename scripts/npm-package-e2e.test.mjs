@@ -136,31 +136,48 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     assert.equal(spendReplay.exitCode, 0, spendReplay.stderr);
     assert.equal(JSON.parse(spendReplay.stdout).fingerprint, spendReport.fingerprint);
     if (process.env.CFL_NUTZAP_CDK_RECEIVER && process.env.CFL_NUTZAP_MINT_URL) {
-      const artifact = join(installRoot, 'cdk-nutzap.json');
-      const options = [
-        '--seed',
-        'installed-cdk',
-        '--mint-url',
-        process.env.CFL_NUTZAP_MINT_URL,
-        '--cdk-receiver',
-        process.env.CFL_NUTZAP_CDK_RECEIVER,
-      ];
-      const native = await run(
-        process.execPath,
-        [cli, 'nutzap', 'run', 'cdk-crash-after-swap', ...options, '--output', artifact],
-        { cwd: installRoot },
-      );
-      assert.equal(native.exitCode, 0, native.stderr);
-      const report = JSON.parse(native.stdout);
-      assert.equal(report.status, 'passed');
-      assert.equal(report.evidence.crossLanguage.crashedReceiver, 'cdk');
-      if (process.env.CFL_NUTZAP_EXPECTED_MINT)
-        assert.equal(report.implementations.mint, process.env.CFL_NUTZAP_EXPECTED_MINT);
-      const replay = await run(process.execPath, [cli, 'nutzap', 'replay', artifact, ...options], {
-        cwd: installRoot,
-      });
-      assert.equal(replay.exitCode, 0, replay.stderr);
-      assert.equal(JSON.parse(replay.stdout).fingerprint, report.fingerprint);
+      for (const scenario of [
+        'cdk-crash-after-swap',
+        'cdk-post-spend-publication-crash',
+        'cdk-peer-post-spend-publication-crash',
+      ]) {
+        const artifact = join(installRoot, `${scenario}.json`);
+        const options = [
+          '--seed',
+          'installed-cdk',
+          '--mint-url',
+          process.env.CFL_NUTZAP_MINT_URL,
+          '--cdk-receiver',
+          process.env.CFL_NUTZAP_CDK_RECEIVER,
+        ];
+        const native = await run(
+          process.execPath,
+          [cli, 'nutzap', 'run', scenario, ...options, '--output', artifact],
+          { cwd: installRoot },
+        );
+        assert.equal(native.exitCode, 0, native.stderr);
+        const report = JSON.parse(native.stdout);
+        assert.equal(report.status, 'passed');
+        assert.equal(
+          report.evidence.crossLanguage.crashedReceiver,
+          scenario.startsWith('cdk-peer-') ? 'cashu-ts' : 'cdk',
+        );
+        if (scenario.includes('post-spend-')) {
+          assert.equal(report.evidence.postSpend.publicationCrashObserved, true);
+          assert.equal(report.evidence.crossLanguage.postSpend.cdkSyncObserved, true);
+        }
+        if (process.env.CFL_NUTZAP_EXPECTED_MINT)
+          assert.equal(report.implementations.mint, process.env.CFL_NUTZAP_EXPECTED_MINT);
+        const replay = await run(
+          process.execPath,
+          [cli, 'nutzap', 'replay', artifact, ...options],
+          {
+            cwd: installRoot,
+          },
+        );
+        assert.equal(replay.exitCode, 0, replay.stderr);
+        assert.equal(JSON.parse(replay.stdout).fingerprint, report.fingerprint);
+      }
     }
     assert.equal(scenarios.exitCode, 0, scenarios.stderr);
     assert.ok(JSON.parse(scenarios.stdout).some(({ path }) => path === 'retry/response-lost.json'));

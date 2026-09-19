@@ -3,8 +3,10 @@ mod journal;
 mod mint;
 mod protocol;
 mod relay;
+mod spend;
 #[cfg(test)]
 mod tests;
+mod wallet;
 
 use cdk::nuts::Proof;
 use journal::Journal;
@@ -25,6 +27,10 @@ pub struct Config {
     pub info: Event,
     pub event: Event,
     pub relays: Vec<String>,
+    #[serde(default)]
+    pub spend_amount: Option<u64>,
+    #[serde(default)]
+    pub sync_wallet: bool,
 }
 #[derive(Clone, Deserialize, Serialize)]
 struct Output {
@@ -46,6 +52,31 @@ struct Record {
     events: Vec<Event>,
     published: Vec<String>,
     origin: Option<String>,
+    #[serde(default)]
+    wallet: Option<Wallet>,
+    #[serde(default)]
+    spend: Option<Spend>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct Wallet {
+    token: Option<Event>,
+    proofs: Vec<Proof>,
+    retired: Vec<String>,
+}
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpendPlan {
+    #[serde(flatten)]
+    plan: Plan,
+    send_secrets: Vec<String>,
+}
+#[derive(Clone, Deserialize, Serialize)]
+struct Spend {
+    amount: u64,
+    plan: SpendPlan,
+    events: Vec<Event>,
+    sent: Vec<Proof>,
 }
 
 fn validate_outputs(record: &Record, proofs: &[Proof]) -> Result<()> {
@@ -74,6 +105,26 @@ pub async fn receive(
     let mut db = Journal::open(&config.database)?;
     let mint = Mint::new(&zap.mint, &config.lock_hex).await?;
     mint.verify(&zap.proofs)?;
+    if config.spend_amount.is_some() && config.sync_wallet {
+        return Err("conflicting_operation");
+    }
+    if let Some(amount) = config.spend_amount {
+        return spend::run(
+            &config,
+            &zap.id,
+            amount,
+            &keys,
+            &mint,
+            &mut db,
+            &mut checkpoint,
+        )
+        .await;
+    }
+    if config.sync_wallet {
+        let result = wallet::sync(&config, &zap.id, &keys, &mint, &mut db).await?;
+        checkpoint("after-wallet-sync")?;
+        return Ok(result);
+    }
     let saved = db.get(&zap.id)?;
     let plan = match saved {
         Some(ref r) => r.plan.clone(),
@@ -86,6 +137,8 @@ pub async fn receive(
         events: vec![],
         published: vec![],
         origin: None,
+        wallet: None,
+        spend: None,
     })?;
     if record.credit.is_none() {
         let mut proofs = mint.restore(&record.plan).await?;

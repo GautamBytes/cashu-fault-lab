@@ -37,7 +37,7 @@ swap, NUT-09 output recovery, and NUT-07 proof states.
 
 ## Two-mint funded matrix (unreleased)
 
-The source checkout runs all thirteen scenarios on each mint, including the cashu-ts/CDK
+The source checkout runs all seventeen scenarios on each mint, including the cashu-ts/CDK
 race and crashes in both directions. Every scenario is replayed with fresh proofs.
 The existing installed-package check also runs CDK crash/recovery and replay against
 each mint outside the monorepo. Both lanes must pass; unavailable infrastructure or
@@ -182,9 +182,47 @@ those two balances must not be added together. Reports retain no proof secrets o
 
 Scope is one partial spend after both journals synchronized the initial redemption, with
 the spender's private journal surviving restart. This is not arbitrary multi-spend history
-reconstruction, recovery of a permanently lost journal, or a native-CDK post-spend claim.
+reconstruction or recovery of a permanently lost journal. The native CDK cases below
+apply the same bounded scope to two different receiver implementations.
 The fault relays deliberately retain obsolete events to test stale responses; successful
 synchronization does not depend on a relay honoring a deletion request.
+
+## Cross-language post-spend recovery (unreleased)
+
+Four funded cases extend the same partial-spend faults to Rust/CDK and cashu-ts:
+
+| Scenario                                | Spender  | Reconnecting wallet | Fault                                                                          |
+| --------------------------------------- | -------- | ------------------- | ------------------------------------------------------------------------------ |
+| `cdk-post-spend-stale-relay`            | CDK      | cashu-ts            | Stale tokens and reordered deletion/replacement events                         |
+| `cdk-post-spend-publication-crash`      | CDK      | cashu-ts            | SIGKILL after the first replacement publication, followed by stale relay views |
+| `cdk-peer-post-spend-stale-relay`       | cashu-ts | CDK                 | Stale tokens and reordered deletion/replacement events                         |
+| `cdk-peer-post-spend-publication-crash` | cashu-ts | CDK                 | SIGKILL after the first replacement publication, followed by stale relay views |
+
+CDK prepares and restores its own blinded outputs, persists its own spend reservation and
+signed outbox, and sends its own mint and relay requests. Its reconciler validates signed
+NIP-60 transitions, persistent deletion tombstones, DLEQ, and mint proof states. Unverified
+or ambiguous state cannot establish a spendable balance. The harness only controls fault
+ordering and reads journals; it never writes CDK wallet state or performs CDK spending.
+
+Both wallets start synchronized with the initial receipt. After one partial spend, their
+balances must equal the verified change, while a separate recipient redeems the payment.
+The original credit remains immutable. Replay uses fresh proofs and compares semantic
+evidence, including the spender implementation, observed native spend/sync checkpoints,
+private distinct journals, and the actual crashed process. The installed CLI exercises
+both publication-crash directions and replay against both mints.
+
+```bash
+pnpm lab nutzap run cdk-post-spend-publication-crash --seed demo \
+  --mint-url http://127.0.0.1:3358 \
+  --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver" \
+  --output artifacts/cdk-post-spend.json
+pnpm lab nutzap replay artifacts/cdk-post-spend.json --seed demo \
+  --mint-url http://127.0.0.1:3358 \
+  --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver"
+```
+
+These cases require the same surviving private journals and one-spend scope described above.
+They do not claim arbitrary history reconstruction or external wallet adoption.
 
 ## Native CDK interoperability
 
@@ -223,9 +261,9 @@ pnpm lab nutzap replay artifacts/nutzap-cdk.json --seed demo \
   --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver"
 ```
 
-`nutzap list` includes all thirteen cases. The default `nutzap matrix` still runs the
+`nutzap list` includes all seventeen cases. The default `nutzap matrix` still runs the
 ten cases that support simulation. Supplying `--cdk-receiver` and `--mint-url`
-adds the three native cases. Missing native infrastructure fails explicitly; it
+adds the seven native cases. Missing native infrastructure fails explicitly; it
 never falls back to simulation. The npm CLI requires a separately built receiver
 binary. `CFL_NUTZAP_CDK_RECEIVER` can select an existing binary for the funded test
 script; otherwise that script builds it and respects `CARGO_TARGET_DIR`.
