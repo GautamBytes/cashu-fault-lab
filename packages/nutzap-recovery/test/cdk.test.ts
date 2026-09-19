@@ -1,7 +1,15 @@
 import { expect, it } from 'vitest';
 import { runNutzapScenario, validateRun } from '../src/runner.js';
 
-it.each(['cdk-concurrent', 'cdk-crash-after-swap', 'cdk-peer-crash-after-swap'])(
+it.each([
+  'cdk-concurrent',
+  'cdk-crash-after-swap',
+  'cdk-peer-crash-after-swap',
+  'cdk-post-spend-stale-relay',
+  'cdk-post-spend-publication-crash',
+  'cdk-peer-post-spend-stale-relay',
+  'cdk-peer-post-spend-publication-crash',
+])(
   'recognizes funded cross-language scenario %s without falling back to simulation',
   async (scenario) => {
     expect(() => validateRun(scenario, 'cdk-test')).not.toThrow();

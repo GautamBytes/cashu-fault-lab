@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Extend NIP-60 post-spend recovery to native CDK and cashu-ts in both directions, including
+  durable spend reservations, stale/deleted/reordered tokens, publication SIGKILL, and
+  fresh-proof replay against Nutshell and mintd through the source and installed CLI.
+
 - Add post-spend NIP-60 recovery scenarios: partial spending, stale/deleted/reordered token events,
   wallet reconnection, publication SIGKILL recovery, and recipient settlement on both mints.
 - Keep immutable redemption credits separate from current spendable balances, preserve retired

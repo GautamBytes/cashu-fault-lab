@@ -120,6 +120,12 @@ impl Mint {
     }
 
     pub fn prepare(&self, zap: &Zap) -> Result<Plan> {
+        Ok(self.prepare_outputs(zap, None)?.plan)
+    }
+    pub fn prepare_spend(&self, zap: &Zap, amount: u64) -> Result<super::SpendPlan> {
+        self.prepare_outputs(zap, Some(amount))
+    }
+    fn prepare_outputs(&self, zap: &Zap, send: Option<u64>) -> Result<super::SpendPlan> {
         self.verify(&zap.proofs)?;
         let ppk = zap.proofs.iter().try_fold(0_u64, |sum, proof| {
             sum.checked_add(
@@ -148,33 +154,47 @@ impl Mint {
             .keys;
         let mut saved = Vec::new();
         let mut outputs = Vec::new();
-        for bit in 0..20 {
-            let part = 1_u64 << bit;
-            if value & part == 0 {
-                continue;
+        let parts = match send {
+            Some(n) if n > 0 && n < value => vec![n, value - n],
+            Some(_) => return Err("invalid_partial_spend"),
+            None => vec![value],
+        };
+        let mut send_secrets = Vec::new();
+        for (index, value) in parts.into_iter().enumerate() {
+            for bit in 0..20 {
+                let part = 1_u64 << bit;
+                if value & part == 0 {
+                    continue;
+                }
+                let amount = Amount::from(part);
+                if keys.amount_key(amount).is_none() {
+                    return Err("unsupported_amount");
+                }
+                let secret = Secret::generate();
+                let (blinded, r) =
+                    dhke::blind_message(&secret.to_bytes(), None).map_err(|_| "blinding_failed")?;
+                outputs.push(Output {
+                    id: info.id.to_string(),
+                    amount: part,
+                    secret: secret.to_string(),
+                });
+                if send.is_some() && index == 0 {
+                    send_secrets.push(secret.to_string());
+                }
+                saved.push(BlindPlan {
+                    message: BlindedMessage::new(amount, info.id, blinded),
+                    secret,
+                    r,
+                });
             }
-            let amount = Amount::from(part);
-            if keys.amount_key(amount).is_none() {
-                return Err("unsupported_amount");
-            }
-            let secret = Secret::generate();
-            let (blinded, r) =
-                dhke::blind_message(&secret.to_bytes(), None).map_err(|_| "blinding_failed")?;
-            outputs.push(Output {
-                id: info.id.to_string(),
-                amount: part,
-                secret: secret.to_string(),
-            });
-            saved.push(BlindPlan {
-                message: BlindedMessage::new(amount, info.id, blinded),
-                secret,
-                r,
-            });
         }
-        Ok(Plan {
-            outputs,
-            fee,
-            material: serde_json::to_string(&saved).map_err(|_| "invalid_plan")?,
+        Ok(super::SpendPlan {
+            plan: Plan {
+                outputs,
+                fee,
+                material: serde_json::to_string(&saved).map_err(|_| "invalid_plan")?,
+            },
+            send_secrets,
         })
     }
 
@@ -256,9 +276,14 @@ impl Mint {
             serde_json::from_str(&plan.material).map_err(|_| "invalid_plan")?;
         let mut inputs = zap.proofs.clone();
         for proof in &mut inputs {
-            proof
-                .sign_p2pk(self.lock.clone())
-                .map_err(|_| "p2pk_signing_failed")?;
+            if serde_json::from_str::<Value>(&proof.secret.to_string())
+                .ok()
+                .is_some_and(|v| v[0] == "P2PK")
+            {
+                proof
+                    .sign_p2pk(self.lock.clone())
+                    .map_err(|_| "p2pk_signing_failed")?;
+            }
         }
         let result: Value = self.request("v1/swap", Some(json!({"inputs": inputs, "outputs": saved.iter().map(|s| &s.message).collect::<Vec<_>>()}))).await?;
         let signatures = serde_json::from_value(result["signatures"].clone())

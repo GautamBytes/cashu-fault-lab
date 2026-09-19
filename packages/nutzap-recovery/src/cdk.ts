@@ -12,12 +12,16 @@ import { digest } from './protocol.js';
 import { evidenceFingerprint, verifyNutzapEvidence, type NutzapReport } from './evidence.js';
 import type { MintPort, RedemptionRecord } from './types.js';
 
-function snapshot(path: string, id: string) {
+export function snapshot(path: string, id: string) {
   const db = new DatabaseSync(path, { readOnly: true });
   try {
     const row = db.prepare('SELECT record FROM redemptions WHERE id=?').get(id);
     if (!row) throw Error('Missing cross-language journal record');
     const record: RedemptionRecord = JSON.parse(String(row.record));
+    record.published = db
+      .prepare('SELECT target FROM acknowledgements WHERE id=?')
+      .all(id)
+      .map((r) => String(r.target));
     const records: RedemptionRecord[] = db
       .prepare('SELECT record FROM redemptions')
       .all()
@@ -26,7 +30,11 @@ function snapshot(path: string, id: string) {
       record,
       summary: {
         credits: records.filter((r) => r.credit !== null && r.origin !== 'relay').length,
-        balance: records.reduce((n, r) => n + (r.credit ?? 0), 0),
+        balance: records.reduce(
+          (n, r) =>
+            n + (r.wallet ? r.wallet.proofs.reduce((s, p) => s + p.amount, 0) : (r.credit ?? 0)),
+          0,
+        ),
       },
     };
   } finally {

@@ -370,6 +370,9 @@ test('Architecture participates in docs navigation, search, and pagination', asy
   await expect(
     page.getByRole('heading', { name: 'Post-spend wallet recovery (unreleased)' }),
   ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Cross-language post-spend recovery (unreleased)' }),
+  ).toBeVisible();
   await expectNoPageOverflow(page);
   await page
     .getByRole('navigation', { name: 'Document pagination' })

@@ -1,6 +1,10 @@
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { nip44 } from 'nostr-tools';
-import { Journal } from './journal.js';
+import { access, stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { snapshot } from './cdk.js';
+import { runCdkReceiver } from './cdk-process.js';
+import type { WorkerInput } from './nutzap-worker.js';
 import { createNutzapSession } from './session.js';
 import { runReceiverProcess } from './process.js';
 import { publishEvent, queryEvents } from './relay.js';
@@ -13,7 +17,16 @@ export async function runPostSpendScenario(
   id: string,
   seed: string,
   mintUrl?: string,
+  binary?: string,
 ): Promise<NutzapReport> {
+  const native = id.startsWith('cdk-');
+  if (native) {
+    if (!mintUrl || !binary)
+      throw Error('CDK scenarios require a disposable mint URL and receiver binary');
+    if (!isAbsolute(binary)) throw Error('CDK receiver binary must be an absolute executable path');
+    await access(binary, constants.X_OK);
+  }
+  const cdkIndex = native ? (id.startsWith('cdk-peer-') ? 1 : 0) : -1;
   const session = await createNutzapSession(seed, mintUrl);
   const { directory, key, info, event, zap, relays, relayObjects, backend } = session;
   try {
@@ -28,31 +41,43 @@ export async function runPostSpendScenario(
       pauseAfterSwap: false,
       syncPeers: true,
     }));
-    const read = (i: number) => {
-      const db = new Journal(databases[i]!);
-      try {
-        return { record: db.get(zap.id)!, summary: db.summary() };
-      } finally {
-        db.close();
-      }
+    const read = (i: number) => snapshot(databases[i]!, zap.id);
+    let cdkProcessObserved = false,
+      cdkSpendObserved = false,
+      cdkSyncObserved = false;
+    const run = (i: number, extra: Partial<WorkerInput> & { syncWallet?: boolean } = {}) => {
+      const input = { ...inputs[i]!, ...extra };
+      if (i !== cdkIndex) return runReceiverProcess(input, clients[i]!, publishEvent);
+      return runCdkReceiver(
+        binary!,
+        input,
+        Buffer.from(session.lock).toString('hex'),
+        async (phase) => {
+          cdkProcessObserved = true;
+          if (phase === 'spend-prepared') cdkSpendObserved = true;
+          if (phase === 'after-wallet-sync') cdkSyncObserved = true;
+          return phase === 'after-publication' && extra.pauseAfterPublication ? 'kill' : 'continue';
+        },
+      );
     };
     const sync = (i: number) =>
-      syncWallet(zap.id, {
-        database: databases[i]!,
-        key,
-        info,
-        relays,
-        mint: clients[i]!,
-        publish: publishEvent,
-        query: queryEvents,
-      });
+      i === cdkIndex
+        ? run(i, { syncWallet: true })
+        : syncWallet(zap.id, {
+            database: databases[i]!,
+            key,
+            info,
+            relays,
+            mint: clients[i]!,
+            publish: publishEvent,
+            query: queryEvents,
+          });
     const views = () =>
       Promise.all(
         relays.map((r) => queryEvents(r, { kinds: [7375, 7376, 5], authors: [info.pubkey] })),
       );
     for (let i = 0; i < inputs.length; i++) {
-      if ((await runReceiverProcess(inputs[i]!, clients[i]!, publishEvent)) !== 'complete')
-        throw Error('Initial wallet synchronization failed');
+      if ((await run(i)) !== 'complete') throw Error('Initial wallet synchronization failed');
     }
     const initial = read(0);
     // The original redemption evidence is a snapshot before the spend.
@@ -69,12 +94,8 @@ export async function runPostSpendScenario(
     const originalProofs: NutzapProof[] = JSON.parse(
       nip44.v2.decrypt(original.content, conversation),
     ).proofs;
-    const crash = id === 'post-spend-publication-crash';
-    const first = await runReceiverProcess(
-      { ...inputs[0]!, spendAmount: 4, pauseAfterPublication: crash },
-      clients[0]!,
-      publishEvent,
-    );
+    const crash = id.endsWith('publication-crash');
+    const first = await run(0, { spendAmount: 4, pauseAfterPublication: crash });
     const prepared = read(0).record.spend!;
     if (!prepared) throw Error('Missing durable spend');
     const outboxIds = prepared.events.map((e) => e.id);
@@ -86,10 +107,7 @@ export async function runPostSpendScenario(
     if (crash ? !publicationCrashObserved : first !== 'complete')
       throw Error('Spend fault was not exercised');
     clients[0] = await session.client();
-    if (
-      (await runReceiverProcess({ ...inputs[0]!, spendAmount: 4 }, clients[0]!, publishEvent)) !==
-      'complete'
-    )
+    if ((await run(0, { spendAmount: 4 })) !== 'complete')
       throw Error('Spend publication did not recover');
 
     // A disconnected wallet first sees only the obsolete token, then the deletion,
@@ -128,7 +146,7 @@ export async function runPostSpendScenario(
     for (let i = 0; i < 2; i++) {
       if ((await sync(i)) !== 'complete') throw Error('Wallet failed to reconcile');
       // Re-delivery of the old nutzap must not restore its original balance.
-      await runReceiverProcess(inputs[i]!, clients[i]!, publishEvent);
+      await run(i);
     }
     await Promise.all(relays.map((r) => publishEvent(r, original)));
     for (let i = 0; i < 2; i++)
@@ -183,6 +201,21 @@ export async function runPostSpendScenario(
         JSON.stringify(finalViews[0]!.map((e) => e.id).sort()) ===
           JSON.stringify(finalViews[1]!.map((e) => e.id).sort()),
     };
+    if (native) {
+      const files = await Promise.all(databases.map((path) => stat(path)));
+      evidence.crossLanguage = {
+        receivers: ['cashu-ts/4.7.2', 'cdk/0.17.3 + nostr/0.45.5'],
+        cdkProcessObserved,
+        crashedReceiver: crash ? (cdkIndex === 0 ? 'cdk' : 'cashu-ts') : 'none',
+        privateJournals: files.every((f) => (f.mode & 0o777) === 0o600),
+        postSpend: {
+          spender: cdkIndex === 0 ? 'cdk' : 'cashu-ts',
+          cdkSpendObserved,
+          cdkSyncObserved,
+          databasesDistinct: files[0]!.dev !== files[1]!.dev || files[0]!.ino !== files[1]!.ino,
+        },
+      };
+    }
     const check = verifyNutzapEvidence(evidence, id);
     return {
       schemaVersion: 1,
@@ -195,7 +228,9 @@ export async function runPostSpendScenario(
       failures: check.failures,
       fingerprint: evidenceFingerprint(evidence),
       implementations: {
-        receiver: 'cashu-fault-lab/nip60-post-spend-v1',
+        receiver: native
+          ? 'cashu-fault-lab/cashu-ts + native-cdk-nip60-post-spend-v1'
+          : 'cashu-fault-lab/nip60-post-spend-v1',
         mint: session.mintImplementation,
         relay: 'cashu-fault-lab/nostr-fault-relay',
       },

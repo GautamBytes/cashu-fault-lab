@@ -2,10 +2,16 @@ import { spawn } from 'node:child_process';
 import type { WorkerInput } from './nutzap-worker.js';
 import type { ReceiveResult } from './types.js';
 
-export type CdkPhase = 'before-swap' | 'after-swap' | 'before-publish';
+export type CdkPhase =
+  | 'before-swap'
+  | 'after-swap'
+  | 'before-publish'
+  | 'spend-prepared'
+  | 'after-publication'
+  | 'after-wallet-sync';
 export async function runCdkReceiver(
   binary: string,
-  input: WorkerInput,
+  input: WorkerInput & { syncWallet?: boolean },
   lockHex: string,
   checkpoint: (phase: CdkPhase) => Promise<'continue' | 'kill'>,
 ): Promise<ReceiveResult | 'killed'> {
@@ -61,7 +67,14 @@ export async function runCdkReceiver(
       if (
         result ||
         message.type !== 'checkpoint' ||
-        !['before-swap', 'after-swap', 'before-publish'].includes(message.phase ?? '')
+        ![
+          'before-swap',
+          'after-swap',
+          'before-publish',
+          'spend-prepared',
+          'after-publication',
+          'after-wallet-sync',
+        ].includes(message.phase ?? '')
       )
         return fail();
       processing = true;
@@ -85,7 +98,7 @@ export async function runCdkReceiver(
       }
     });
     child.stdin.write(
-      `${JSON.stringify({ database: input.database, keyHex: input.keyHex, lockHex, info: input.info, event: input.event, relays: input.relays })}\n`,
+      `${JSON.stringify({ database: input.database, keyHex: input.keyHex, lockHex, info: input.info, event: input.event, relays: input.relays, spendAmount: input.spendAmount, syncWallet: input.syncWallet })}\n`,
     );
   });
 }

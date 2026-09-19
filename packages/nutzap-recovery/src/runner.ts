@@ -27,6 +27,10 @@ export const CDK_SCENARIOS = [
   'cdk-concurrent',
   'cdk-crash-after-swap',
   'cdk-peer-crash-after-swap',
+  'cdk-post-spend-stale-relay',
+  'cdk-post-spend-publication-crash',
+  'cdk-peer-post-spend-stale-relay',
+  'cdk-peer-post-spend-publication-crash',
 ] as const;
 export interface NutzapRunOptions {
   mintUrl?: string;
@@ -44,7 +48,8 @@ export async function runNutzapScenario(
   options: NutzapRunOptions = {},
 ): Promise<NutzapReport> {
   validateRun(id, seed);
-  if (id.startsWith('post-spend-')) return runPostSpendScenario(id, seed, options.mintUrl);
+  if (id.includes('post-spend-'))
+    return runPostSpendScenario(id, seed, options.mintUrl, options.cdkReceiver);
   if (id.startsWith('cdk-')) return runCdkScenario(id, seed, options.mintUrl, options.cdkReceiver);
   if (id.startsWith('independent-')) return runIndependentScenario(id, seed, options.mintUrl);
   const session = await createNutzapSession(seed, options.mintUrl);
