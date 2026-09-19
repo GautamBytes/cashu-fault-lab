@@ -38,7 +38,10 @@ export async function runReceiverProcess(
         child.send({ type: 'start', input });
         return;
       }
-      if (m.type === 'after-swap' && input.pauseAfterSwap) {
+      if (
+        (m.type === 'after-swap' && input.pauseAfterSwap) ||
+        (m.type === 'after-publication' && input.pauseAfterPublication)
+      ) {
         result = 'killed';
         child.kill('SIGKILL');
         return;
@@ -60,6 +63,9 @@ export async function runReceiverProcess(
       const dispatch = async (): Promise<unknown> => {
         const [a, b] = m.args;
         switch (m.method) {
+          case 'prepareSpend':
+            if (!mint.prepareSpend) throw Error('Spend unavailable');
+            return mint.prepareSpend(a as NutzapProof[], b as number);
           case 'prepare':
             return mint.prepare(a as Nutzap);
           case 'swap':

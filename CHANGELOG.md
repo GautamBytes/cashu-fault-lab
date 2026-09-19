@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add post-spend NIP-60 recovery scenarios: partial spending, stale/deleted/reordered token events,
+  wallet reconnection, publication SIGKILL recovery, and recipient settlement on both mints.
+- Keep immutable redemption credits separate from current spendable balances, preserve retired
+  token IDs, and prevent relay synchronization from releasing prepared spend reservations.
 - Run the eleven funded NIP-61 recovery scenarios and replay against both pinned Nutshell
   and mintd, including native CDK/cashu-ts races and crashes in both directions.
 - Save redacted evidence per mint, record observed mint software versions, and reject

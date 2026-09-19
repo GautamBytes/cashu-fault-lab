@@ -104,6 +104,37 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     }
 
     const scenarios = await run(process.execPath, [cli, 'ls', '--json'], { cwd: installRoot });
+    const spendArtifact = join(installRoot, 'post-spend.json');
+    const spendOptions = [
+      '--seed',
+      'installed-post-spend',
+      ...(process.env.CFL_NUTZAP_MINT_URL ? ['--mint-url', process.env.CFL_NUTZAP_MINT_URL] : []),
+    ];
+    const spent = await run(
+      process.execPath,
+      [
+        cli,
+        'nutzap',
+        'run',
+        'post-spend-publication-crash',
+        ...spendOptions,
+        '--output',
+        spendArtifact,
+      ],
+      { cwd: installRoot },
+    );
+    assert.equal(spent.exitCode, 0, spent.stderr);
+    const spendReport = JSON.parse(spent.stdout);
+    assert.equal(spendReport.status, 'passed');
+    assert.equal(spendReport.evidence.postSpend.publicationCrashObserved, true);
+    assert.equal(spendReport.evidence.postSpend.credits, 1);
+    const spendReplay = await run(
+      process.execPath,
+      [cli, 'nutzap', 'replay', spendArtifact, ...spendOptions],
+      { cwd: installRoot },
+    );
+    assert.equal(spendReplay.exitCode, 0, spendReplay.stderr);
+    assert.equal(JSON.parse(spendReplay.stdout).fingerprint, spendReport.fingerprint);
     if (process.env.CFL_NUTZAP_CDK_RECEIVER && process.env.CFL_NUTZAP_MINT_URL) {
       const artifact = join(installRoot, 'cdk-nutzap.json');
       const options = [

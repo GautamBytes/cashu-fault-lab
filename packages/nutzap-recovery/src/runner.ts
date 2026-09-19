@@ -9,6 +9,7 @@ import { createNutzapSession } from './session.js';
 import { observeNutzap } from './observation.js';
 import { runIndependentScenario } from './independent.js';
 import { runCdkScenario } from './cdk.js';
+import { runPostSpendScenario } from './post-spend.js';
 export { verifyNutzapEvidence } from './evidence.js';
 export const SCENARIOS = [
   'duplicate-relays',
@@ -19,6 +20,8 @@ export const SCENARIOS = [
   'independent-concurrent',
   'independent-crash-after-swap',
   'independent-relay-outage',
+  'post-spend-stale-relay',
+  'post-spend-publication-crash',
 ] as const;
 export const CDK_SCENARIOS = [
   'cdk-concurrent',
@@ -41,6 +44,7 @@ export async function runNutzapScenario(
   options: NutzapRunOptions = {},
 ): Promise<NutzapReport> {
   validateRun(id, seed);
+  if (id.startsWith('post-spend-')) return runPostSpendScenario(id, seed, options.mintUrl);
   if (id.startsWith('cdk-')) return runCdkScenario(id, seed, options.mintUrl, options.cdkReceiver);
   if (id.startsWith('independent-')) return runIndependentScenario(id, seed, options.mintUrl);
   const session = await createNutzapSession(seed, options.mintUrl);

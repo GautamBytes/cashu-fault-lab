@@ -1,6 +1,8 @@
 import type { Event } from 'nostr-tools';
 import { receiveNutzap } from './receiver.js';
 import { queryEvents } from './relay.js';
+import { spendNutzap } from './spend.js';
+import { validateNutzap } from './protocol.js';
 import type { MintPort } from './types.js';
 export interface WorkerInput {
   database: string;
@@ -10,6 +12,8 @@ export interface WorkerInput {
   relays: string[];
   pauseAfterSwap: boolean;
   syncPeers?: boolean;
+  spendAmount?: number;
+  pauseAfterPublication?: boolean;
 }
 let sequence = 0;
 const pending = new Map<
@@ -46,19 +50,20 @@ process.on('message', (raw: unknown) => {
   if (message.type !== 'start') return;
   const input = message.input;
   const mint: MintPort = {
+    prepareSpend: (proofs, amount) => rpc('prepareSpend', [proofs, amount]),
     prepare: (zap) => rpc('prepare', [zap]),
     swap: (zap, plan) => rpc('swap', [zap, plan]),
     restore: (zap, plan) => rpc('restore', [zap, plan]),
     states: (proofs) => rpc('states', [proofs]),
     verify: (proofs) => rpc('verify', [proofs]),
   };
-  void receiveNutzap(input.event, {
+  const options = {
     database: input.database,
     key: Uint8Array.from(Buffer.from(input.keyHex, 'hex')),
     info: input.info,
     relays: input.relays,
     mint,
-    publish: (relay, event) => rpc('publish', [relay, event]),
+    publish: (relay: string, event: Event) => rpc<void>('publish', [relay, event]),
     ...(input.syncPeers ? { query: queryEvents } : {}),
     ...(input.pauseAfterSwap
       ? {
@@ -68,7 +73,22 @@ process.on('message', (raw: unknown) => {
           },
         }
       : {}),
-  })
+  };
+  const operation =
+    input.spendAmount !== undefined
+      ? spendNutzap(validateNutzap(input.event, input.info).id, input.spendAmount, {
+          ...options,
+          ...(input.pauseAfterPublication
+            ? {
+                afterPublication: async () => {
+                  process.send?.({ type: 'after-publication' });
+                  await new Promise<void>(() => {});
+                },
+              }
+            : {}),
+        })
+      : receiveNutzap(input.event, options);
+  void operation
     .then((result) => process.send?.({ type: 'result', result }, () => process.disconnect?.()))
     .catch(() => process.send?.({ type: 'error' }, () => process.disconnect?.()));
 });

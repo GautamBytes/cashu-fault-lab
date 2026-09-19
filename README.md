@@ -76,7 +76,7 @@ pnpm test:nutzap:funded
 ```
 
 The default matrix labels its mint as simulated. In the source checkout, the funded
-test runs all eleven scenarios and replay against both pinned Nutshell and mintd,
+test runs all thirteen scenarios and replay against both pinned Nutshell and mintd,
 using fake Lightning funding, real P2PK/DLEQ swaps and NUT-09 restoration. It saves
 redacted reports per mint under `artifacts/nutzap-funded/`. Select a single lane with
 `pnpm test:nutzap:funded --mint nutshell` or `--mint mintd`. This two-mint expansion
@@ -85,6 +85,14 @@ the same wallet identity and synchronize through signed, encrypted relay events.
 The funded lane also runs a separately implemented Rust/CDK receiver against
 cashu-ts, including crashes in both directions and replay. It requires Rust 1.97;
 these are lab receivers, not certification of external wallet products.
+The post-spend cases receive a nutzap, spend part of it, and reconnect a second wallet
+through stale, deleted and reordered NIP-60 token events. They also kill the spender
+during publication and verify the remaining balance and recipient settlement.
+
+```bash
+pnpm lab nutzap run post-spend-publication-crash --seed demo
+```
+
 See [nutzap recovery](docs/nutzap-recovery.md).
 
 ## Diagnose NIP-60 wallet state across relays

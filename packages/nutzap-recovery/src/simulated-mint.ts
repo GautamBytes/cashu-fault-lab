@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { digest, type Nutzap, type NutzapProof } from './protocol.js';
-import type { MintPort, PreparedRedemption } from './types.js';
+import type { MintPort, PreparedRedemption, PreparedSpend } from './types.js';
 
 /** Deterministic semantic oracle, not cryptographic mint interoperability evidence. */
 export class SimulatedMint implements MintPort {
@@ -35,6 +35,24 @@ export class SimulatedMint implements MintPort {
     this.#outputs.set(plan.material, proofs);
     this.successfulSwaps++;
     return proofs;
+  }
+  async prepareSpend(proofs: NutzapProof[], amount: number): Promise<PreparedSpend> {
+    await this.verify(proofs);
+    const send = randomBytes(32).toString('hex');
+    const keep = randomBytes(32).toString('hex');
+    return {
+      material: randomBytes(32).toString('hex'),
+      fee: 1,
+      sendSecrets: [send],
+      outputs: [
+        { secret: send, id: this.#source.id, amount },
+        {
+          secret: keep,
+          id: this.#source.id,
+          amount: proofs.reduce((n, p) => n + p.amount, 0) - amount - 1,
+        },
+      ],
+    };
   }
   async restore(_zap: Nutzap, plan: PreparedRedemption): Promise<NutzapProof[]> {
     return this.#outputs.get(plan.material) ?? [];

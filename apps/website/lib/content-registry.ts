@@ -75,7 +75,7 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
     sourcePath: 'docs/nutzap-recovery.md',
     title: 'NIP-61 nutzap recovery',
     description:
-      'Nutzap recovery across cashu-ts, native CDK, Nutshell and mintd, with replayable evidence.',
+      'Nutzap redemption and NIP-60 post-spend recovery, with replayable evidence across Nutshell and mintd.',
     group: 'Integrate',
     order: 37,
   },

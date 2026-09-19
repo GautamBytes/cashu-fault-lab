@@ -13,9 +13,11 @@ describe('nutzap commands', () => {
       writeText: async () => {},
     };
     expect((await runCli(['node', 'lab', 'nutzap', 'list'], { io })).exitCode).toBe(0);
-    expect(JSON.parse(out)).toHaveLength(11);
+    expect(JSON.parse(out)).toHaveLength(13);
     expect(JSON.parse(out)).toContain('independent-crash-after-swap');
     expect(JSON.parse(out)).toContain('cdk-peer-crash-after-swap');
+    expect(JSON.parse(out)).toContain('post-spend-stale-relay');
+    expect(JSON.parse(out)).toContain('post-spend-publication-crash');
   });
   it('rejects an unknown case before running or writing a report', async () => {
     let writes = 0;

@@ -6,11 +6,15 @@ export interface PreparedRedemption {
   fee: number;
 }
 export interface MintPort {
+  prepareSpend?(proofs: NutzapProof[], amount: number): Promise<PreparedSpend>;
   prepare(zap: Nutzap): Promise<PreparedRedemption>;
   swap(zap: Nutzap, plan: PreparedRedemption): Promise<NutzapProof[]>;
   restore(zap: Nutzap, plan: PreparedRedemption): Promise<NutzapProof[]>;
   states(proofs: NutzapProof[]): Promise<('UNSPENT' | 'SPENT' | 'PENDING')[]>;
   verify(proofs: NutzapProof[]): Promise<void>;
+}
+export interface PreparedSpend extends PreparedRedemption {
+  sendSecrets: string[];
 }
 export interface RedemptionRecord {
   zap: Nutzap;
@@ -19,6 +23,8 @@ export interface RedemptionRecord {
   events: Event[];
   published: string[];
   origin?: 'local' | 'relay';
+  wallet?: { token: Event | null; proofs: NutzapProof[]; retired: string[] };
+  spend?: { amount: number; plan: PreparedSpend; events: Event[]; sent: NutzapProof[] };
 }
 export interface ReceiverOptions {
   database: string;

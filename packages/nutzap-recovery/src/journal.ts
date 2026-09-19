@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, closeSync, openSync } from 'node:fs';
 import type { Event } from 'nostr-tools';
 import { proofY, type Nutzap, type NutzapProof } from './protocol.js';
-import type { PreparedRedemption, RedemptionRecord } from './types.js';
+import type { PreparedRedemption, PreparedSpend, RedemptionRecord } from './types.js';
 
 /** Private, disposable single-wallet journal. Transactions never span network calls. */
 export class Journal {
@@ -74,6 +74,7 @@ export class Journal {
         record.credit = amount;
         record.origin = origin;
         record.events = events;
+        record.wallet = { token: events.find((e) => e.kind === 7375) ?? null, proofs, retired: [] };
         this.#db
           .prepare('UPDATE redemptions SET record=? WHERE id=?')
           .run(JSON.stringify(record), id);
@@ -88,6 +89,84 @@ export class Journal {
   acknowledge(id: string, target: string): void {
     this.#db.prepare('INSERT OR IGNORE INTO acknowledgements VALUES(?,?)').run(id, target);
   }
+  #update(id: string, change: (record: RedemptionRecord) => void): RedemptionRecord {
+    this.#db.exec('BEGIN IMMEDIATE');
+    try {
+      const record = this.get(id);
+      if (!record || record.credit === null) throw Error('Missing credited nutzap');
+      change(record);
+      this.#db
+        .prepare('UPDATE redemptions SET record=? WHERE id=?')
+        .run(JSON.stringify(record), id);
+      this.#db.exec('COMMIT');
+      return record;
+    } catch (error) {
+      this.#db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+  prepareSpend(id: string, amount: number, plan: PreparedSpend): RedemptionRecord {
+    return this.#update(id, (record) => {
+      if (record.spend) {
+        if (record.spend.amount !== amount) throw Error('Conflicting spend amount');
+        return;
+      }
+      if (!record.wallet?.token || record.wallet.retired.length)
+        throw Error('Requires initial wallet token');
+      record.spend = { amount, plan, events: [], sent: [] };
+      // Prepared inputs are reserved, never advertised as spendable during recovery.
+      record.wallet.proofs = [];
+    });
+  }
+  #wallet(
+    record: RedemptionRecord,
+    token: Event | null,
+    proofs: NutzapProof[],
+    retired: string[],
+  ): void {
+    const tombstones = [...new Set([...(record.wallet?.retired ?? []), ...retired])];
+    if (token && tombstones.includes(token.id)) throw Error('Retired wallet token');
+    for (const proof of proofs) {
+      const owner = this.#db
+        .prepare('SELECT redemption FROM outputs WHERE mint=? AND y=?')
+        .get(record.zap.mint, proofY(proof));
+      if (owner && owner.redemption !== record.zap.id)
+        throw Error('Proof already belongs to another receipt');
+      this.#db
+        .prepare('INSERT OR IGNORE INTO outputs VALUES(?,?,?)')
+        .run(record.zap.mint, proofY(proof), record.zap.id);
+    }
+    record.wallet = { token, proofs, retired: tombstones };
+  }
+  wallet(id: string, token: Event | null, proofs: NutzapProof[], retired: string[]): boolean {
+    let updated = false;
+    this.#update(id, (record) => {
+      if (record.spend && !record.spend.events.length) return;
+      this.#wallet(record, token, proofs, retired);
+      updated = true;
+    });
+    return updated;
+  }
+  finishSpend(
+    id: string,
+    events: Event[],
+    keep: NutzapProof[],
+    sent: NutzapProof[],
+  ): RedemptionRecord {
+    return this.#update(id, (record) => {
+      if (!record.spend) throw Error('Missing prepared spend');
+      if (record.spend.events.length) return;
+      const original = record.events.find((e) => e.kind === 7375)!;
+      this.#wallet(
+        record,
+        events.find((e) => e.kind === 7375)!,
+        keep,
+        [original.id],
+      );
+      record.spend.events = events;
+      record.spend.sent = sent;
+    });
+  }
   summary(): { credits: number; balance: number } {
     const records = this.#db
       .prepare('SELECT record FROM redemptions')
@@ -95,7 +174,11 @@ export class Journal {
       .map((r) => JSON.parse(String(r.record)) as RedemptionRecord);
     return {
       credits: records.filter((r) => r.credit !== null && r.origin !== 'relay').length,
-      balance: records.reduce((sum, r) => sum + (r.credit ?? 0), 0),
+      balance: records.reduce(
+        (sum, r) =>
+          sum + (r.wallet ? r.wallet.proofs.reduce((n, p) => n + p.amount, 0) : (r.credit ?? 0)),
+        0,
+      ),
     };
   }
   close(): void {
