@@ -31,6 +31,8 @@ pnpm test:nutzap:funded
 Requires Node 24, Rust 1.97 and Docker on macOS or Linux. The script builds the native
 CDK receiver once and runs separate Nutshell and mintd stacks in sequence. Each uses a
 unique Compose project, a dynamically selected loopback port and fake Lightning funding.
+The mintd fixture pins its fake-payment delay to one second so random funding waits
+cannot accumulate across the matrix and exhaust its timeout.
 The script removes only its own stacks and volumes; no real sats are required. Missing infrastructure fails the lane.
 The funded mode uses cashu-ts 4.7.2 for actual P2PK proof creation, DLEQ validation,
 swap, NUT-09 output recovery, and NUT-07 proof states.

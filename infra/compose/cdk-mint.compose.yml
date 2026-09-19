@@ -7,6 +7,9 @@ services:
     environment:
       CDK_MINTD_URL: http://cdk-mint:8085
       CDK_MINTD_LN_BACKEND: fakewallet
+      # Keep funding waits deterministic across fresh test stacks.
+      CDK_MINTD_FAKE_WALLET_MIN_DELAY: 1
+      CDK_MINTD_FAKE_WALLET_MAX_DELAY: 1
       CDK_MINTD_LISTEN_HOST: 0.0.0.0
       CDK_MINTD_LISTEN_PORT: 8085
       CDK_MINTD_DATABASE: sqlite
