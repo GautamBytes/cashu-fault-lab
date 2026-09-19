@@ -374,6 +374,15 @@ test('Architecture participates in docs navigation, search, and pagination', asy
     page.getByRole('heading', { name: 'Cross-language post-spend recovery (unreleased)' }),
   ).toBeVisible();
   await expect(
+    page.getByRole('heading', { name: 'NIP-65 sender read-relay discovery (unreleased)' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Upstream Nutshell wallet integration (unreleased)' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'sender-relay-response-lost', exact: true }),
+  ).toBeVisible();
+  await expect(
     page.getByRole('heading', { name: 'Receiving-key rotation (unreleased)' }),
   ).toBeVisible();
   await expect(

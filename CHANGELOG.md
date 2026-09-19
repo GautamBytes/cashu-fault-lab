@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add durable NIP-65 sender read-relay discovery with stale-list, offline-relay and lost-OK recovery scenarios.
+- Verify a pinned upstream Nutshell CLI wallet round trip, including duplicate rejection, restart persistence and P2PK return through sender relay routing.
+
 - Add receiving-key rotation scenarios for delayed nutzaps, post-swap SIGKILL recovery,
   stale advertisements and missing-key backup restoration, with private durable key history,
   funded replay on Nutshell and mintd, and installed CLI coverage.

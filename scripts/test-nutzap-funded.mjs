@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+import { execFile, spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
@@ -108,6 +109,25 @@ try {
         ],
         env,
       );
+      if (mint.name === 'nutshell') {
+        const { stdout } = await promisify(execFile)(
+          'docker',
+          [...compose, 'ps', '-q', 'nutshell'],
+          { env, timeout: 10000 },
+        );
+        await run(
+          'pnpm',
+          [
+            '--filter',
+            '@cashu-fault-lab/nutzap-recovery',
+            'exec',
+            'vitest',
+            'run',
+            'test/upstream-wallet-funded.test.ts',
+          ],
+          { ...env, CFL_NUTZAP_WALLET_CONTAINER: stdout.trim() },
+        );
+      }
       await run('pnpm', ['test:npm-package'], env);
       console.log(`NIP-61 ${mint.name} reports: ${reports}`);
     } finally {

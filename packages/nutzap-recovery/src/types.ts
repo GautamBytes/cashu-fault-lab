@@ -22,6 +22,7 @@ export interface RedemptionRecord {
   credit: number | null;
   events: Event[];
   published: string[];
+  historyRelays?: string[];
   origin?: 'local' | 'relay';
   wallet?: { token: Event | null; proofs: NutzapProof[]; retired: string[] };
   spend?: { amount: number; plan: PreparedSpend; events: Event[]; sent: NutzapProof[] };
@@ -34,6 +35,7 @@ export interface ReceiverOptions {
   mint: MintPort;
   publish: (relay: string, event: Event) => Promise<void>;
   query?: (relay: string, filter: Filter) => Promise<Event[]>;
+  senderRelayQuery?: (relay: string, filter: Filter) => Promise<Event[]>;
   afterSwap?: () => Promise<void>;
 }
 export type ReceiveResult =

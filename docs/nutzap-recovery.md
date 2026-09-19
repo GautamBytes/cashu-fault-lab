@@ -39,7 +39,7 @@ swap, NUT-09 output recovery, and NUT-07 proof states.
 
 ## Two-mint funded matrix (unreleased)
 
-The source checkout runs all twenty scenarios on each mint, including the cashu-ts/CDK
+The source checkout runs all twenty-three scenarios on each mint, including the cashu-ts/CDK
 race and crashes in both directions. Every scenario is replayed with fresh proofs.
 The existing installed-package check also runs CDK crash/recovery and replay against
 each mint outside the monorepo. Both lanes must pass; unavailable infrastructure or
@@ -50,7 +50,7 @@ an unexpected mint implementation fails the lane instead of becoming simulated e
 | Nutshell | 0.20.2         | `infra/compose/nutshell.compose.yml` |
 | mintd    | 0.17.3         | `infra/compose/cdk-mint.compose.yml` |
 
-Both images are digest-pinned in those files. The full command runs 40 scenario/mint
+Both images are digest-pinned in those files. The full command runs 46 scenario/mint
 combinations plus replay and invalid-DLEQ canaries. To select one lane:
 
 ```bash
@@ -68,7 +68,7 @@ Replay checks the target mint implementation before creating new proofs and comp
 it again after execution. The port can change between runs. Older funded artifacts
 with a generic mint label must be regenerated; simulated replay remains supported.
 This verifies recovery with two mint implementations, not transfers between mints or
-certification of external wallet products. The default simulated matrix contains thirteen scenarios; seven native CDK cases require funded mode.
+certification of external wallet products. The default simulated matrix contains sixteen scenarios; seven native CDK cases require funded mode.
 
 For an already-running **disposable** mint, use:
 
@@ -134,8 +134,9 @@ receipt. This does not implement general wallet synchronization or migrate exist
 Recovery requires the winner's private journal to survive the crash: permanent loss
 of unpublished output secrets is outside the guarantee. The scenarios provide lab
 receiver evidence, not certification of independently developed wallet products.
-Upstream wallet adoption, public-relay discovery, NIP-65 sender
-read-relay discovery and custom external adapters remain future work. The existing
+Public-relay discovery, native CDK sender routing and upstream Nostr wallet adoption
+remain future work. The sections below add bounded sender read-relay discovery and
+a pinned external CLI wallet round trip. The existing
 wallet doctor remains read-only.
 
 ## Post-spend wallet recovery (unreleased)
@@ -351,3 +352,104 @@ This is a bounded lab recovery policy. [NIP-61](https://github.com/nostr-protoco
 advertises a separate receiving key; it does not specify a complete rotation lifecycle.
 The private history here is not a new NIP-60 wire format or a production wallet key-backup
 service. Permanent loss of the old key before redemption remains unrecoverable in this profile.
+
+## NIP-65 sender read-relay discovery (unreleased)
+
+[NIP-61](https://github.com/nostr-protocol/nips/blob/master/61.md) recommends publishing
+redemption history to the sender's [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md)
+read relays. These cases enable that behavior in the cashu-ts lab receiver.
+It queries kind:10002 on its configured relays for the **original nutzap sender**,
+verifies signatures and author, and persists the newest observed list. Timestamp ties
+choose the lowest event ID. A stale answer after restart cannot roll back this cache.
+
+Unmarked `r` tags count as read and write; `read` tags receive history and `write`-only
+tags do not. Only kind:7376 redemption history is forwarded. Kind:7375 wallet token
+events stay on the wallet's configured relays. The existing encrypted history and
+its public sender/nutzap references are reused without re-signing.
+
+The first successful discovery commits a destination snapshot for that redemption.
+Each relay/event acknowledgement remains durable. An unavailable destination leaves
+`publication-pending`; a new receiver process retries the same event without another
+swap or credit. Changing metadata later affects new redemptions, not an existing outbox.
+A cached list can be used during discovery outages. With no cache, failed queries remain
+pending; successful discovery with no list or a list without read relays adds no targets.
+A signed withdrawal supersedes an older cached list.
+
+This is a local test profile: at most four sender read relays, `ws://127.0.0.1` only,
+no URL credentials or fragments, no public relay crawling. Signed unsupported
+read destinations keep publication pending rather than claiming delivery. Lists are
+limited to 64 KiB, query results to 128 events, and timestamps to at most five minutes
+in the future. This tests ordering of observed lists, not global freshness across Nostr.
+
+| Scenario                     | Required evidence                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `sender-relay-stale-list`    | Cache the newer signed list, restart with stale answers, deliver to the newer read relays only.           |
+| `sender-relay-outage`        | Stop a sender relay before publication, confirm it is unreachable, restart it on the same port and retry. |
+| `sender-relay-response-lost` | Accept history but drop its OK; retry the identical event with no duplicate credit.                       |
+
+```bash
+pnpm lab nutzap run sender-relay-response-lost --seed demo --output artifacts/sender-routing.json
+pnpm lab nutzap replay artifacts/sender-routing.json --seed demo
+```
+
+All three cases run and replay in simulated mode and on both funded mints. Reports
+require one history and zero tokens on each sender read relay, no events on the
+write-only relay, stable outbox IDs and conserved value. Routing is opt-in for this
+profile; native CDK receivers retain their configured-relay behavior.
+
+## Upstream Nutshell wallet integration (unreleased)
+
+The Nutshell funded lane additionally runs the independently maintained
+[Nutshell CLI wallet](https://github.com/cashubtc/nutshell/tree/0.20.2/cashu/wallet),
+version 0.20.2, from the same digest-pinned image as the disposable mint. These are
+unmodified upstream `receive`, `balance`, `proofs` and `send` commands, each in a new
+process with a separate disposable wallet database. The fixture uses its default
+`wallet` name and sets `LOCKTIME_DELTA_SECONDS=0` to emit the basic SIG_INPUTS
+profile; timelocked transfers are outside this suite. Named wallets are not qualified:
+the pinned CLI receive helper recreates a wallet without preserving its name, so
+receiving into a non-default name did not appear in that named wallet after restart. The test does not substitute
+lab wallet code for those operations.
+
+```bash
+pnpm test:nutzap:funded --mint nutshell
+```
+
+The integration verifies this sequence:
+
+1. Kill the lab receiver after a real swap, then recover its 16-sat payment.
+2. Send 8 sats from the recovered balance into the upstream CLI wallet.
+3. Reopen the CLI wallet, verify its balance and proofs, and reject receiving the same token twice.
+4. Have the CLI send 4 sats locked to the lab's P2PK receiving key, including DLEQ.
+5. Wrap that upstream token in a lab-signed nutzap, redeem it, lose a history acknowledgement,
+   and retry using NIP-65 read-relay discovery.
+6. Verify spent inputs, unspent remaining proofs, one credit per distinct payment and
+   total value including every fee.
+
+Locally verified amounts for this pinned fixture:
+
+| Item                                                      | Sats |
+| --------------------------------------------------------- | ---: |
+| Initial disposable payment                                |   16 |
+| Final lab balance (original change plus returned payment) |    9 |
+| Final upstream wallet balance                             |    2 |
+| Five mint-operation fees                                  |    5 |
+
+The final balances plus fees equal the initial 16 sats. The lab records two distinct
+payments; duplicate receipt and publication retries add no credit.
+
+The upstream CLI owns Cashu token operations and persistence. The lab supplies the
+Nostr identity, kind:9321 wrapper and kind:10002 advertisement; this does **not** claim
+native NIP-60/NIP-61 support or adoption by the upstream wallet. This application
+integration currently covers the Nutshell mint only. The two-mint recovery matrix
+remains separate.
+
+The wallet runs inside the disposable container. Token envelopes use the container's
+loopback mint URL; the host-side Nostr wrapper uses the host's mapped loopback URL.
+Both identify the same mint, and proof data is unchanged. Tokens travel through stdin;
+private command output is captured, not logged or uploaded. The wallet directory,
+journals and test volumes are removed after the run.
+
+CI runs this integration in its Nutshell NIP-61 lane. Its separate redacted result is
+`artifacts/nutzap-funded/<run-id>/nutshell/upstream-wallet-roundtrip.json`, recording
+wallet/image versions, balances, fees and checked outcomes. Re-running the command
+uses fresh wallet state and proofs; this result is not a `nutzap replay` artifact.

@@ -1,3 +1,4 @@
+import { runSenderRoutingScenario } from './sender-routing.js';
 import { join } from 'node:path';
 import { runKeyRotationScenario } from './key-rotation.js';
 import { digest } from './protocol.js';
@@ -13,6 +14,9 @@ import { runCdkScenario } from './cdk.js';
 import { runPostSpendScenario } from './post-spend.js';
 export { verifyNutzapEvidence } from './evidence.js';
 export const SCENARIOS = [
+  'sender-relay-stale-list',
+  'sender-relay-outage',
+  'sender-relay-response-lost',
   'duplicate-relays',
   'concurrent-redemption',
   'crash-after-swap',
@@ -52,6 +56,7 @@ export async function runNutzapScenario(
   options: NutzapRunOptions = {},
 ): Promise<NutzapReport> {
   validateRun(id, seed);
+  if (id.startsWith('sender-relay-')) return runSenderRoutingScenario(id, seed, options.mintUrl);
   if (id.startsWith('key-rotation-')) return runKeyRotationScenario(id, seed, options.mintUrl);
   if (id.includes('post-spend-'))
     return runPostSpendScenario(id, seed, options.mintUrl, options.cdkReceiver);

@@ -13,6 +13,7 @@ export interface WorkerInput {
   relays: string[];
   pauseAfterSwap: boolean;
   syncPeers?: boolean;
+  discoverSenderRelays?: boolean;
   spendAmount?: number;
   pauseAfterPublication?: boolean;
   receivingKeys?: { database: string; funded: boolean };
@@ -66,6 +67,7 @@ process.on('message', (raw: unknown) => {
     relays: input.relays,
     mint,
     publish: (relay: string, event: Event) => rpc<void>('publish', [relay, event]),
+    ...(input.discoverSenderRelays ? { senderRelayQuery: queryEvents } : {}),
     ...(input.syncPeers ? { query: queryEvents } : {}),
     ...(input.pauseAfterSwap
       ? {

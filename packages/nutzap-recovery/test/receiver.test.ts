@@ -171,6 +171,68 @@ describe('durable nutzap recovery', () => {
     expect(f.swaps()).toBe(1);
     expect([...f.published.values()].map((s) => s.size)).toEqual([2, 2]);
   });
+  it('persists history-only sender routes and retries the same event after an unavailable relay', async () => {
+    const f = await fixture();
+    const senderRelay = 'ws://127.0.0.1:4402/';
+    const metadata = finalizeEvent(
+      { kind: 10002, created_at: 3, content: '', tags: [['r', senderRelay, 'read']] },
+      lock,
+    );
+    let queries = 0;
+    let offline = true;
+    const sent: { relay: string; kind: number; id: string }[] = [];
+    const options = {
+      ...f,
+      senderRelayQuery: async () => {
+        queries++;
+        return [metadata];
+      },
+      publish: async (relay: string, e: { kind: number; id: string }) => {
+        sent.push({ relay, kind: e.kind, id: e.id });
+        if (relay === senderRelay && offline) throw Error('offline');
+        await f.publish(relay, e);
+      },
+    };
+    expect(await receiveNutzap(event, options)).toBe('publication-pending');
+    const queriesBeforeRestart = queries;
+    offline = false;
+    expect(await receiveNutzap(event, options)).toBe('complete');
+    expect(await receiveNutzap(event, options)).toBe('complete');
+    expect(queries).toBe(queriesBeforeRestart);
+    expect(f.swaps()).toBe(1);
+    const forwarded = sent.filter((e) => e.relay === senderRelay);
+    expect(forwarded.map((e) => e.kind)).toEqual([7376, 7376]);
+    expect(new Set(forwarded.map((e) => e.id)).size).toBe(1);
+    expect([...f.published.values()].map((s) => s.size)).toEqual([2, 2, 1]);
+  });
+  it('retries discovery failures without redirecting history to a duplicate publisher', async () => {
+    const f = await fixture();
+    expect(
+      await receiveNutzap(event, {
+        ...f,
+        senderRelayQuery: async () => {
+          throw Error('offline');
+        },
+      }),
+    ).toBe('publication-pending');
+    const duplicate = finalizeEvent(
+      { kind: event.kind, created_at: 4, content: '', tags: event.tags },
+      key,
+    );
+    let queried = 0;
+    expect(
+      await receiveNutzap(duplicate, {
+        ...f,
+        senderRelayQuery: async (_relay, filter) => {
+          queried++;
+          expect(filter.authors).toEqual([event.pubkey]);
+          return [];
+        },
+      }),
+    ).toBe('complete');
+    expect(queried).toBe(2);
+    expect(f.swaps()).toBe(1);
+  });
   it('rejects partially overlapping proof sets without a second swap or credit', async () => {
     const f = await fixture();
     await receiveNutzap(event, f);

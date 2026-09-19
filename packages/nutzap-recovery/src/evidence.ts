@@ -17,6 +17,15 @@ export interface NutzapEvidence {
   faultObserved: boolean;
   killedAfterSwap: boolean;
   completed: boolean;
+  senderRelays?: {
+    staleListRejected: boolean;
+    offlineObserved: boolean;
+    historyCounts: number[];
+    tokenCounts: number[];
+    writeOnlyEvents: number;
+    outboxStable: boolean;
+    pendingObserved: boolean;
+  };
   rotation?: {
     staleAdvertisementRejected: boolean;
     delayedDeliveryObserved: boolean;
@@ -209,6 +218,18 @@ export function verifyNutzapEvidence(
       p.relayEventsAgree === true;
     checks['post-spend-crash'] =
       !!p && p.publicationCrashObserved === scenarioId.endsWith('publication-crash');
+  }
+  if (scenarioId?.startsWith('sender-relay-')) {
+    const r = e.senderRelays;
+    checks['sender-history-routing'] =
+      !!r &&
+      r.staleListRejected === true &&
+      JSON.stringify(r.historyCounts) === '[1,1]' &&
+      JSON.stringify(r.tokenCounts) === '[0,0]' &&
+      r.writeOnlyEvents === 0 &&
+      r.outboxStable === true &&
+      r.pendingObserved === (scenarioId !== 'sender-relay-stale-list') &&
+      r.offlineObserved === (scenarioId === 'sender-relay-outage');
   }
   if (scenarioId?.startsWith('key-rotation-')) {
     const r = e.rotation;

@@ -1,4 +1,5 @@
 import { finalizeEvent, getPublicKey, nip44, type Event } from 'nostr-tools';
+import { discoverSenderRelays } from './sender-relays.js';
 import { Journal } from './journal.js';
 import { recoverFromPeer } from './peer.js';
 import { validateNutzap, type NutzapProof } from './protocol.js';
@@ -112,18 +113,38 @@ export async function receiveNutzap(
         );
       }
     }
-    for (const relay of options.relays) {
-      for (const out of record.events) {
-        const target = JSON.stringify([relay, out.id]);
-        if (record.published.includes(target)) continue;
+    let pending = false;
+    const published = new Set(record.published);
+    const publish = async (relay: string, out: Event) => {
+      const target = JSON.stringify([relay, out.id]);
+      if (published.has(target)) return;
+      try {
+        await options.publish(relay, out);
+        db.acknowledge(zap.id, target);
+        published.add(target);
+      } catch {
+        pending = true;
+      }
+    };
+    for (const relay of options.relays) for (const out of record.events) await publish(relay, out);
+    if (options.senderRelayQuery || record.historyRelays !== undefined) {
+      if (record.historyRelays === undefined) {
         try {
-          await options.publish(relay, out);
-          db.acknowledge(zap.id, target);
+          const relays = await discoverSenderRelays(
+            db,
+            record.zap.event.pubkey,
+            options.relays,
+            options.senderRelayQuery!,
+          );
+          record = db.historyRelays(zap.id, relays);
         } catch {
           return 'publication-pending';
         }
       }
+      for (const relay of record.historyRelays!)
+        for (const out of record.events.filter((e) => e.kind === 7376)) await publish(relay, out);
     }
+    if (pending) return 'publication-pending';
     return 'complete';
   } finally {
     db.close();

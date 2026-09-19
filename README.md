@@ -76,7 +76,7 @@ pnpm test:nutzap:funded
 ```
 
 The default matrix labels its mint as simulated. In the source checkout, the funded
-test runs all twenty scenarios and replay against both pinned Nutshell and mintd,
+test runs all twenty-three scenarios and replay against both pinned Nutshell and mintd,
 using fake Lightning funding, real P2PK/DLEQ swaps and NUT-09 restoration. It saves
 redacted reports per mint under `artifacts/nutzap-funded/`. Select a single lane with
 `pnpm test:nutzap:funded --mint nutshell` or `--mint mintd`. This two-mint expansion
@@ -103,6 +103,17 @@ against both mints; private keys remain in disposable local state.
 
 ```bash
 pnpm lab nutzap run key-rotation-crash-after-swap --seed demo
+```
+
+NIP-65 sender routing adds stale relay-list, disconnected relay and lost-acknowledgement
+cases. Only the original redemption history reaches sender read relays; retries preserve
+one credit and the same event ID. The Nutshell funded lane also runs the upstream
+Nutshell CLI wallet through a receive/restart/duplicate-rejection/P2PK-return round trip.
+The lab supplies the Nostr wrapper; the upstream wallet performs its own Cashu operations.
+
+```bash
+pnpm lab nutzap run sender-relay-response-lost --seed demo
+pnpm test:nutzap:funded --mint nutshell
 ```
 
 See [nutzap recovery](docs/nutzap-recovery.md).
