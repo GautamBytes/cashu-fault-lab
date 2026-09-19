@@ -1,6 +1,10 @@
-import { join } from 'node:path';
-import { stat } from 'node:fs/promises';
+import { join, isAbsolute } from 'node:path';
+import { access, stat } from 'node:fs/promises';
 import { finalizeEvent, getPublicKey, type Event } from 'nostr-tools';
+import { constants } from 'node:fs';
+import { runCdkReceiver } from './cdk-process.js';
+import type { WorkerInput } from './nutzap-worker.js';
+import type { MintPort } from './types.js';
 import { ReceivingKeys } from './receiving-keys.js';
 import { createNutzapSession } from './session.js';
 import { FundedMint } from './funded-mint.js';
@@ -16,7 +20,27 @@ export async function runKeyRotationScenario(
   id: string,
   seed: string,
   mintUrl?: string,
+  binary?: string,
 ): Promise<NutzapReport> {
+  const native = id.startsWith('cdk-');
+  if (native) {
+    if (!mintUrl || !binary)
+      throw Error('CDK scenarios require a disposable mint URL and receiver binary');
+    if (!isAbsolute(binary)) throw Error('CDK receiver binary must be an absolute executable path');
+    await access(binary, constants.X_OK);
+  }
+  let keySelections = 0,
+    blockedBeforeMint = 0,
+    swaps = 0;
+  const receive = (input: WorkerInput, backend: MintPort) =>
+    native
+      ? runCdkReceiver(binary!, input, '', async (phase) => {
+          if (phase === 'receiving-key-selected') keySelections++;
+          if (phase === 'missing-receiving-key') blockedBeforeMint++;
+          if (phase === 'after-swap') swaps++;
+          return phase === 'after-swap' && input.pauseAfterSwap ? 'kill' : 'continue';
+        })
+      : runReceiverProcess(input, backend, publishEvent);
   const session = await createNutzapSession(seed, mintUrl);
   const { directory, key, lock, info, event, relays, relayObjects, backend, zap } = session;
   const keyDatabase = join(directory, 'receiving-keys.sqlite');
@@ -32,8 +56,8 @@ export async function runKeyRotationScenario(
     },
     key,
   );
-  const missing = id === 'key-rotation-missing-key';
-  const crash = id === 'key-rotation-crash-after-swap';
+  const missing = id.endsWith('missing-key');
+  const crash = id.endsWith('crash-after-swap');
   const remember = (path: string, events: Event[], secret?: string) => {
     const keys = new ReceivingKeys(path, info.pubkey);
     try {
@@ -95,8 +119,7 @@ export async function runKeyRotationScenario(
     let missingKeyBlocked = false,
       blockedWithoutCredit = false;
     if (missing) {
-      missingKeyBlocked =
-        (await runReceiverProcess(input, backend, publishEvent)) === 'recovery-blocked';
+      missingKeyBlocked = (await receive(input, backend)) === 'recovery-blocked';
       const blocked = read();
       const views = await Promise.all(
         relays.map((r) => queryEvents(r, { kinds: [7375, 7376], authors: [info.pubkey] })),
@@ -111,11 +134,7 @@ export async function runKeyRotationScenario(
         throw Error('Missing receiving key did not block safely');
       remember(keyDatabase, [info], Buffer.from(lock).toString('hex'));
     }
-    const first = await runReceiverProcess(
-      { ...input, pauseAfterSwap: crash },
-      backend,
-      publishEvent,
-    );
+    const first = await receive({ ...input, pauseAfterSwap: crash }, backend);
     const before = read();
     const killedAfterSwap =
       first === 'killed' &&
@@ -126,8 +145,7 @@ export async function runKeyRotationScenario(
     let completed = true;
     for (const inbox of inboxes)
       completed =
-        (await runReceiverProcess({ ...input, event: inbox[0]! }, backend, publishEvent)) ===
-          'complete' && completed;
+        (await receive({ ...input, event: inbox[0]! }, backend)) === 'complete' && completed;
     const old = read();
     if (!old.old) throw Error('Missing delayed nutzap journal');
     const evidence = await observeNutzap(
@@ -168,8 +186,8 @@ export async function runKeyRotationScenario(
     for (const inbox of newInboxes) {
       if (inbox[0])
         newCompleted =
-          (await runReceiverProcess({ ...input, event: inbox[0] }, nextBackend, publishEvent)) ===
-            'complete' && newCompleted;
+          (await receive({ ...input, event: inbox[0] }, nextBackend)) === 'complete' &&
+          newCompleted;
     }
     const db = new Journal(database);
     const nextRecord = db.get(nextZap.id);
@@ -193,10 +211,7 @@ export async function runKeyRotationScenario(
       [event, backend],
       [nextEvent, nextBackend],
     ] as const)
-      if (
-        (await runReceiverProcess({ ...input, event: payment }, client, publishEvent)) !==
-        'complete'
-      )
+      if ((await receive({ ...input, event: payment }, client)) !== 'complete')
         throw Error('Duplicate delivery failed');
     const finalDb = new Journal(database);
     const finalSummary = finalDb.summary();
@@ -218,6 +233,7 @@ export async function runKeyRotationScenario(
       finalKeys.close();
     }
     evidence.rotation = {
+      ...(native ? { native: { keySelections, blockedBeforeMint, swaps } } : {}),
       staleAdvertisementRejected,
       delayedDeliveryObserved,
       oldKeyRecovered,
@@ -252,7 +268,7 @@ export async function runKeyRotationScenario(
       failures: check.failures,
       fingerprint: evidenceFingerprint(evidence),
       implementations: {
-        receiver: 'cashu-fault-lab/nip61-key-rotation-v1',
+        receiver: native ? 'cdk/0.17.3 + nostr/0.45.5' : 'cashu-fault-lab/nip61-key-rotation-v1',
         mint: session.mintImplementation,
         relay: 'cashu-fault-lab/nostr-fault-relay',
       },

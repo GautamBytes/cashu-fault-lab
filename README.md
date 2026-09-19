@@ -95,11 +95,13 @@ cases reverse those roles. Both directions run against each mint.
 pnpm lab nutzap run post-spend-publication-crash --seed demo
 ```
 
-Three receiving-key rotation cases test delayed old-key payments, recovery after SIGKILL,
+Six receiving-key rotation cases test delayed old-key payments, recovery after SIGKILL,
 and a missing old key that blocks until its backup is imported. A persisted sender cache
 rejects stale advertisements after seeing the new key. Both old and new payments must
-be credited once, with conserved value after fees. These cashu-ts cases run and replay
-against both mints; private keys remain in disposable local state.
+be credited once, with conserved value after fees. Cashu-ts and native Rust/CDK cases run and replay
+against both mints; native CDK selects retained keys from the private history itself.
+The `cdk-key-rotation-*` cases require a disposable mint and native receiver binary;
+private keys remain in disposable local state.
 
 ```bash
 pnpm lab nutzap run key-rotation-crash-after-swap --seed demo

@@ -24,6 +24,7 @@ pub(super) fn fixture() -> Config {
         database: PathBuf::from("unused.sqlite"),
         spend_amount: None,
         sync_wallet: false,
+        receiving_keys: None,
         key_hex,
         lock_hex,
         info: signed(
@@ -281,4 +282,180 @@ fn spend_reservation_survives_stale_sync_and_keeps_original_credit() {
     assert!(db.prepare_spend(&record.zap.id, 5, plan).is_err());
     drop(db);
     std::fs::remove_file(path).unwrap();
+}
+
+fn retained_keys(f: &mut Config, old_secret: Option<&str>) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = std::env::temp_dir().join(format!("rotation-{}.sqlite", uuid::Uuid::new_v4()));
+    let db = rusqlite::Connection::open(&path).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    db.execute_batch(
+        "CREATE TABLE receiving_keys(pubkey TEXT PRIMARY KEY,info TEXT NOT NULL,secret TEXT);",
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO receiving_keys VALUES(?1,?2,?3)",
+        rusqlite::params![
+            protocol::tags(&f.info, "pubkey")[0][1],
+            serde_json::to_string(&f.info).unwrap(),
+            old_secret
+        ],
+    )
+    .unwrap();
+    let new_secret = format!("{:064x}", 3);
+    let new_key = Keys::parse(&new_secret).unwrap();
+    f.info = signed(
+        10019,
+        vec![
+            vec!["pubkey".into(), new_key.public_key().to_hex()],
+            vec!["mint".into(), "http://127.0.0.1:3338".into(), "sat".into()],
+        ],
+        &Keys::parse(&f.key_hex).unwrap(),
+    );
+    db.execute(
+        "INSERT INTO receiving_keys VALUES(?1,?2,?3)",
+        rusqlite::params![
+            new_key.public_key().to_hex(),
+            serde_json::to_string(&f.info).unwrap(),
+            new_secret
+        ],
+    )
+    .unwrap();
+    f.receiving_keys = Some(path.clone());
+    f.lock_hex.clear(); // No per-payment secret supplied by the harness.
+    path
+}
+
+#[test]
+fn native_rotation_selects_retained_key_after_reopening_private_history() {
+    let mut f = fixture();
+    let secret = f.lock_hex.clone();
+    let path = retained_keys(&mut f, Some(&secret));
+    for _ in 0..2 {
+        let (info, selected) = receiving_keys::select(&f).unwrap().unwrap();
+        assert_eq!(selected, secret);
+        assert_ne!(info.id, f.info.id);
+    }
+    std::fs::remove_file(path).unwrap();
+}
+
+#[tokio::test]
+async fn native_rotation_missing_key_blocks_before_mint_or_journal_access() {
+    let mut f = fixture();
+    let fallback = f.lock_hex.clone();
+    let path = retained_keys(&mut f, None);
+    f.lock_hex = fallback; // Missing retained keys must not silently use the single-key input.
+    f.database = path.with_extension("journal");
+    let journal = f.database.clone();
+    // No mint is running; reaching Mint::new would fail instead of returning blocked.
+    let mut phases = Vec::new();
+    assert_eq!(
+        receive(f, |phase| {
+            phases.push(phase.to_string());
+            Ok(())
+        })
+        .await
+        .unwrap(),
+        "recovery-blocked"
+    );
+    assert_eq!(phases, vec!["missing-receiving-key"]);
+    assert!(!journal.exists());
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn native_rotation_rejects_corrupt_or_expanded_key_history() {
+    for (fault, expected) in [
+        ("secret", "wrong_receiving_secret"),
+        ("signature", "invalid_info_signature"),
+        ("mint", "receiving_key_trust_changed"),
+        ("unit", "invalid_receiving_profile"),
+        ("recipient", "invalid_receiving_profile"),
+        ("third-key", "too_many_receiving_keys"),
+        ("oversize", "invalid_key_history"),
+        ("row-key", "receiving_key_trust_changed"),
+        ("public-file", "insecure_key_history"),
+    ] {
+        let mut f = fixture();
+        let secret = f.lock_hex.clone();
+        let path = retained_keys(&mut f, Some(&secret));
+        let db = rusqlite::Connection::open(&path).unwrap();
+        let key = protocol::tags(&f.info, "pubkey")[0][1].clone();
+        match fault {
+            "secret" => {
+                db.execute(
+                    "UPDATE receiving_keys SET secret=?1 WHERE pubkey=?2",
+                    rusqlite::params![secret, key],
+                )
+                .unwrap();
+            }
+            "third-key" => {
+                let extra_secret = format!("{:064x}", 4);
+                let extra_key = Keys::parse(&extra_secret).unwrap().public_key().to_hex();
+                let info = signed(
+                    10019,
+                    vec![
+                        vec!["pubkey".into(), extra_key.clone()],
+                        protocol::tags(&f.info, "mint")[0].clone(),
+                    ],
+                    &Keys::parse(&f.key_hex).unwrap(),
+                );
+                db.execute(
+                    "INSERT INTO receiving_keys VALUES(?1,?2,?3)",
+                    rusqlite::params![
+                        extra_key,
+                        serde_json::to_string(&info).unwrap(),
+                        extra_secret
+                    ],
+                )
+                .unwrap();
+            }
+            "oversize" => {
+                db.execute(
+                    "UPDATE receiving_keys SET info=?1 WHERE pubkey=?2",
+                    rusqlite::params!["x".repeat(65537), key],
+                )
+                .unwrap();
+            }
+            "row-key" => {
+                db.execute(
+                    "UPDATE receiving_keys SET pubkey='mismatched' WHERE pubkey=?1",
+                    [&key],
+                )
+                .unwrap();
+            }
+            "public-file" => {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+            }
+            _ => {
+                let mut tags: Vec<Vec<String>> =
+                    f.info.tags.iter().map(|t| t.as_slice().to_vec()).collect();
+                if fault == "mint" {
+                    tags[1][1] = "http://127.0.0.1:9999".into();
+                }
+                if fault == "unit" {
+                    tags[1][2] = "usd".into();
+                }
+                let author = Keys::parse(&if fault == "recipient" {
+                    format!("{:064x}", 7)
+                } else {
+                    f.key_hex.clone()
+                })
+                .unwrap();
+                let mut info = signed(10019, tags, &author);
+                if fault == "signature" {
+                    info.content = "tampered".into();
+                }
+                db.execute(
+                    "UPDATE receiving_keys SET info=?1 WHERE pubkey=?2",
+                    rusqlite::params![serde_json::to_string(&info).unwrap(), key],
+                )
+                .unwrap();
+            }
+        }
+        assert_eq!(receiving_keys::select(&f).err(), Some(expected), "{fault}");
+        drop(db);
+        std::fs::remove_file(path).unwrap();
+    }
 }

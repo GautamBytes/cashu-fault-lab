@@ -27,6 +27,7 @@ export interface NutzapEvidence {
     pendingObserved: boolean;
   };
   rotation?: {
+    native?: { keySelections: number; blockedBeforeMint: number; swaps: number };
     staleAdvertisementRejected: boolean;
     delayedDeliveryObserved: boolean;
     oldKeyRecovered: boolean;
@@ -123,6 +124,7 @@ export function verifyNutzapEvidence(
       ![
         'crash-after-swap',
         'key-rotation-crash-after-swap',
+        'cdk-key-rotation-crash-after-swap',
         'independent-crash-after-swap',
         'cdk-crash-after-swap',
         'cdk-peer-crash-after-swap',
@@ -132,7 +134,9 @@ export function verifyNutzapEvidence(
   };
   if (
     scenarioId?.startsWith('independent-') ||
-    (scenarioId?.startsWith('cdk-') && !scenarioId.includes('post-spend-'))
+    (scenarioId?.startsWith('cdk-') &&
+      !scenarioId.includes('post-spend-') &&
+      !scenarioId.includes('key-rotation-'))
   ) {
     const i = e.independent;
     checks['independent-wallets'] =
@@ -152,7 +156,7 @@ export function verifyNutzapEvidence(
     checks['relay-outage'] =
       scenarioId !== 'independent-relay-outage' || i?.relayOutageObserved === true;
   }
-  if (scenarioId?.startsWith('cdk-')) {
+  if (scenarioId?.startsWith('cdk-') && !scenarioId.includes('key-rotation-')) {
     const c = e.crossLanguage;
     checks['cross-language-receivers'] =
       !!c &&
@@ -231,8 +235,14 @@ export function verifyNutzapEvidence(
       r.pendingObserved === (scenarioId !== 'sender-relay-stale-list') &&
       r.offlineObserved === (scenarioId === 'sender-relay-outage');
   }
-  if (scenarioId?.startsWith('key-rotation-')) {
+  if (scenarioId?.includes('key-rotation-')) {
     const r = e.rotation;
+    if (scenarioId.startsWith('cdk-')) {
+      checks['native-rotation'] =
+        r?.native?.keySelections === 7 &&
+        r.native.swaps === 2 &&
+        r.native.blockedBeforeMint === (scenarioId.endsWith('missing-key') ? 1 : 0);
+    }
     checks['rotation-recovery'] =
       !!r &&
       r.staleAdvertisementRejected === true &&
@@ -251,8 +261,8 @@ export function verifyNutzapEvidence(
       r.totalBalance === e.outputAmount + r.newPayment.outputAmount;
     checks['rotation-missing-key'] =
       !!r &&
-      r.missingKeyBlocked === (scenarioId === 'key-rotation-missing-key') &&
-      r.blockedWithoutCredit === (scenarioId === 'key-rotation-missing-key');
+      r.missingKeyBlocked === scenarioId.endsWith('missing-key') &&
+      r.blockedWithoutCredit === scenarioId.endsWith('missing-key');
   }
   const failures = Object.entries(checks)
     .filter(([, ok]) => !ok)

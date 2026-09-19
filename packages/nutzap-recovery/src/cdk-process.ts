@@ -3,6 +3,8 @@ import type { WorkerInput } from './nutzap-worker.js';
 import type { ReceiveResult } from './types.js';
 
 export type CdkPhase =
+  | 'receiving-key-selected'
+  | 'missing-receiving-key'
   | 'before-swap'
   | 'after-swap'
   | 'before-publish'
@@ -68,6 +70,8 @@ export async function runCdkReceiver(
         result ||
         message.type !== 'checkpoint' ||
         ![
+          'receiving-key-selected',
+          'missing-receiving-key',
           'before-swap',
           'after-swap',
           'before-publish',
@@ -98,7 +102,7 @@ export async function runCdkReceiver(
       }
     });
     child.stdin.write(
-      `${JSON.stringify({ database: input.database, keyHex: input.keyHex, lockHex, info: input.info, event: input.event, relays: input.relays, spendAmount: input.spendAmount, syncWallet: input.syncWallet })}\n`,
+      `${JSON.stringify({ database: input.database, keyHex: input.keyHex, lockHex, info: input.info, event: input.event, relays: input.relays, spendAmount: input.spendAmount, syncWallet: input.syncWallet, receivingKeys: input.receivingKeys?.database })}\n`,
     );
   });
 }

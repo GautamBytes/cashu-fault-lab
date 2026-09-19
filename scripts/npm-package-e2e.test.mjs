@@ -191,6 +191,7 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     if (process.env.CFL_NUTZAP_CDK_RECEIVER && process.env.CFL_NUTZAP_MINT_URL) {
       for (const scenario of [
         'cdk-crash-after-swap',
+        'cdk-key-rotation-crash-after-swap',
         'cdk-post-spend-publication-crash',
         'cdk-peer-post-spend-publication-crash',
       ]) {
@@ -211,10 +212,20 @@ test('the packed CLI installs and works outside the monorepo', async () => {
         assert.equal(native.exitCode, 0, native.stderr);
         const report = JSON.parse(native.stdout);
         assert.equal(report.status, 'passed');
-        assert.equal(
-          report.evidence.crossLanguage.crashedReceiver,
-          scenario.startsWith('cdk-peer-') ? 'cashu-ts' : 'cdk',
-        );
+        if (scenario === 'cdk-key-rotation-crash-after-swap') {
+          assert.equal(report.evidence.killedAfterSwap, true);
+          assert.equal(report.evidence.rotation.totalCredits, 2);
+          assert.deepEqual(report.evidence.rotation.native, {
+            keySelections: 7,
+            blockedBeforeMint: 0,
+            swaps: 2,
+          });
+        } else {
+          assert.equal(
+            report.evidence.crossLanguage.crashedReceiver,
+            scenario.startsWith('cdk-peer-') ? 'cashu-ts' : 'cdk',
+          );
+        }
         if (scenario.includes('post-spend-')) {
           assert.equal(report.evidence.postSpend.publicationCrashObserved, true);
           assert.equal(report.evidence.crossLanguage.postSpend.cdkSyncObserved, true);

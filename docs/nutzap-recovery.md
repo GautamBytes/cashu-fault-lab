@@ -50,7 +50,7 @@ an unexpected mint implementation fails the lane instead of becoming simulated e
 | Nutshell | 0.20.2         | `infra/compose/nutshell.compose.yml` |
 | mintd    | 0.17.3         | `infra/compose/cdk-mint.compose.yml` |
 
-Both images are digest-pinned in those files. The full command runs 46 scenario/mint
+Both images are digest-pinned in those files. The full command runs 52 scenario/mint
 combinations plus replay and invalid-DLEQ canaries. To select one lane:
 
 ```bash
@@ -68,7 +68,7 @@ Replay checks the target mint implementation before creating new proofs and comp
 it again after execution. The port can change between runs. Older funded artifacts
 with a generic mint label must be regenerated; simulated replay remains supported.
 This verifies recovery with two mint implementations, not transfers between mints or
-certification of external wallet products. The default simulated matrix contains sixteen scenarios; seven native CDK cases require funded mode.
+certification of external wallet products. The default simulated matrix contains sixteen scenarios; ten native CDK cases require funded mode.
 
 For an already-running **disposable** mint, use:
 
@@ -264,9 +264,9 @@ pnpm lab nutzap replay artifacts/nutzap-cdk.json --seed demo \
   --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver"
 ```
 
-`nutzap list` includes all seventeen cases. The default `nutzap matrix` still runs the
-ten cases that support simulation. Supplying `--cdk-receiver` and `--mint-url`
-adds the seven native cases. Missing native infrastructure fails explicitly; it
+`nutzap list` includes all twenty-six cases. The default `nutzap matrix` still runs the
+sixteen cases that support simulation. Supplying `--cdk-receiver` and `--mint-url`
+adds the ten native cases. Missing native infrastructure fails explicitly; it
 never falls back to simulation. The npm CLI requires a separately built receiver
 binary. `CFL_NUTZAP_CDK_RECEIVER` can select an existing binary for the funded test
 script; otherwise that script builds it and respects `CARGO_TARGET_DIR`.
@@ -311,15 +311,19 @@ Sources: [NIP-61](https://github.com/nostr-protocol/nips/blob/master/61.md),
 
 ## Receiving-key rotation (unreleased)
 
-These three cases rotate the recipient's separate P2PK receiving key once while retaining
-the same Nostr identity, mint and sat unit. They exercise cashu-ts receivers; native CDK
-key rotation and arbitrary key histories are outside this profile.
+These six cases rotate the recipient's separate P2PK receiving key once while retaining
+the same Nostr identity, mint and sat unit. Three use cashu-ts; their `cdk-` equivalents
+use the native Rust/CDK receiver and require funded mode. Arbitrary key histories remain
+outside this profile.
 
-| Scenario                        | Required recovery                                                                                                                                                   |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `key-rotation-delayed`          | Hide an old-key nutzap until after rotation, then redeem it with the retained key. Redeem a second payment locked to the newly advertised key.                      |
-| `key-rotation-crash-after-swap` | SIGKILL the old-key receiver after its swap succeeds but before credit/history. Reopen private state, restore outputs and credit once.                              |
-| `key-rotation-missing-key`      | Withhold the old private key. Require `recovery-blocked`, zero credit, no wallet publication and unspent inputs. Import the matching backup and retry successfully. |
+| Scenario                            | Required recovery                                                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `key-rotation-delayed`              | Hide an old-key nutzap until after rotation, then redeem it with the retained key. Redeem a second payment locked to the newly advertised key.                      |
+| `key-rotation-crash-after-swap`     | SIGKILL the old-key receiver after its swap succeeds but before credit/history. Reopen private state, restore outputs and credit once.                              |
+| `key-rotation-missing-key`          | Withhold the old private key. Require `recovery-blocked`, zero credit, no wallet publication and unspent inputs. Import the matching backup and retry successfully. |
+| `cdk-key-rotation-delayed`          | Native CDK selects the retained old key and the new key from private history, then redeems each payment once.                                                       |
+| `cdk-key-rotation-crash-after-swap` | SIGKILL native CDK after the old-key swap; restart and restore the saved outputs before credit and publication.                                                     |
+| `cdk-key-rotation-missing-key`      | Native CDK blocks before mint or journal access until the matching old-key backup is imported.                                                                      |
 
 Every case gives the sender a newer signed kind:10019 advertisement followed by a stale
 relay answer after reopening its cache. The sender keeps the newest known advertisement;
@@ -334,17 +338,34 @@ are rejected. A missing key blocks before mint access. Restoring a backup does n
 back the active advertisement. Private state uses mode 0600 inside a temporary directory
 and is removed after the run; reports contain no private keys, bearer proofs or output secrets.
 
+The harness imports advertisements and backups into the private SQLite fixture store.
+Native Rust opens it read-only, bounds the history to two entries, validates every signed
+advertisement and secret binding, and selects the key matching the incoming proofs.
+The harness passes no per-payment lock secret to the native receiver. Mint swaps, output
+restoration, credit and NIP-60 publication remain native CDK/Nostr operations. These are
+lab receivers, not upstream wallet key-rotation implementations.
+
 Each case retries both payments through receiver subprocesses. The report's base evidence
 captures the old-key redemption before the new payment; `rotation.newPayment` verifies
 the second payment separately. The oracle requires two total credits, the combined
 balance after both swap fees, unspent outputs, and identical token/history IDs after retries.
-All three cases run and replay with fresh proofs against Nutshell and mintd. The installed
-CLI also runs and replays the rotation crash case outside the monorepo on each mint.
+All six cases run and replay with fresh proofs against Nutshell and mintd. The installed
+CLI also runs and replays both rotation crash cases outside the monorepo on each mint.
+Native evidence requires seven retained-key selections across fresh processes, exactly
+two completed swaps, and a pre-mint missing-key checkpoint only in the missing-key case.
 
 ```bash
 pnpm lab nutzap run key-rotation-crash-after-swap --seed demo --output artifacts/key-rotation.json
 pnpm lab nutzap replay artifacts/key-rotation.json --seed demo
 pnpm lab nutzap run key-rotation-missing-key --seed demo
+# Requires a separately built native receiver and a disposable local mint:
+pnpm lab nutzap run cdk-key-rotation-crash-after-swap --seed demo \
+  --mint-url http://127.0.0.1:3358 \
+  --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver" \
+  --output artifacts/cdk-key-rotation.json
+pnpm lab nutzap replay artifacts/cdk-key-rotation.json --seed demo \
+  --mint-url http://127.0.0.1:3358 \
+  --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver"
 pnpm test:nutzap:funded
 ```
 
@@ -392,7 +413,7 @@ pnpm lab nutzap run sender-relay-response-lost --seed demo --output artifacts/se
 pnpm lab nutzap replay artifacts/sender-routing.json --seed demo
 ```
 
-All three cases run and replay in simulated mode and on both funded mints. Reports
+All six cases run and replay in simulated mode and on both funded mints. Reports
 require one history and zero tokens on each sender read relay, no events on the
 write-only relay, stable outbox IDs and conserved value. Routing is opt-in for this
 profile; native CDK receivers retain their configured-relay behavior.
