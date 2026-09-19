@@ -21,7 +21,7 @@ export function registerNutzapCommands(
 ): void {
   const parent = program
     .command('nutzap')
-    .description('NIP-61 duplicate, concurrent and crash recovery lab');
+    .description('NIP-61 redemption and NIP-60 post-spend recovery lab');
   parent
     .command('list')
     .description('List the bounded nutzap fault scenarios')

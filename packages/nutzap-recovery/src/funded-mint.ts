@@ -12,7 +12,7 @@ import {
   type SwapPreview,
 } from '@cashu/cashu-ts';
 import { loopbackMint, type Nutzap, type NutzapProof } from './protocol.js';
-import type { MintPort, PreparedRedemption } from './types.js';
+import type { MintPort, PreparedRedemption, PreparedSpend } from './types.js';
 
 function boundedRequest(origin: string): RequestFn {
   return async <T>(args: Parameters<RequestFn>[0]): Promise<T> => {
@@ -118,7 +118,34 @@ export class FundedMint implements MintPort {
     const preview = await this.#wallet.prepareSwapToReceive(normalizeProofAmounts(zap.proofs), {
       requireDleq: true,
     });
-    const outputs = (preview.keepOutputs ?? []).map((o) => OutputData.serialize(o));
+    return this.#plan(preview);
+  }
+  async prepareSpend(proofs: NutzapProof[], amount: number): Promise<PreparedSpend> {
+    await this.verify(proofs);
+    const keyset = this.#wallet.getKeyset();
+    const fee = this.#wallet.getFeesForProofs(proofs).toNumber();
+    const keep = OutputData.createRandomData(
+      proofs.reduce((n, p) => n + p.amount, 0) - amount - fee,
+      keyset,
+    );
+    const send = OutputData.createRandomData(amount, keyset);
+    // Reissue every proof from the retired token, including its remaining value.
+    const preview = await this.#wallet.prepareSwapToReceive(
+      normalizeProofAmounts(proofs),
+      { requireDleq: true, keysetId: keyset.id },
+      { type: 'custom', data: [...keep, ...send] },
+    );
+    return {
+      ...this.#plan(preview),
+      sendSecrets: send.map((o) =>
+        Buffer.from(OutputData.serialize(o).secret, 'hex').toString('utf8'),
+      ),
+    };
+  }
+  #plan(preview: SwapPreview): PreparedRedemption {
+    const outputs = [...(preview.keepOutputs ?? []), ...(preview.sendOutputs ?? [])].map((o) =>
+      OutputData.serialize(o),
+    );
     const stored: StoredPreview = {
       amount: preview.amount.toString(),
       fees: preview.fees.toString(),

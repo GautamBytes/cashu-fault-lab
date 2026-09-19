@@ -37,7 +37,7 @@ swap, NUT-09 output recovery, and NUT-07 proof states.
 
 ## Two-mint funded matrix (unreleased)
 
-The source checkout runs all eleven scenarios on each mint, including the cashu-ts/CDK
+The source checkout runs all thirteen scenarios on each mint, including the cashu-ts/CDK
 race and crashes in both directions. Every scenario is replayed with fresh proofs.
 The existing installed-package check also runs CDK crash/recovery and replay against
 each mint outside the monorepo. Both lanes must pass; unavailable infrastructure or
@@ -48,7 +48,7 @@ an unexpected mint implementation fails the lane instead of becoming simulated e
 | Nutshell | 0.20.2         | `infra/compose/nutshell.compose.yml` |
 | mintd    | 0.17.3         | `infra/compose/cdk-mint.compose.yml` |
 
-Both images are digest-pinned in those files. The full command runs 22 scenario/mint
+Both images are digest-pinned in those files. The full command runs 26 scenario/mint
 combinations plus replay and invalid-DLEQ canaries. To select one lane:
 
 ```bash
@@ -127,14 +127,64 @@ events; they do not create another receipt.
 
 The `independent-*` cases use one receiver implementation. All cases are bounded
 recovery tests using fresh, disposable journals and two configured loopback relays.
-They do not implement general
-wallet synchronization after further spending or migrate existing wallet databases.
+The post-spend cases below extend this to one partial spend from a previously synchronized
+receipt. This does not implement general wallet synchronization or migrate existing databases.
 Recovery requires the winner's private journal to survive the crash: permanent loss
 of unpublished output secrets is outside the guarantee. The scenarios provide lab
 receiver evidence, not certification of independently developed wallet products.
 Upstream wallet adoption, public-relay discovery, key rotation, NIP-65 sender
 read-relay discovery and custom external adapters remain future work. The existing
 wallet doctor remains read-only.
+
+## Post-spend wallet recovery (unreleased)
+
+These two cashu-ts scenarios start with a redeemed nutzap in two separate wallet journals,
+spend 4 sats from that balance, and reconnect the second wallet. The spender reissues all
+proofs from the old token into payment and change outputs. A separate recipient redeems
+the payment at the mint, so evidence includes actual settlement and fees.
+
+| Scenario                       | Fault and required recovery                                                                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `post-spend-stale-relay`       | Relays first return only the obsolete token, then a deletion without its replacement, then a replacement without the deletion. Reverse one relay's result order and require the same remaining balance. |
+| `post-spend-publication-crash` | SIGKILL the spender after its first replacement-token publication. Restart from its journal, publish the original saved outbox, then exercise the same stale/reordered relay sequence.                  |
+
+```bash
+pnpm lab nutzap run post-spend-stale-relay --seed demo
+pnpm lab nutzap run post-spend-publication-crash --seed demo --output artifacts/post-spend.json
+pnpm lab nutzap replay artifacts/post-spend.json --seed demo
+pnpm test:nutzap:funded
+```
+
+The last command runs both new cases and replay against Nutshell and mintd; CI also tests
+crash recovery and replay through the installed npm CLI. The simulated fixture retains
+10 sats after spending 4 from a 15-sat redemption with a 1-sat swap fee; funded reports
+use the actual mint fees rather than assuming those amounts.
+
+An immutable redemption receipt records the original economic credit. Current proofs
+record the spendable balance separately. Prepared spend inputs stay reserved. Exact
+output secrets/blinding data are saved before swapping; the replacement token, NIP-09
+deletion and outgoing history are saved before publication. Retry uses the same signed
+event IDs. Retired token IDs survive journal restart, and duplicate nutzap delivery does
+not recreate the original balance.
+
+Reconciliation verifies event signatures and wallet ownership, NIP-44 payloads, mint/unit,
+the replacement's `del` reference, unique proofs, DLEQ and current mint proof states.
+History is informational, not balance authority. Conflicting replacements, pending proofs,
+missing replacement evidence or unavailable mint checks cannot establish spendable value.
+The journal exposes zero verified spendable value with `awaiting-peer` when evidence is
+insufficient; this does not mean the missing funds are proven lost. A prepared local spend
+must recover before synchronization can release its reservation.
+
+Reports keep the original redemption snapshot in the existing evidence fields and add
+`postSpend` for final balances, payment/change/recipient proof states, fees, relay fault
+observations and publication recovery. Each wallet's balance is a view of the same money;
+those two balances must not be added together. Reports retain no proof secrets or keys.
+
+Scope is one partial spend after both journals synchronized the initial redemption, with
+the spender's private journal surviving restart. This is not arbitrary multi-spend history
+reconstruction, recovery of a permanently lost journal, or a native-CDK post-spend claim.
+The fault relays deliberately retain obsolete events to test stale responses; successful
+synchronization does not depend on a relay honoring a deletion request.
 
 ## Native CDK interoperability
 
@@ -173,8 +223,8 @@ pnpm lab nutzap replay artifacts/nutzap-cdk.json --seed demo \
   --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver"
 ```
 
-`nutzap list` includes all eleven cases. The default `nutzap matrix` still runs the
-eight cases that support simulation. Supplying `--cdk-receiver` and `--mint-url`
+`nutzap list` includes all thirteen cases. The default `nutzap matrix` still runs the
+ten cases that support simulation. Supplying `--cdk-receiver` and `--mint-url`
 adds the three native cases. Missing native infrastructure fails explicitly; it
 never falls back to simulation. The npm CLI requires a separately built receiver
 binary. `CFL_NUTZAP_CDK_RECEIVER` can select an existing binary for the funded test

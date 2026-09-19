@@ -17,6 +17,32 @@ export interface NutzapEvidence {
   faultObserved: boolean;
   killedAfterSwap: boolean;
   completed: boolean;
+  postSpend?: {
+    amount: number;
+    fee: number;
+    remaining: number;
+    recipientAmount: number;
+    recipientFee: number;
+    walletBalances: number[];
+    credits: number;
+    staleBalance: number;
+    originalProofs: number;
+    spentOriginalProofs: number;
+    changeProofs: number;
+    unspentChangeProofs: number;
+    sentProofs: number;
+    spentSentProofs: number;
+    recipientProofs: number;
+    unspentRecipientProofs: number;
+    staleOnlyObserved: boolean;
+    deletionFirstObserved: boolean;
+    replacementFirstObserved: boolean;
+    reorderedHistoryObserved: boolean;
+    retiredTokenRejected: boolean;
+    publicationCrashObserved: boolean;
+    outboxStable: boolean;
+    relayEventsAgree: boolean;
+  };
   crossLanguage?: {
     receivers: string[];
     cdkProcessObserved: boolean;
@@ -106,6 +132,45 @@ export function verifyNutzapEvidence(
           : scenarioId === 'cdk-peer-crash-after-swap'
             ? 'cashu-ts'
             : 'none');
+  }
+  if (scenarioId?.startsWith('post-spend-')) {
+    const p = e.postSpend;
+    checks['post-spend-value'] =
+      !!p &&
+      [p.amount, p.fee, p.remaining, p.recipientAmount, p.recipientFee].every(
+        (n) => Number.isSafeInteger(n) && n >= 0,
+      ) &&
+      p.amount > 0 &&
+      p.remaining > 0 &&
+      p.recipientAmount > 0 &&
+      e.outputAmount === p.amount + p.fee + p.remaining &&
+      p.amount === p.recipientAmount + p.recipientFee;
+    checks['post-spend-states'] =
+      !!p &&
+      proofCount(p.originalProofs) &&
+      p.originalProofs === p.spentOriginalProofs &&
+      proofCount(p.changeProofs) &&
+      p.changeProofs === p.unspentChangeProofs &&
+      proofCount(p.sentProofs) &&
+      p.sentProofs === p.spentSentProofs &&
+      proofCount(p.recipientProofs) &&
+      p.recipientProofs === p.unspentRecipientProofs;
+    checks['post-spend-convergence'] =
+      !!p &&
+      p.credits === 1 &&
+      p.staleBalance === 0 &&
+      Array.isArray(p.walletBalances) &&
+      p.walletBalances.length === 2 &&
+      p.walletBalances.every((n) => n === p.remaining) &&
+      p.staleOnlyObserved === true &&
+      p.deletionFirstObserved === true &&
+      p.replacementFirstObserved === true &&
+      p.reorderedHistoryObserved === true &&
+      p.retiredTokenRejected === true &&
+      p.outboxStable === true &&
+      p.relayEventsAgree === true;
+    checks['post-spend-crash'] =
+      !!p && p.publicationCrashObserved === (scenarioId === 'post-spend-publication-crash');
   }
   const failures = Object.entries(checks)
     .filter(([, ok]) => !ok)

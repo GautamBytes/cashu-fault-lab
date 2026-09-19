@@ -6,7 +6,7 @@ Global diagnostic option: `--json` before a command emits machine-readable diagn
 
 ## `cashu-fault-lab nutzap list`
 
-Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.
+Exercise NIP-61 redemption, independent-wallet synchronization and NIP-60 post-spend recovery.
 
 Modes: `json`
 Environment: None
@@ -22,10 +22,11 @@ Examples:
 
 - `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
 - `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
+- `cashu-fault-lab nutzap run post-spend-publication-crash --seed demo`
 
 ## `cashu-fault-lab nutzap run <scenario>`
 
-Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.
+Exercise NIP-61 redemption, independent-wallet synchronization and NIP-60 post-spend recovery.
 
 Arguments:
 
@@ -52,10 +53,11 @@ Examples:
 
 - `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
 - `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
+- `cashu-fault-lab nutzap run post-spend-publication-crash --seed demo`
 
 ## `cashu-fault-lab nutzap matrix`
 
-Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.
+Exercise NIP-61 redemption, independent-wallet synchronization and NIP-60 post-spend recovery.
 
 Options:
 
@@ -78,10 +80,11 @@ Examples:
 
 - `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
 - `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
+- `cashu-fault-lab nutzap run post-spend-publication-crash --seed demo`
 
 ## `cashu-fault-lab nutzap replay <artifact>`
 
-Exercise NIP-61 duplicate delivery, independent-wallet synchronization and durable recovery.
+Exercise NIP-61 redemption, independent-wallet synchronization and NIP-60 post-spend recovery.
 
 Arguments:
 
@@ -108,6 +111,7 @@ Examples:
 
 - `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
 - `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
+- `cashu-fault-lab nutzap run post-spend-publication-crash --seed demo`
 
 ## `cashu-fault-lab up`
 
