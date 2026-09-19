@@ -29,12 +29,44 @@ pnpm test:nutzap:funded
 ```
 
 Requires Node 24, Rust 1.97 and Docker on macOS or Linux. The script builds the native
-CDK receiver, starts a uniquely named stack using the repository's pinned Nutshell
-and Redis images, selects a loopback port, runs all eleven scenarios, and removes
-only that stack and its volumes. Nutshell uses FakeWallet
-Lightning funding; no real sats are required. Missing infrastructure fails the lane.
+CDK receiver once and runs separate Nutshell and mintd stacks in sequence. Each uses a
+unique Compose project, a dynamically selected loopback port and fake Lightning funding.
+The script removes only its own stacks and volumes; no real sats are required. Missing infrastructure fails the lane.
 The funded mode uses cashu-ts 4.7.2 for actual P2PK proof creation, DLEQ validation,
 swap, NUT-09 output recovery, and NUT-07 proof states.
+
+## Two-mint funded matrix (unreleased)
+
+The source checkout runs all eleven scenarios on each mint, including the cashu-ts/CDK
+race and crashes in both directions. Every scenario is replayed with fresh proofs.
+The existing installed-package check also runs CDK crash/recovery and replay against
+each mint outside the monorepo. Both lanes must pass; unavailable infrastructure or
+an unexpected mint implementation fails the lane instead of becoming simulated evidence.
+
+| Mint     | Pinned version | Compose source                       |
+| -------- | -------------- | ------------------------------------ |
+| Nutshell | 0.20.2         | `infra/compose/nutshell.compose.yml` |
+| mintd    | 0.17.3         | `infra/compose/cdk-mint.compose.yml` |
+
+Both images are digest-pinned in those files. The full command runs 22 scenario/mint
+combinations plus replay and invalid-DLEQ canaries. To select one lane:
+
+```bash
+pnpm test:nutzap:funded --mint nutshell
+pnpm test:nutzap:funded --mint mintd
+```
+
+Reports are saved with private file permissions under
+`artifacts/nutzap-funded/<run-id>/<mint>/<scenario>.json`; CI uploads them separately
+for each mint. Reports record the bounded `/v1/info` software/version string in
+`implementations.mint`. The test harness requires the expected version for its pinned
+image. This string is self-reported metadata, not authenticated build provenance.
+
+Replay checks the target mint implementation before creating new proofs and compares
+it again after execution. The port can change between runs. Older funded artifacts
+with a generic mint label must be regenerated; simulated replay remains supported.
+This verifies recovery with two mint implementations, not transfers between mints or
+certification of external wallet products. The default simulated matrix is unchanged.
 
 For an already-running **disposable** mint, use:
 

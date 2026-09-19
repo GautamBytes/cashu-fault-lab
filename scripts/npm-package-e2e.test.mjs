@@ -123,6 +123,8 @@ test('the packed CLI installs and works outside the monorepo', async () => {
       const report = JSON.parse(native.stdout);
       assert.equal(report.status, 'passed');
       assert.equal(report.evidence.crossLanguage.crashedReceiver, 'cdk');
+      if (process.env.CFL_NUTZAP_EXPECTED_MINT)
+        assert.equal(report.implementations.mint, process.env.CFL_NUTZAP_EXPECTED_MINT);
       const replay = await run(process.execPath, [cli, 'nutzap', 'replay', artifact, ...options], {
         cwd: installRoot,
       });

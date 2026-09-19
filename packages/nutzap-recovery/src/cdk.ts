@@ -207,7 +207,7 @@ export async function runCdkScenario(
       fingerprint: evidenceFingerprint(evidence),
       implementations: {
         receiver: 'cashu-fault-lab/cashu-ts + native-cdk-nip61-v1',
-        mint: 'operator-provided loopback mint',
+        mint: session.mintImplementation,
         relay: 'cashu-fault-lab/nostr-fault-relay',
       },
     };

@@ -66,6 +66,8 @@ export async function createNutzapSession(seed: string, mintOption?: string) {
       key,
       lock,
       backend,
+      mintImplementation:
+        backend instanceof FundedMint ? backend.implementation : 'simulated-mint/v1',
       proofs,
       directory,
       relayObjects,

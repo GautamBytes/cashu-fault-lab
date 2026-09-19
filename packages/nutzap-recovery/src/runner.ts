@@ -167,9 +167,7 @@ export async function runNutzapScenario(
       fingerprint: evidenceFingerprint(evidence),
       implementations: {
         receiver: 'cashu-fault-lab/nip61-shared-journal-v1',
-        mint: options.mintUrl
-          ? 'cashu-ts/4.7.2 + operator-provided loopback mint'
-          : 'simulated-mint/v1',
+        mint: session.mintImplementation,
         relay: 'cashu-fault-lab/nostr-fault-relay',
       },
     };

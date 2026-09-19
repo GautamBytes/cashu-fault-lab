@@ -172,7 +172,7 @@ export async function runIndependentScenario(
       fingerprint: evidenceFingerprint(evidence),
       implementations: {
         receiver: 'cashu-fault-lab/nip61-independent-journals-v1',
-        mint: mintUrl ? 'cashu-ts/4.7.2 + operator-provided loopback mint' : 'simulated-mint/v1',
+        mint: session.mintImplementation,
         relay: 'cashu-fault-lab/nostr-fault-relay',
       },
     };

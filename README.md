@@ -75,9 +75,12 @@ pnpm lab nutzap run independent-crash-after-swap --seed demo
 pnpm test:nutzap:funded
 ```
 
-The default matrix labels its mint as simulated. The funded test starts pinned
-Nutshell with fake Lightning funding and runs real cashu-ts P2PK/DLEQ swaps and
-NUT-09 restoration. The independent-database cases use separate SDK instances for
+The default matrix labels its mint as simulated. In the source checkout, the funded
+test runs all eleven scenarios and replay against both pinned Nutshell and mintd,
+using fake Lightning funding, real P2PK/DLEQ swaps and NUT-09 restoration. It saves
+redacted reports per mint under `artifacts/nutzap-funded/`. Select a single lane with
+`pnpm test:nutzap:funded --mint nutshell` or `--mint mintd`. This two-mint expansion
+is unreleased. The independent-database cases use separate SDK instances for
 the same wallet identity and synchronize through signed, encrypted relay events.
 The funded lane also runs a separately implemented Rust/CDK receiver against
 cashu-ts, including crashes in both directions and replay. It requires Rust 1.97;
