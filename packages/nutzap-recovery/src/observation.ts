@@ -1,4 +1,4 @@
-import { nip44 } from 'nostr-tools';
+import { nip44, type Event } from 'nostr-tools';
 import { queryEvents } from './relay.js';
 import { verifyWalletPayloads } from './wallet-evidence.js';
 import type { NutzapEvidence } from './evidence.js';
@@ -7,17 +7,23 @@ import type { NutzapSession } from './session.js';
 import type { RedemptionRecord } from './types.js';
 
 export async function observeNutzap(
-  session: NutzapSession,
+  session: Pick<NutzapSession, 'relays' | 'key' | 'zap' | 'backend' | 'proofs'> & {
+    info: Event;
+    event: Event;
+  },
   record: RedemptionRecord,
   summary: { credits: number; balance: number },
   faultObserved: boolean,
   killedAfterSwap: boolean,
   completed: boolean,
+  excludeEventIds: string[] = [],
 ): Promise<NutzapEvidence> {
   const { relays, info, key, event, zap, backend, proofs } = session;
-  const views = await Promise.all(
-    relays.map((r) => queryEvents(r, { kinds: [7375, 7376], authors: [info.pubkey] })),
-  );
+  const views = (
+    await Promise.all(
+      relays.map((r) => queryEvents(r, { kinds: [7375, 7376], authors: [info.pubkey] })),
+    )
+  ).map((events) => events.filter((e) => !excludeEventIds.includes(e.id)));
   const tokens = views.map((v) => v.filter((e) => e.kind === 7375));
   const histories = views.map((v) => v.filter((e) => e.kind === 7376));
   const conversation = nip44.v2.utils.getConversationKey(key, info.pubkey);

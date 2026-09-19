@@ -17,6 +17,20 @@ export interface NutzapEvidence {
   faultObserved: boolean;
   killedAfterSwap: boolean;
   completed: boolean;
+  rotation?: {
+    staleAdvertisementRejected: boolean;
+    delayedDeliveryObserved: boolean;
+    oldKeyRecovered: boolean;
+    newKeyUsed: boolean;
+    missingKeyBlocked: boolean;
+    blockedWithoutCredit: boolean;
+    privateState: boolean;
+    totalCredits: number;
+    totalBalance: number;
+    oldOutputsStillUnspent: boolean;
+    duplicateStable: boolean;
+    newPayment: Omit<NutzapEvidence, 'rotation'>;
+  };
   postSpend?: {
     amount: number;
     fee: number;
@@ -99,6 +113,7 @@ export function verifyNutzapEvidence(
     'crash-confirmed':
       ![
         'crash-after-swap',
+        'key-rotation-crash-after-swap',
         'independent-crash-after-swap',
         'cdk-crash-after-swap',
         'cdk-peer-crash-after-swap',
@@ -194,6 +209,29 @@ export function verifyNutzapEvidence(
       p.relayEventsAgree === true;
     checks['post-spend-crash'] =
       !!p && p.publicationCrashObserved === scenarioId.endsWith('publication-crash');
+  }
+  if (scenarioId?.startsWith('key-rotation-')) {
+    const r = e.rotation;
+    checks['rotation-recovery'] =
+      !!r &&
+      r.staleAdvertisementRejected === true &&
+      r.delayedDeliveryObserved === true &&
+      r.oldKeyRecovered === true &&
+      r.newKeyUsed === true &&
+      r.privateState === true &&
+      r.oldOutputsStillUnspent === true &&
+      r.duplicateStable === true;
+    checks['rotation-value'] =
+      !!r &&
+      !!r.newPayment &&
+      verifyNutzapEvidence(r.newPayment).ok &&
+      r.totalCredits === 2 &&
+      Number.isSafeInteger(r.totalBalance) &&
+      r.totalBalance === e.outputAmount + r.newPayment.outputAmount;
+    checks['rotation-missing-key'] =
+      !!r &&
+      r.missingKeyBlocked === (scenarioId === 'key-rotation-missing-key') &&
+      r.blockedWithoutCredit === (scenarioId === 'key-rotation-missing-key');
   }
   const failures = Object.entries(checks)
     .filter(([, ok]) => !ok)

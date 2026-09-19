@@ -49,6 +49,7 @@ describe('observed mint implementation', () => {
       await expect(readMintImplementation(url)).rejects.toThrow('Invalid mint implementation');
     });
   });
+  // This case starts real relays and receiver processes, like the runner/replay tests.
   it('rejects a replay against a different mint implementation before creating proofs', async () => {
     const original = await runNutzapScenario('duplicate-relays', 'identity-replay');
     await withMint('cdk-mintd/0.17.3', async (url, requests) => {
@@ -65,5 +66,5 @@ describe('observed mint implementation', () => {
       ).rejects.toThrow('mint implementation mismatch');
       expect(requests).toEqual(['GET /v1/info']);
     });
-  });
+  }, 30_000);
 });

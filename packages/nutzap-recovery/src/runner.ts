@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { runKeyRotationScenario } from './key-rotation.js';
 import { digest } from './protocol.js';
 import { Journal } from './journal.js';
 import { publishEvent } from './relay.js';
@@ -22,6 +23,9 @@ export const SCENARIOS = [
   'independent-relay-outage',
   'post-spend-stale-relay',
   'post-spend-publication-crash',
+  'key-rotation-delayed',
+  'key-rotation-crash-after-swap',
+  'key-rotation-missing-key',
 ] as const;
 export const CDK_SCENARIOS = [
   'cdk-concurrent',
@@ -48,6 +52,7 @@ export async function runNutzapScenario(
   options: NutzapRunOptions = {},
 ): Promise<NutzapReport> {
   validateRun(id, seed);
+  if (id.startsWith('key-rotation-')) return runKeyRotationScenario(id, seed, options.mintUrl);
   if (id.includes('post-spend-'))
     return runPostSpendScenario(id, seed, options.mintUrl, options.cdkReceiver);
   if (id.startsWith('cdk-')) return runCdkScenario(id, seed, options.mintUrl, options.cdkReceiver);

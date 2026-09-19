@@ -135,6 +135,33 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     );
     assert.equal(spendReplay.exitCode, 0, spendReplay.stderr);
     assert.equal(JSON.parse(spendReplay.stdout).fingerprint, spendReport.fingerprint);
+    const rotationArtifact = join(installRoot, 'key-rotation.json');
+    const rotation = await run(
+      process.execPath,
+      [
+        cli,
+        'nutzap',
+        'run',
+        'key-rotation-crash-after-swap',
+        ...spendOptions,
+        '--output',
+        rotationArtifact,
+      ],
+      { cwd: installRoot },
+    );
+    assert.equal(rotation.exitCode, 0, rotation.stderr);
+    const rotationReport = JSON.parse(rotation.stdout);
+    assert.equal(rotationReport.status, 'passed');
+    assert.equal(rotationReport.evidence.killedAfterSwap, true);
+    assert.equal(rotationReport.evidence.rotation.totalCredits, 2);
+    assert.equal(rotationReport.evidence.rotation.staleAdvertisementRejected, true);
+    const rotationReplay = await run(
+      process.execPath,
+      [cli, 'nutzap', 'replay', rotationArtifact, ...spendOptions],
+      { cwd: installRoot },
+    );
+    assert.equal(rotationReplay.exitCode, 0, rotationReplay.stderr);
+    assert.equal(JSON.parse(rotationReplay.stdout).fingerprint, rotationReport.fingerprint);
     if (process.env.CFL_NUTZAP_CDK_RECEIVER && process.env.CFL_NUTZAP_MINT_URL) {
       for (const scenario of [
         'cdk-crash-after-swap',
