@@ -2,6 +2,7 @@ import type { Event } from 'nostr-tools';
 import { receiveNutzap } from './receiver.js';
 import { receiveWithReceivingKeys } from './rotating-receiver.js';
 import { queryEvents } from './relay.js';
+import { syncWallet } from './wallet-sync.js';
 import { spendNutzap } from './spend.js';
 import { validateNutzap } from './protocol.js';
 import type { MintPort } from './types.js';
@@ -15,6 +16,7 @@ export interface WorkerInput {
   syncPeers?: boolean;
   discoverSenderRelays?: boolean;
   spendAmount?: number;
+  syncWallet?: boolean;
   pauseAfterPublication?: boolean;
   receivingKeys?: { database: string; funded: boolean };
 }
@@ -78,8 +80,9 @@ process.on('message', (raw: unknown) => {
         }
       : {}),
   };
-  const operation =
-    input.spendAmount !== undefined
+  const operation = input.syncWallet
+    ? syncWallet(validateNutzap(input.event, input.info).id, options)
+    : input.spendAmount !== undefined
       ? spendNutzap(validateNutzap(input.event, input.info).id, input.spendAmount, {
           ...options,
           ...(input.pauseAfterPublication

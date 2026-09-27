@@ -11,9 +11,12 @@ import { createNutzapSession } from './session.js';
 import { observeNutzap } from './observation.js';
 import { runIndependentScenario } from './independent.js';
 import { runCdkScenario } from './cdk.js';
+import { runConcurrentSpendScenario } from './concurrent-spend.js';
 import { runPostSpendScenario } from './post-spend.js';
 export { verifyNutzapEvidence } from './evidence.js';
 export const SCENARIOS = [
+  'concurrent-spend',
+  'concurrent-spend-crash-after-swap',
   'sender-relay-stale-list',
   'sender-relay-outage',
   'sender-relay-response-lost',
@@ -32,6 +35,10 @@ export const SCENARIOS = [
   'key-rotation-missing-key',
 ] as const;
 export const CDK_SCENARIOS = [
+  'cdk-concurrent-spend',
+  'cdk-concurrent-spend-crash-after-swap',
+  'cdk-peer-concurrent-spend',
+  'cdk-peer-concurrent-spend-crash-after-swap',
   'cdk-key-rotation-delayed',
   'cdk-key-rotation-crash-after-swap',
   'cdk-key-rotation-missing-key',
@@ -59,6 +66,8 @@ export async function runNutzapScenario(
   options: NutzapRunOptions = {},
 ): Promise<NutzapReport> {
   validateRun(id, seed);
+  if (id.includes('concurrent-spend'))
+    return runConcurrentSpendScenario(id, seed, options.mintUrl, options.cdkReceiver);
   if (id.startsWith('sender-relay-')) return runSenderRoutingScenario(id, seed, options.mintUrl);
   if (id.includes('key-rotation-'))
     return runKeyRotationScenario(id, seed, options.mintUrl, options.cdkReceiver);

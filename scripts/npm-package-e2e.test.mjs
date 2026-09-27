@@ -191,6 +191,8 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     if (process.env.CFL_NUTZAP_CDK_RECEIVER && process.env.CFL_NUTZAP_MINT_URL) {
       for (const scenario of [
         'cdk-crash-after-swap',
+        'cdk-concurrent-spend-crash-after-swap',
+        'cdk-peer-concurrent-spend-crash-after-swap',
         'cdk-key-rotation-crash-after-swap',
         'cdk-post-spend-publication-crash',
         'cdk-peer-post-spend-publication-crash',
@@ -225,6 +227,10 @@ test('the packed CLI installs and works outside the monorepo', async () => {
             report.evidence.crossLanguage.crashedReceiver,
             scenario.startsWith('cdk-peer-') ? 'cashu-ts' : 'cdk',
           );
+        }
+        if (scenario.includes('concurrent-spend')) {
+          assert.equal(report.evidence.concurrentSpend.crashObserved, true);
+          assert.equal(report.evidence.concurrentSpend.loserHasNoPayment, true);
         }
         if (scenario.includes('post-spend-')) {
           assert.equal(report.evidence.postSpend.publicationCrashObserved, true);

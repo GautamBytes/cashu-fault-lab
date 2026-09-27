@@ -13,8 +13,10 @@ describe('nutzap commands', () => {
       writeText: async () => {},
     };
     expect((await runCli(['node', 'lab', 'nutzap', 'list'], { io })).exitCode).toBe(0);
-    expect(JSON.parse(out)).toHaveLength(26);
+    expect(JSON.parse(out)).toHaveLength(32);
     expect(JSON.parse(out)).toContain('cdk-key-rotation-delayed');
+    expect(JSON.parse(out)).toContain('concurrent-spend');
+    expect(JSON.parse(out)).toContain('cdk-peer-concurrent-spend-crash-after-swap');
     expect(JSON.parse(out)).toContain('cdk-key-rotation-crash-after-swap');
     expect(JSON.parse(out)).toContain('cdk-key-rotation-missing-key');
     expect(JSON.parse(out)).toContain('key-rotation-delayed');

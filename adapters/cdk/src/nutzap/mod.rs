@@ -76,6 +76,8 @@ struct SpendPlan {
 }
 #[derive(Clone, Deserialize, Serialize)]
 struct Spend {
+    #[serde(default)]
+    conflicted: bool,
     amount: u64,
     plan: SpendPlan,
     events: Vec<Event>,

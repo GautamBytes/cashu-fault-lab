@@ -25,7 +25,13 @@ export interface RedemptionRecord {
   historyRelays?: string[];
   origin?: 'local' | 'relay';
   wallet?: { token: Event | null; proofs: NutzapProof[]; retired: string[] };
-  spend?: { amount: number; plan: PreparedSpend; events: Event[]; sent: NutzapProof[] };
+  spend?: {
+    conflicted?: boolean;
+    amount: number;
+    plan: PreparedSpend;
+    events: Event[];
+    sent: NutzapProof[];
+  };
 }
 export interface ReceiverOptions {
   database: string;
@@ -39,4 +45,9 @@ export interface ReceiverOptions {
   afterSwap?: () => Promise<void>;
 }
 export type ReceiveResult =
-  'complete' | 'pending' | 'recovery-blocked' | 'publication-pending' | 'awaiting-peer';
+  | 'complete'
+  | 'pending'
+  | 'recovery-blocked'
+  | 'publication-pending'
+  | 'awaiting-peer'
+  | 'spend-conflict';

@@ -80,7 +80,7 @@ describe('funded NIP-61 recovery', () => {
       await session.close();
     }
   }, 90_000);
-  it('native post-spend sync rejects forged DLEQ and conflicting signed replacements', async () => {
+  it('native losing-spend sync rejects forged DLEQ and conflicting signed replacements', async () => {
     const mintUrl = process.env.CFL_NUTZAP_MINT_URL;
     const binary = process.env.CFL_NUTZAP_CDK_RECEIVER;
     if (!mintUrl || !binary) throw Error('Run pnpm test:nutzap:funded');
@@ -95,16 +95,27 @@ describe('funded NIP-61 recovery', () => {
         pauseAfterSwap: false,
       };
       const reader = { ...input, database: join(session.directory, 'reader.sqlite') };
-      const native = (syncWallet = false) =>
+      const tombstoneDatabase = join(session.directory, 'reader-tombstone.sqlite');
+      const native = (syncWallet = false, database = reader.database) =>
         runCdkReceiver(
           binary,
-          { ...reader, syncWallet },
+          { ...reader, database, syncWallet },
           Buffer.from(session.lock).toString('hex'),
           async () => 'continue',
         );
       const client = await session.client();
       expect(await runReceiverProcess(input, client, publishEvent)).toBe('complete');
-      expect(await native()).toBe('complete');
+      for (const database of [reader.database, tombstoneDatabase]) {
+        expect(await native(false, database)).toBe('complete');
+        expect(
+          await runCdkReceiver(
+            binary,
+            { ...reader, database, spendAmount: 5 },
+            Buffer.from(session.lock).toString('hex'),
+            async (phase) => (phase === 'spend-prepared' ? 'kill' : 'continue'),
+          ),
+        ).toBe('killed');
+      }
       expect(await runReceiverProcess({ ...input, spendAmount: 4 }, client, publishEvent)).toBe(
         'complete',
       );
@@ -141,6 +152,37 @@ describe('funded NIP-61 recovery', () => {
       expect(restored.summary.balance).toBe(spent.wallet!.proofs.reduce((n, p) => n + p.amount, 0));
       expect(restored.record.credit).toBe(spent.credit);
       expect(restored.summary.credits).toBe(0);
+      expect(restored.record.spend?.conflicted).toBe(true);
+      expect(
+        await runCdkReceiver(
+          binary,
+          { ...reader, spendAmount: 5 },
+          Buffer.from(session.lock).toString('hex'),
+          async () => 'continue',
+        ),
+      ).toBe('spend-conflict');
+      const deletion = finalizeEvent(
+        {
+          kind: 5,
+          created_at: replacement.created_at + 2,
+          content: '',
+          tags: [
+            ['e', replacement.id],
+            ['k', '7375'],
+          ],
+        },
+        session.key,
+      );
+      await Promise.all(session.relays.map((r) => publishEvent(r, deletion)));
+      expect(await native(true, tombstoneDatabase)).toBe('awaiting-peer');
+      session.relayObjects.forEach((r) =>
+        r.control.setPartition({ eventIds: [duplicate.id, deletion.id] }),
+      );
+      expect(await native(true, tombstoneDatabase)).toBe('awaiting-peer');
+      const deletedView = snapshot(tombstoneDatabase, session.zap.id);
+      expect(deletedView.summary.balance).toBe(0);
+      expect(deletedView.record.wallet!.retired).toContain(replacement.id);
+      expect(deletedView.record.spend?.conflicted).not.toBe(true);
     } finally {
       await session.close();
     }
@@ -219,6 +261,9 @@ describe('funded NIP-61 recovery', () => {
               ).ok,
             ).toBe(false);
           }
+        } else if (id.includes('concurrent-spend')) {
+          expect(result.evidence.concurrentSpend?.successfulSwaps).toBe(1);
+          expect(result.evidence.concurrentSpend?.nativeSyncObserved).toBe(true);
         } else expect(result.evidence.independent?.localCredits).toEqual([0, 1]);
         for (const patch of [
           { cdkProcessObserved: false },
@@ -235,7 +280,11 @@ describe('funded NIP-61 recovery', () => {
             ).ok,
           ).toBe(false);
         }
-        if (id !== 'cdk-concurrent' && !id.includes('post-spend-')) {
+        if (
+          id !== 'cdk-concurrent' &&
+          !id.includes('post-spend-') &&
+          !id.includes('concurrent-spend')
+        ) {
           expect(result.evidence.killedAfterSwap).toBe(true);
           expect(verifyNutzapEvidence({ ...result.evidence, killedAfterSwap: false }, id).ok).toBe(
             false,

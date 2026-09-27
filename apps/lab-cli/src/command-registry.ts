@@ -40,7 +40,7 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
       name: `nutzap ${action}`,
       usage: `cashu-fault-lab nutzap ${action}${action === 'run' ? ' <scenario>' : action === 'replay' ? ' <artifact>' : ''}`,
       summary:
-        'Exercise NIP-61 redemption and NIP-60 post-spend recovery, including native CDK/cashu-ts interoperability.',
+        'Exercise NIP-61 redemption, NIP-60 concurrent spending and post-spend recovery with cashu-ts and native CDK.',
       arguments:
         action === 'run'
           ? [{ value: 'scenario', description: 'A packaged NIP-61 scenario ID.' }]
@@ -71,6 +71,7 @@ export function createCommandRegistry(): readonly CliCommandDefinition[] {
         'cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json',
         'cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo',
         'cashu-fault-lab nutzap run post-spend-publication-crash --seed demo',
+        'cashu-fault-lab nutzap run concurrent-spend-crash-after-swap --seed demo',
       ],
       env: [],
       modes: ['json'],

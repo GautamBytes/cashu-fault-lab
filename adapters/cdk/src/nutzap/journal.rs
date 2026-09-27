@@ -194,6 +194,7 @@ impl Journal {
                 return Err("requires_initial_wallet");
             }
             record.spend = Some(super::Spend {
+                conflicted: false,
                 amount,
                 plan,
                 events: vec![],
@@ -260,10 +261,42 @@ impl Journal {
         let mut updated = false;
         self.update(id, |tx, record| {
             // Re-read under the write transaction: a spend may have begun during relay/mint I/O.
-            if record.spend.as_ref().is_some_and(|s| s.events.is_empty()) {
+            if record
+                .spend
+                .as_ref()
+                .is_some_and(|s| s.events.is_empty() && !s.conflicted)
+                && (token.is_some() || !proofs.is_empty())
+            {
                 return Ok(());
             }
             Self::set_wallet(tx, record, token, proofs, retired)?;
+            updated = true;
+            Ok(())
+        })?;
+        Ok(updated)
+    }
+    pub fn resolve_spend_conflict(
+        &mut self,
+        id: &str,
+        plan: &super::SpendPlan,
+        token: Event,
+        proofs: Vec<Proof>,
+        retired: Vec<String>,
+    ) -> Result<bool> {
+        let mut updated = false;
+        self.update(id, |tx, record| {
+            let Some(spend) = &record.spend else {
+                return Ok(());
+            };
+            if spend.conflicted
+                || !spend.events.is_empty()
+                || serde_json::to_value(&spend.plan).map_err(|_| "invalid_plan")?
+                    != serde_json::to_value(plan).map_err(|_| "invalid_plan")?
+            {
+                return Ok(());
+            }
+            Self::set_wallet(tx, record, Some(token), proofs, retired)?;
+            record.spend.as_mut().ok_or("missing_spend")?.conflicted = true;
             updated = true;
             Ok(())
         })?;
@@ -278,6 +311,9 @@ impl Journal {
     ) -> Result<Record> {
         self.update(id, |tx, record| {
             let spend = record.spend.as_ref().ok_or("missing_spend")?;
+            if spend.conflicted {
+                return Err("conflicted_spend");
+            }
             if !spend.events.is_empty() {
                 return Ok(());
             }

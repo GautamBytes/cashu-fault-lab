@@ -391,6 +391,12 @@ test('Architecture participates in docs navigation, search, and pagination', asy
   await expect(
     page.getByRole('cell', { name: 'cdk-key-rotation-missing-key', exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Concurrent wallet spending (unreleased)' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'cdk-peer-concurrent-spend-crash-after-swap', exact: true }),
+  ).toBeVisible();
   await expectNoPageOverflow(page);
   await page
     .getByRole('navigation', { name: 'Document pagination' })

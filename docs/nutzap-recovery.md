@@ -39,7 +39,7 @@ swap, NUT-09 output recovery, and NUT-07 proof states.
 
 ## Two-mint funded matrix (unreleased)
 
-The source checkout runs all twenty-three scenarios on each mint, including the cashu-ts/CDK
+The source checkout runs all thirty-two scenarios on each mint, including the cashu-ts/CDK
 race and crashes in both directions. Every scenario is replayed with fresh proofs.
 The existing installed-package check also runs CDK crash/recovery and replay against
 each mint outside the monorepo. Both lanes must pass; unavailable infrastructure or
@@ -50,7 +50,7 @@ an unexpected mint implementation fails the lane instead of becoming simulated e
 | Nutshell | 0.20.2         | `infra/compose/nutshell.compose.yml` |
 | mintd    | 0.17.3         | `infra/compose/cdk-mint.compose.yml` |
 
-Both images are digest-pinned in those files. The full command runs 52 scenario/mint
+Both images are digest-pinned in those files. The full command runs 64 scenario/mint
 combinations plus replay and invalid-DLEQ canaries. To select one lane:
 
 ```bash
@@ -68,7 +68,7 @@ Replay checks the target mint implementation before creating new proofs and comp
 it again after execution. The port can change between runs. Older funded artifacts
 with a generic mint label must be regenerated; simulated replay remains supported.
 This verifies recovery with two mint implementations, not transfers between mints or
-certification of external wallet products. The default simulated matrix contains sixteen scenarios; ten native CDK cases require funded mode.
+certification of external wallet products. The default simulated matrix contains eighteen scenarios; fourteen native CDK cases require funded mode.
 
 For an already-running **disposable** mint, use:
 
@@ -265,8 +265,8 @@ pnpm lab nutzap replay artifacts/nutzap-cdk.json --seed demo \
 ```
 
 `nutzap list` includes all twenty-six cases. The default `nutzap matrix` still runs the
-sixteen cases that support simulation. Supplying `--cdk-receiver` and `--mint-url`
-adds the ten native cases. Missing native infrastructure fails explicitly; it
+eighteen cases that support simulation. Supplying `--cdk-receiver` and `--mint-url`
+adds the fourteen native cases. Missing native infrastructure fails explicitly; it
 never falls back to simulation. The npm CLI requires a separately built receiver
 binary. `CFL_NUTZAP_CDK_RECEIVER` can select an existing binary for the funded test
 script; otherwise that script builds it and respects `CARGO_TARGET_DIR`.
@@ -474,3 +474,51 @@ CI runs this integration in its Nutshell NIP-61 lane. Its separate redacted resu
 `artifacts/nutzap-funded/<run-id>/nutshell/upstream-wallet-roundtrip.json`, recording
 wallet/image versions, balances, fees and checked outcomes. Re-running the command
 uses fresh wallet state and proofs; this result is not a `nutzap replay` artifact.
+
+## Concurrent wallet spending (unreleased)
+
+Two devices share the same NIP-60 wallet identity and original proofs, but persist
+separate spend plans for payments of 4 and 5 sats to separate recipient clients.
+A relay read partition hides wallet transitions. Both processes reserve their
+inputs and reach the mint swap boundary before the harness releases a chosen
+winner, then the loser. This controlled ordering makes each report replayable;
+it tests both winner directions, not arbitrary scheduler interleavings.
+
+| Scenario                                     | Mint winner                       | Crash                                   |
+| -------------------------------------------- | --------------------------------- | --------------------------------------- |
+| `concurrent-spend`                           | First cashu-ts process            | None                                    |
+| `concurrent-spend-crash-after-swap`          | First cashu-ts process            | SIGKILL after swap, before local commit |
+| `cdk-concurrent-spend`                       | Native CDK                        | None                                    |
+| `cdk-concurrent-spend-crash-after-swap`      | Native CDK                        | SIGKILL after swap, before local commit |
+| `cdk-peer-concurrent-spend`                  | cashu-ts, with a native CDK loser | None                                    |
+| `cdk-peer-concurrent-spend-crash-after-swap` | cashu-ts, with a native CDK loser | SIGKILL after swap, before local commit |
+
+```bash
+pnpm lab nutzap run concurrent-spend-crash-after-swap --seed demo \
+  --output artifacts/concurrent-spend.json
+pnpm lab nutzap replay artifacts/concurrent-spend.json --seed demo
+pnpm lab nutzap run cdk-peer-concurrent-spend-crash-after-swap --seed demo \
+  --mint-url http://127.0.0.1:3358 \
+  --cdk-receiver "$PWD/adapters/cdk/target/debug/cdk-nutzap-receiver"
+```
+
+Before relay recovery, the losing spend returns `recovery-blocked` and advertises
+zero spendable balance. Reconciliation first verifies that every original input
+is SPENT, then restores the exact local plan. Any restored local output keeps the
+reservation intact so the wallet can recover its own successful swap. SPENT or
+PENDING inputs alone never establish payment success.
+
+Only one valid signed and decrypted peer replacement, with the original token as
+its ancestor, unique DLEQ-valid unspent proofs, and no overlap with local planned
+outputs, can resolve the conflict. A journal transaction records the failed
+intent and imports the remaining balance together. Retrying that intent returns
+`spend-conflict`; it cannot publish outgoing history or deliver payment proofs.
+The winner restores its exact plan after a crash and publishes its durable outbox.
+
+Reports require one successful spend, two distinct journals and plans, zero value
+at the losing recipient, conserved value after spend and recipient fees, matching
+remaining balances, stable plans/outbox, and rejection of the obsolete token after
+restart. Both recipient clients are lab-controlled bearer-proof consumers; these
+are not new NIP-61 delivery events or certification of external wallet products.
+The profile remains one partial spend per original receipt. It does not test an
+unbounded spend graph, compromised wallet keys, or a dishonest mint.

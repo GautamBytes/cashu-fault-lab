@@ -38,6 +38,9 @@ pub async fn run(
     if spend.amount != amount {
         return Err("conflicting_spend");
     }
+    if spend.conflicted {
+        return Ok("spend-conflict");
+    }
     checkpoint("spend-prepared")?;
     if spend.events.is_empty() {
         let plan = &spend.plan.plan;
@@ -51,6 +54,7 @@ pub async fn run(
             {
                 return Ok("recovery-blocked");
             }
+            checkpoint("spend-before-swap")?;
             outputs = match mint.swap(&spending, plan).await {
                 Ok(proofs) => proofs,
                 Err(_) => mint.restore(plan).await?,
@@ -80,6 +84,7 @@ pub async fn run(
         {
             return Err("spend_value_mismatch");
         }
+        checkpoint("spend-after-swap")?;
         let events = wallet::spend_events(&record, &keep, keys)?;
         record = db.finish_spend(id, events, keep, sent)?;
     }

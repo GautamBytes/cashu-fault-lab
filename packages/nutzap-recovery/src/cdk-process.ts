@@ -9,6 +9,8 @@ export type CdkPhase =
   | 'after-swap'
   | 'before-publish'
   | 'spend-prepared'
+  | 'spend-after-swap'
+  | 'spend-before-swap'
   | 'after-publication'
   | 'after-wallet-sync';
 export async function runCdkReceiver(
@@ -60,6 +62,7 @@ export async function runCdkReceiver(
           'recovery-blocked',
           'publication-pending',
           'awaiting-peer',
+          'spend-conflict',
         ].includes(message.result ?? '')
       ) {
         if (result) return fail();
@@ -76,6 +79,8 @@ export async function runCdkReceiver(
           'after-swap',
           'before-publish',
           'spend-prepared',
+          'spend-after-swap',
+          'spend-before-swap',
           'after-publication',
           'after-wallet-sync',
         ].includes(message.phase ?? '')
