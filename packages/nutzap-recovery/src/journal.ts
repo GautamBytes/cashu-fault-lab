@@ -171,8 +171,39 @@ export class Journal {
   wallet(id: string, token: Event | null, proofs: NutzapProof[], retired: string[]): boolean {
     let updated = false;
     this.#update(id, (record) => {
-      if (record.spend && !record.spend.events.length) return;
+      // Pending spends may retain deletions, but cannot import a spendable balance.
+      if (
+        record.spend &&
+        !record.spend.events.length &&
+        !record.spend.conflicted &&
+        (token || proofs.length)
+      )
+        return;
       this.#wallet(record, token, proofs, retired);
+      updated = true;
+    });
+    return updated;
+  }
+  resolveSpendConflict(
+    id: string,
+    plan: PreparedSpend,
+    token: Event,
+    proofs: NutzapProof[],
+    retired: string[],
+  ): boolean {
+    let updated = false;
+    this.#update(id, (record) => {
+      const spend = record.spend;
+      // Recheck under the transaction: an overlapping local recovery may have finished.
+      if (
+        !spend ||
+        spend.conflicted ||
+        spend.events.length ||
+        JSON.stringify(spend.plan) !== JSON.stringify(plan)
+      )
+        return;
+      this.#wallet(record, token, proofs, retired);
+      spend.conflicted = true;
       updated = true;
     });
     return updated;
@@ -185,6 +216,7 @@ export class Journal {
   ): RedemptionRecord {
     return this.#update(id, (record) => {
       if (!record.spend) throw Error('Missing prepared spend');
+      if (record.spend.conflicted) throw Error('Conflicted spend');
       if (record.spend.events.length) return;
       const original = record.events.find((e) => e.kind === 7375)!;
       this.#wallet(

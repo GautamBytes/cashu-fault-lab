@@ -87,6 +87,16 @@ it.each([
   'history-only',
 ])('rejects invalid post-spend relay evidence: %s', async (fault) => {
   const f = await fixture();
+  const reservation = new Journal(f.b.database);
+  try {
+    reservation.prepareSpend(
+      f.id,
+      5,
+      await f.mint.prepareSpend(f.read(f.b.database).record.wallet!.proofs, 5),
+    );
+  } finally {
+    reservation.close();
+  }
   await spendNutzap(f.id, 4, f.a);
   const spend = f.read(f.a.database).record.spend!;
   const token = spend.events.find((e) => e.kind === 7375)!;
@@ -112,6 +122,16 @@ it.each(['PENDING', 'unavailable'])(
   'never advertises unverifiable proofs as spendable: %s',
   async (state) => {
     const f = await fixture();
+    const reservation = new Journal(f.b.database);
+    try {
+      reservation.prepareSpend(
+        f.id,
+        5,
+        await f.mint.prepareSpend(f.read(f.b.database).record.wallet!.proofs, 5),
+      );
+    } finally {
+      reservation.close();
+    }
     await spendNutzap(f.id, 4, f.a);
     const states = f.mint.states.bind(f.mint);
     f.b.mint = {
@@ -229,6 +249,128 @@ it('restores the exact prepared payment and change after a lost swap response', 
 });
 it('remembers an authenticated deletion delivered before its token', async () => {
   const f = await fixture();
+  await spendNutzap(f.id, 4, f.a);
+  const token = f.read(f.a.database).record.wallet!.token!;
+  const deletion = finalizeEvent(
+    {
+      kind: 5,
+      created_at: 5,
+      content: '',
+      tags: [
+        ['e', token.id],
+        ['k', '7375'],
+      ],
+    },
+    key,
+  );
+  f.published.delete(token.id);
+  f.published.set(deletion.id, deletion);
+  expect(await syncWallet(f.id, f.b)).toBe('awaiting-peer');
+  f.published.delete(deletion.id);
+  f.published.set(token.id, token);
+  expect(await syncWallet(f.id, f.b)).toBe('awaiting-peer');
+  expect(f.read(f.b.database).summary.balance).toBe(0);
+});
+
+it('recovers a losing spend only after verified peer change, preserving its failed intent', async () => {
+  const f = await fixture();
+  const swap = f.mint.swap.bind(f.mint);
+  f.mint.swap = async () => {
+    throw Error('partition');
+  };
+  expect(await spendNutzap(f.id, 5, f.b)).toBe('recovery-blocked');
+  const plan = f.read(f.b.database).record.spend!.plan;
+  f.mint.swap = swap;
+  expect(await spendNutzap(f.id, 4, f.a)).toBe('complete');
+  const query = f.b.query!;
+  f.b.query = async () => [];
+  expect(await syncWallet(f.id, f.b)).toBe('awaiting-peer');
+  expect(f.read(f.b.database).summary.balance).toBe(0);
+  f.b.query = query;
+  expect(await syncWallet(f.id, f.b)).toBe('complete');
+  expect(f.read(f.b.database).summary).toEqual({ credits: 0, balance: 10 });
+  expect(await spendNutzap(f.id, 5, f.b)).toBe('spend-conflict');
+  expect(f.read(f.b.database).record.spend).toMatchObject({
+    plan,
+    conflicted: true,
+    events: [],
+    sent: [],
+  });
+  expect(f.mint.successfulSwaps).toBe(2);
+  const db = new Journal(f.b.database);
+  try {
+    expect(() => db.finishSpend(f.id, [], [], [])).toThrow('Conflicted spend');
+  } finally {
+    db.close();
+  }
+});
+
+it('keeps its own successful swap reserved until its exact plan is recovered', async () => {
+  const f = await fixture();
+  const swap = f.mint.swap.bind(f.mint);
+  const restore = f.mint.restore.bind(f.mint);
+  f.mint.swap = async (zap, plan) => {
+    await swap(zap, plan);
+    throw Error('lost response');
+  };
+  f.mint.restore = async () => [];
+  expect(await spendNutzap(f.id, 4, f.a)).toBe('recovery-blocked');
+  f.mint.restore = restore;
+  expect(await syncWallet(f.id, f.a)).toBe('awaiting-peer');
+  expect(f.read(f.a.database).record.spend?.conflicted).not.toBe(true);
+  expect(await spendNutzap(f.id, 4, f.a)).toBe('complete');
+});
+
+it('does not mark an overlapping completed spend or different saved plan as conflicted', async () => {
+  const f = await fixture();
+  await spendNutzap(f.id, 4, f.a);
+  const record = f.read(f.a.database).record;
+  const db = new Journal(f.a.database);
+  try {
+    expect(
+      db.resolveSpendConflict(
+        f.id,
+        record.spend!.plan,
+        record.wallet!.token!,
+        record.wallet!.proofs,
+        [],
+      ),
+    ).toBe(false);
+    expect(db.get(f.id)!.spend!.conflicted).not.toBe(true);
+  } finally {
+    db.close();
+  }
+  const peer = new Journal(f.b.database);
+  try {
+    const plan = await f.mint.prepareSpend(f.read(f.b.database).record.wallet!.proofs, 5);
+    peer.prepareSpend(f.id, 5, plan);
+    expect(
+      peer.resolveSpendConflict(
+        f.id,
+        { ...plan, material: 'different' },
+        record.wallet!.token!,
+        record.wallet!.proofs,
+        [],
+      ),
+    ).toBe(false);
+    expect(peer.summary().balance).toBe(0);
+  } finally {
+    peer.close();
+  }
+});
+
+it('remembers a deleted peer replacement while a losing spend is still reserved', async () => {
+  const f = await fixture();
+  const db = new Journal(f.b.database);
+  try {
+    db.prepareSpend(
+      f.id,
+      5,
+      await f.mint.prepareSpend(f.read(f.b.database).record.wallet!.proofs, 5),
+    );
+  } finally {
+    db.close();
+  }
   await spendNutzap(f.id, 4, f.a);
   const token = f.read(f.a.database).record.wallet!.token!;
   const deletion = finalizeEvent(

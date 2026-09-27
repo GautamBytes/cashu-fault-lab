@@ -67,6 +67,33 @@ export interface NutzapEvidence {
     outboxStable: boolean;
     relayEventsAgree: boolean;
   };
+  concurrentSpend?: {
+    winner: number;
+    intents: number[];
+    swapAttempts: number;
+    successfulSwaps: number;
+    databasesDistinct: boolean;
+    plansDistinct: boolean;
+    partitionObserved: boolean;
+    partitionBalance: number;
+    crashObserved: boolean;
+    results: string[];
+    loserHasNoPayment: boolean;
+    plansStable: boolean;
+    amount: number;
+    fee: number;
+    remaining: number;
+    recipientBalances: number[];
+    recipientFees: number[];
+    walletBalances: number[];
+    credits: number;
+    proofCounts: number[];
+    stateCounts: number[];
+    retiredTokenRejected: boolean;
+    outboxStable: boolean;
+    relayEventsAgree: boolean;
+    nativeSyncObserved: boolean;
+  };
   crossLanguage?: {
     receivers: string[];
     cdkProcessObserved: boolean;
@@ -136,7 +163,8 @@ export function verifyNutzapEvidence(
     scenarioId?.startsWith('independent-') ||
     (scenarioId?.startsWith('cdk-') &&
       !scenarioId.includes('post-spend-') &&
-      !scenarioId.includes('key-rotation-'))
+      !scenarioId.includes('key-rotation-') &&
+      !scenarioId.includes('concurrent-spend'))
   ) {
     const i = e.independent;
     checks['independent-wallets'] =
@@ -164,7 +192,8 @@ export function verifyNutzapEvidence(
       c.privateJournals === true &&
       JSON.stringify(c.receivers) === '["cashu-ts/4.7.2","cdk/0.17.3 + nostr/0.45.5"]' &&
       c.crashedReceiver ===
-        (scenarioId.includes('post-spend-publication-crash')
+        ((scenarioId.includes('concurrent-spend') && scenarioId.endsWith('crash-after-swap')) ||
+        scenarioId.includes('post-spend-publication-crash')
           ? scenarioId.startsWith('cdk-peer-')
             ? 'cashu-ts'
             : 'cdk'
@@ -222,6 +251,60 @@ export function verifyNutzapEvidence(
       p.relayEventsAgree === true;
     checks['post-spend-crash'] =
       !!p && p.publicationCrashObserved === scenarioId.endsWith('publication-crash');
+  }
+  if (scenarioId?.includes('concurrent-spend')) {
+    const p = e.concurrentSpend;
+    const native = scenarioId.startsWith('cdk-');
+    const winner = native && !scenarioId.startsWith('cdk-peer-') ? 1 : 0;
+    const pair = (v: unknown): v is number[] =>
+      Array.isArray(v) && v.length === 2 && v.every((n) => Number.isSafeInteger(n) && n >= 0);
+    checks['concurrent-spend-race'] =
+      !!p &&
+      p.winner === winner &&
+      JSON.stringify(p.intents) === '[4,5]' &&
+      p.swapAttempts === 2 &&
+      p.successfulSwaps === 1 &&
+      p.databasesDistinct === true &&
+      p.plansDistinct === true &&
+      p.plansStable === true &&
+      p.partitionObserved === true &&
+      p.partitionBalance === 0 &&
+      p.crashObserved === scenarioId.endsWith('crash-after-swap') &&
+      p.nativeSyncObserved === native;
+    checks['concurrent-spend-no-false-payment'] =
+      !!p &&
+      p.loserHasNoPayment === true &&
+      Array.isArray(p.results) &&
+      p.results.length === 2 &&
+      p.results[winner] === 'complete' &&
+      p.results[1 - winner] === 'spend-conflict';
+    checks['concurrent-spend-value'] =
+      !!p &&
+      p.amount === p.intents?.[winner] &&
+      [p.amount, p.fee, p.remaining].every((n) => Number.isSafeInteger(n) && n >= 0) &&
+      p.remaining > 0 &&
+      e.outputAmount === p.amount + p.fee + p.remaining &&
+      pair(p.recipientBalances) &&
+      pair(p.recipientFees) &&
+      p.recipientBalances[winner]! > 0 &&
+      p.recipientBalances[1 - winner] === 0 &&
+      p.recipientFees[1 - winner] === 0 &&
+      p.amount === p.recipientBalances[winner]! + p.recipientFees[winner]!;
+    checks['concurrent-spend-states'] =
+      !!p &&
+      Array.isArray(p.proofCounts) &&
+      Array.isArray(p.stateCounts) &&
+      p.proofCounts.length === 4 &&
+      p.stateCounts.length === 4 &&
+      p.proofCounts.every((n, i) => proofCount(n) && n === p.stateCounts[i]);
+    checks['concurrent-spend-convergence'] =
+      !!p &&
+      pair(p.walletBalances) &&
+      p.walletBalances.every((n) => n === p.remaining) &&
+      p.credits === 1 &&
+      p.retiredTokenRejected === true &&
+      p.outboxStable === true &&
+      p.relayEventsAgree === true;
   }
   if (scenarioId?.startsWith('sender-relay-')) {
     const r = e.senderRelays;

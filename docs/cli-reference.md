@@ -6,7 +6,7 @@ Global diagnostic option: `--json` before a command emits machine-readable diagn
 
 ## `cashu-fault-lab nutzap list`
 
-Exercise NIP-61 redemption and NIP-60 post-spend recovery, including native CDK/cashu-ts interoperability.
+Exercise NIP-61 redemption, NIP-60 concurrent spending and post-spend recovery with cashu-ts and native CDK.
 
 Modes: `json`
 Environment: None
@@ -23,10 +23,11 @@ Examples:
 - `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
 - `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
 - `cashu-fault-lab nutzap run post-spend-publication-crash --seed demo`
+- `cashu-fault-lab nutzap run concurrent-spend-crash-after-swap --seed demo`
 
 ## `cashu-fault-lab nutzap run <scenario>`
 
-Exercise NIP-61 redemption and NIP-60 post-spend recovery, including native CDK/cashu-ts interoperability.
+Exercise NIP-61 redemption, NIP-60 concurrent spending and post-spend recovery with cashu-ts and native CDK.
 
 Arguments:
 
@@ -54,10 +55,11 @@ Examples:
 - `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
 - `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
 - `cashu-fault-lab nutzap run post-spend-publication-crash --seed demo`
+- `cashu-fault-lab nutzap run concurrent-spend-crash-after-swap --seed demo`
 
 ## `cashu-fault-lab nutzap matrix`
 
-Exercise NIP-61 redemption and NIP-60 post-spend recovery, including native CDK/cashu-ts interoperability.
+Exercise NIP-61 redemption, NIP-60 concurrent spending and post-spend recovery with cashu-ts and native CDK.
 
 Options:
 
@@ -81,10 +83,11 @@ Examples:
 - `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
 - `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
 - `cashu-fault-lab nutzap run post-spend-publication-crash --seed demo`
+- `cashu-fault-lab nutzap run concurrent-spend-crash-after-swap --seed demo`
 
 ## `cashu-fault-lab nutzap replay <artifact>`
 
-Exercise NIP-61 redemption and NIP-60 post-spend recovery, including native CDK/cashu-ts interoperability.
+Exercise NIP-61 redemption, NIP-60 concurrent spending and post-spend recovery with cashu-ts and native CDK.
 
 Arguments:
 
@@ -112,6 +115,7 @@ Examples:
 - `cashu-fault-lab nutzap run crash-after-swap --seed demo --output artifacts/nutzap.json`
 - `cashu-fault-lab nutzap replay artifacts/nutzap.json --seed demo`
 - `cashu-fault-lab nutzap run post-spend-publication-crash --seed demo`
+- `cashu-fault-lab nutzap run concurrent-spend-crash-after-swap --seed demo`
 
 ## `cashu-fault-lab up`
 

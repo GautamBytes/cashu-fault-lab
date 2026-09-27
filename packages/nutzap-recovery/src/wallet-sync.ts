@@ -39,9 +39,31 @@ export async function syncWallet(
       getPublicKey(options.key) !== record.zap.recipient
     )
       throw Error('Missing synchronized wallet');
-    // Relay reads cannot release inputs reserved by an unfinished local spend.
-    if (record.spend && !record.spend.events.length) return 'awaiting-peer';
     const original = record.events.find((e) => e.kind === 7375)!;
+    const pending =
+      record.spend && !record.spend.events.length && !record.spend.conflicted
+        ? record.spend
+        : undefined;
+    if (pending) {
+      try {
+        const conversation = nip44.v2.utils.getConversationKey(options.key, record.zap.recipient);
+        const inputs: NutzapProof[] = JSON.parse(
+          nip44.v2.decrypt(original.content, conversation),
+        ).proofs;
+        const states = await options.mint.states(inputs);
+        // SPENT must precede restore: once consumed, this plan cannot win a later swap.
+        if (states.length !== inputs.length || states.some((s) => s !== 'SPENT'))
+          return 'awaiting-peer';
+        const spending = {
+          ...record.zap,
+          proofs: inputs,
+          amount: inputs.reduce((n, p) => n + p.amount, 0),
+        };
+        if ((await options.mint.restore(spending, pending.plan)).length) return 'awaiting-peer';
+      } catch {
+        return 'awaiting-peer';
+      }
+    }
     const retired = new Set(record.wallet?.retired ?? []);
     const reads = await Promise.allSettled(
       options.relays.map((r) =>
@@ -129,6 +151,19 @@ export async function syncWallet(
       return 'awaiting-peer';
     }
     const selected = live[0]!;
+    if (pending) {
+      if (
+        selected.event.id === original.id ||
+        selected.proofs.some((p) => pending.plan.outputs.some((o) => o.secret === p.secret))
+      )
+        return 'awaiting-peer';
+      return db.resolveSpendConflict(id, pending.plan, selected.event, selected.proofs, [
+        ...retired,
+        ...selected.del,
+      ])
+        ? 'complete'
+        : 'awaiting-peer';
+    }
     return db.wallet(id, selected.event, selected.proofs, [...retired, ...selected.del])
       ? 'complete'
       : 'awaiting-peer';

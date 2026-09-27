@@ -46,7 +46,7 @@ export async function spendNutzap(
   options: ReceiverOptions & {
     afterPublication?: () => Promise<void>;
   },
-): Promise<'complete' | 'publication-pending' | 'recovery-blocked'> {
+): Promise<'complete' | 'publication-pending' | 'recovery-blocked' | 'spend-conflict'> {
   const db = new Journal(options.database);
   try {
     let record = db.get(id);
@@ -83,6 +83,7 @@ export async function spendNutzap(
       record = db.prepareSpend(id, amount, plan);
     }
     if (record.spend!.amount !== amount) throw Error('Conflicting spend amount');
+    if (record.spend!.conflicted) return 'spend-conflict';
     if (!record.spend!.events.length) {
       const plan = record.spend!.plan;
       const conversation = nip44.v2.utils.getConversationKey(options.key, record.zap.recipient);
@@ -123,6 +124,7 @@ export async function spendNutzap(
         return 'recovery-blocked';
       const keep = outputs.filter((p) => !plan.sendSecrets.includes(p.secret));
       const sent = outputs.filter((p) => plan.sendSecrets.includes(p.secret));
+      await options.afterSwap?.();
       record = db.finishSpend(id, spendEvents(record, keep, options.key), keep, sent);
     }
     for (const relay of options.relays) {

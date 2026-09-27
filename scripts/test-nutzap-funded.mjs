@@ -108,6 +108,7 @@ try {
           'test/nutzap-funded.test.ts',
         ],
         env,
+        300000, // Full scenario matrix plus fresh-proof replay on slower CI runners.
       );
       if (mint.name === 'nutshell') {
         const { stdout } = await promisify(execFile)(

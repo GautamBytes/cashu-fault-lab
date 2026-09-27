@@ -279,7 +279,48 @@ fn spend_reservation_survives_stale_sync_and_keeps_original_credit() {
     assert_eq!(saved.credit, Some(16));
     assert!(saved.wallet.unwrap().proofs.is_empty());
     assert_eq!(saved.spend.unwrap().plan.plan.material, "durable-blinding");
-    assert!(db.prepare_spend(&record.zap.id, 5, plan).is_err());
+    assert!(db.prepare_spend(&record.zap.id, 5, plan.clone()).is_err());
+    assert!(
+        db.wallet(&record.zap.id, None, vec![], vec!["ab".repeat(32)])
+            .unwrap()
+    );
+    assert!(
+        db.get(&record.zap.id)
+            .unwrap()
+            .unwrap()
+            .wallet
+            .unwrap()
+            .retired
+            .contains(&"ab".repeat(32))
+    );
+    let mut different = plan.clone();
+    different.plan.material = "other".into();
+    assert!(
+        !db.resolve_spend_conflict(
+            &record.zap.id,
+            &different,
+            events[0].clone(),
+            vec![],
+            vec![]
+        )
+        .unwrap()
+    );
+    assert!(
+        db.resolve_spend_conflict(&record.zap.id, &plan, events[0].clone(), vec![], vec![])
+            .unwrap()
+    );
+    drop(db);
+    let mut db = Journal::open(&path).unwrap();
+    let saved = db.get(&record.zap.id).unwrap().unwrap();
+    assert!(saved.spend.unwrap().conflicted);
+    assert!(
+        db.finish_spend(&record.zap.id, vec![], vec![], vec![])
+            .is_err()
+    );
+    assert!(
+        !db.resolve_spend_conflict(&record.zap.id, &plan, events[0].clone(), vec![], vec![])
+            .unwrap()
+    );
     drop(db);
     std::fs::remove_file(path).unwrap();
 }

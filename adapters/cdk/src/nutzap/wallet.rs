@@ -96,8 +96,31 @@ pub async fn sync(
     if record.credit.is_none() || record.zap.recipient != keys.public_key().to_hex() {
         return Err("missing_wallet");
     }
-    if record.spend.as_ref().is_some_and(|s| s.events.is_empty()) {
-        return Ok("awaiting-peer");
+    let pending = record
+        .spend
+        .as_ref()
+        .filter(|s| s.events.is_empty() && !s.conflicted);
+    if let Some(spend) = pending {
+        let original = record
+            .events
+            .iter()
+            .find(|e| e.kind.as_u16() == 7375)
+            .ok_or("missing_token")?;
+        let inputs: Vec<Proof> = serde_json::from_value(decrypt(original, keys)?["proofs"].clone())
+            .map_err(|_| "invalid_proofs")?;
+        // Check terminal input state before restoration to exclude an in-flight local success.
+        let resolved = async {
+            let states = mint.states(&inputs).await?;
+            if states.len() != inputs.len() || !states.iter().all(|s| s == "SPENT") {
+                return Ok(false);
+            }
+            Ok::<bool, &'static str>(mint.restore(&spend.plan.plan).await?.is_empty())
+        }
+        .await
+        .unwrap_or(false);
+        if !resolved {
+            return Ok("awaiting-peer");
+        }
     }
     let mut events = record.events.clone();
     let mut retired: BTreeSet<_> = record
@@ -136,6 +159,39 @@ pub async fn sync(
     }
     let (token, proofs, del) = live.pop().ok_or("missing_token")?;
     retired.extend(del);
+    if let Some(spend) = pending {
+        if !retired.contains(
+            &record
+                .events
+                .iter()
+                .find(|e| e.kind.as_u16() == 7375)
+                .ok_or("missing_token")?
+                .id
+                .to_hex(),
+        ) || proofs.iter().any(|p| {
+            spend
+                .plan
+                .plan
+                .outputs
+                .iter()
+                .any(|o| o.secret == p.secret.to_string())
+        }) {
+            return Ok("awaiting-peer");
+        }
+        return Ok(
+            if db.resolve_spend_conflict(
+                id,
+                &spend.plan,
+                token,
+                proofs,
+                retired.into_iter().collect(),
+            )? {
+                "complete"
+            } else {
+                "awaiting-peer"
+            },
+        );
+    }
     Ok(
         if db.wallet(id, Some(token), proofs, retired.into_iter().collect())? {
             "complete"
