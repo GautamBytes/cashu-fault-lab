@@ -44,7 +44,8 @@
     "format:check": "prettier --check .",
     "audit": "pnpm audit --prod",
     "test:nutzap:funded": "node scripts/test-nutzap-funded.mjs",
-    "test:nutzap": "pnpm exec turbo run build --filter=@cashu-fault-lab/nutzap-recovery && pnpm --filter @cashu-fault-lab/nutzap-recovery exec vitest run --exclude test/nutzap-funded.test.ts --exclude test/upstream-wallet-funded.test.ts"
+    "test:nutzap": "pnpm exec turbo run build --filter=@cashu-fault-lab/nutzap-recovery && pnpm --filter @cashu-fault-lab/nutzap-recovery exec vitest run --exclude test/nutzap-funded.test.ts --exclude test/upstream-wallet-funded.test.ts",
+    "test:payment-requests": "pnpm exec turbo run build --filter=@cashu-fault-lab/lab-cli && cargo build --locked --manifest-path adapters/cdk/Cargo.toml --bin cdk-payment-request && node --test scripts/payment-request-e2e.test.mjs"
   },
   "devDependencies": {
     "@types/node": "26.1.1",

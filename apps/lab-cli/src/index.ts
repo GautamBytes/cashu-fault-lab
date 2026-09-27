@@ -29,6 +29,7 @@ import { registerAdapterCommands } from './commands/adapter.js';
 import { registerLifecycleCommands } from './commands/lifecycle.js';
 import { registerWalletDoctorCommands } from './commands/wallet-doctor.js';
 import { registerNutzapCommands } from './commands/nutzap.js';
+import { registerPaymentRequestCommands } from './commands/payment-request.js';
 import { createEnvironmentLifecycleRuntime } from './lifecycle-runtime.js';
 import {
   LabDiagnosticError,
@@ -318,6 +319,9 @@ export async function runCli(
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr });
 
   registerNutzapCommands(program, io, (code) => {
+    exitCode = code;
+  });
+  registerPaymentRequestCommands(program, io, (code) => {
     exitCode = code;
   });
   registerLifecycleCommands(program, {

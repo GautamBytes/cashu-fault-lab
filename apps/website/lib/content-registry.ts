@@ -44,7 +44,8 @@ export const DOCUMENTATION_DESTINATIONS: readonly DocumentationDestination[] = [
     href: '/docs/adapters',
     sourcePath: 'docs/adapter-guide.md',
     title: 'Adapter guide',
-    description: 'Integrate wallet and receiver implementations through the adapter contract.',
+    description:
+      'Integrate wallet adapters and check NUT-26 codec interoperability and known SDK gaps.',
     group: 'Integrate',
     order: 30,
   },

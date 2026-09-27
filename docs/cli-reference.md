@@ -4,6 +4,30 @@
 
 Global diagnostic option: `--json` before a command emits machine-readable diagnostics for command-level failures.
 
+## `cashu-fault-lab payment-request matrix --cdk-codec <path>`
+
+Run the pinned nut26-bech32m-v1 codec profile with cashu-ts and native CDK.
+
+Options:
+
+- `--cdk-codec <path>`: Required path to the locally built cdk-payment-request executable.
+- `--strict`: Fail for known SDK gaps as well as regressions.
+- `--output <path>`: Write JSON evidence with per-stage observations and known gaps.
+
+Modes: `json`
+Environment: None
+Artifacts: `--output JSON report`
+
+Exit Codes:
+
+- `0`: No unexpected codec deviations; known gaps remain explicit unless --strict is set.
+- `1`: Unexpected codec deviation, or incomplete conformance with --strict.
+- `2`: Invalid configuration or native codec process/protocol failure.
+
+Examples:
+
+- `cashu-fault-lab payment-request matrix --cdk-codec adapters/cdk/target/debug/cdk-payment-request --output artifacts/nut26.json`
+
 ## `cashu-fault-lab nutzap list`
 
 Exercise NIP-61 redemption, NIP-60 concurrent spending and post-spend recovery with cashu-ts and native CDK.

@@ -36,6 +36,41 @@ const COMMON_EXIT_CODES: readonly CliExitCodeDefinition[] = [
 
 export function createCommandRegistry(): readonly CliCommandDefinition[] {
   return [
+    {
+      name: 'payment-request matrix',
+      usage: 'cashu-fault-lab payment-request matrix --cdk-codec <path>',
+      summary: 'Run the pinned nut26-bech32m-v1 codec profile with cashu-ts and native CDK.',
+      arguments: [],
+      options: [
+        {
+          flags: '--cdk-codec <path>',
+          description: 'Required path to the locally built cdk-payment-request executable.',
+        },
+        { flags: '--strict', description: 'Fail for known SDK gaps as well as regressions.' },
+        {
+          flags: '--output <path>',
+          description: 'Write JSON evidence with per-stage observations and known gaps.',
+        },
+      ],
+      examples: [
+        'cashu-fault-lab payment-request matrix --cdk-codec adapters/cdk/target/debug/cdk-payment-request --output artifacts/nut26.json',
+      ],
+      env: [],
+      modes: ['json'],
+      artifacts: ['--output JSON report'],
+      exitCodes: [
+        {
+          code: 0,
+          meaning:
+            'No unexpected codec deviations; known gaps remain explicit unless --strict is set.',
+        },
+        {
+          code: 1,
+          meaning: 'Unexpected codec deviation, or incomplete conformance with --strict.',
+        },
+        { code: 2, meaning: 'Invalid configuration or native codec process/protocol failure.' },
+      ],
+    },
     ...(['list', 'run', 'matrix', 'replay'] as const).map((action): CliCommandDefinition => ({
       name: `nutzap ${action}`,
       usage: `cashu-fault-lab nutzap ${action}${action === 'run' ? ' <scenario>' : action === 'replay' ? ' <artifact>' : ''}`,
