@@ -21,6 +21,21 @@ const publicRoutes = [
   '/docs/release-checklist',
 ] as const;
 
+test('adapter docs explain NUT-26 coverage and known SDK gaps', async ({ page }) => {
+  await page.goto('/docs/adapters');
+  await expect(
+    page.getByRole('heading', { name: 'NUT-26 codec interoperability', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('20 known-gap observations', { exact: false })).toBeVisible();
+  await expect(page.getByText('conformance: "incomplete"', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'NUT-26 at 8bde3c0', exact: true })).toHaveAttribute(
+    'href',
+    'https://github.com/cashubtc/nuts/blob/8bde3c0c3684430d852ab543ac8ca72913770dc0/26.md',
+  );
+  await expectNoPageOverflow(page);
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
 async function expectNoPageOverflow(page: Page) {
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,

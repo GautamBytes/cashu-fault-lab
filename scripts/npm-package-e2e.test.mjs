@@ -84,6 +84,26 @@ test('the packed CLI installs and works outside the monorepo', async () => {
     assert.equal(version.exitCode, 0, version.stderr);
     assert.equal(version.stdout.trim(), packageVersion);
 
+    if (process.env.CFL_PAYMENT_REQUEST_CDK_CODEC) {
+      const codecs = await run(
+        process.execPath,
+        [
+          cli,
+          'payment-request',
+          'matrix',
+          '--cdk-codec',
+          process.env.CFL_PAYMENT_REQUEST_CDK_CODEC,
+        ],
+        { cwd: installRoot },
+      );
+      assert.equal(codecs.exitCode, 0, codecs.stderr);
+      const codecReport = JSON.parse(codecs.stdout);
+      assert.equal(codecReport.profile, 'nut26-bech32m-v1');
+      assert.equal(codecReport.regressionGate, 'passed');
+      assert.equal(codecReport.conformance, 'incomplete');
+      assert.equal(codecReport.results.length, 108);
+    }
+
     for (const scenario of ['crash-after-swap', 'independent-crash-after-swap']) {
       const nutzap = await run(
         process.execPath,

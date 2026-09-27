@@ -302,6 +302,12 @@ pnpm lab matrix --profile delivery-v1 \
 
 `delivery-v1` runs configured receipt and idempotency pairs. `legacy-nut18` reports `N/A` until executable legacy receiver adapters are wired; pinned `creqA` vectors remain covered by adapter contract tests. `nut26-nostr` reports the pinned NIP-04/raw-key versus NIP-17/`nprofile` mismatch as an expected failure.
 
+The unreleased `payment-request matrix --cdk-codec <path>` command adds a separate
+`nut26-bech32m-v1` codec profile: 26 vectors exercise cashu-ts and native CDK round trips,
+malformed input and transport preservation. Run `pnpm test:payment-requests` from source.
+Known SDK gaps remain explicit, and `--strict` fails on them. See the
+[codec coverage and limitations](docs/adapter-guide.md#nut-26-codec-interoperability).
+
 `--min-passes` is a developer smoke-test threshold. It is not a release claim. Policy v3 binds the
 decision to the exact release-suite bytes with SHA-256, replaces smoke invariants with a
 conservative aggregate of suite-required invariants, and requires distinct implementations,

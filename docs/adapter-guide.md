@@ -72,6 +72,60 @@ Create a fresh wrapper key and randomized timestamp for each retry. Keep inner p
 
 Treat the pinned NUT-26 NIP-04/raw-key mapping as a separate expected-failure profile.
 
+## NUT-26 codec interoperability
+
+The unreleased `payment-request matrix` command runs the `nut26-bech32m-v1` profile with
+cashu-ts 4.7.2 and native CDK 0.17.3. It tests 26 fixed vectors and 108 decode stages against
+[NUT-26 at `8bde3c0`](https://github.com/cashubtc/nuts/blob/8bde3c0c3684430d852ab543ac8ca72913770dc0/26.md).
+The report records that commit and the specification's SHA-256. The historical `nut26-nostr`
+profile and its original upstream pin remain unchanged. This codec profile does not resolve
+the specification's NIP-04/NIP-17 delivery mapping discrepancy.
+
+From a source checkout with Node 24, pnpm and Rust 1.97:
+
+```bash
+pnpm test:payment-requests
+node apps/lab-cli/dist/bin.js payment-request matrix \
+  --cdk-codec adapters/cdk/target/debug/cdk-payment-request \
+  --output artifacts/nut26.json
+```
+
+Valid vectors travel through cashu-ts → CDK → cashu-ts and CDK → cashu-ts → CDK.
+Coverage includes the upstream uppercase/lowercase example, HTTP/Nostr transport priority,
+relay URLs, NIP tags, custom units, UTF-8 descriptions, multiple mints, full-width `u64`
+amounts, P2PK/HTLC field preservation, unknown tags, mint preference and supported methods.
+Negative vectors cover checksum corruption, mixed case, the wrong HRP or checksum scheme,
+truncated top-level and nested TLVs, malformed tuple lengths and invalid amount/key lengths.
+SDK decoders receive the original bytes without lab prevalidation.
+
+The pinned SDKs currently produce **20 known-gap observations**:
+
+| Gap                                                                    | Affected implementation                    |
+| ---------------------------------------------------------------------- | ------------------------------------------ |
+| Accepts mixed-case Bech32m                                             | cashu-ts                                   |
+| Accepts a legacy Bech32 checksum                                       | CDK                                        |
+| Ignores a trailing incomplete TLV header, including inside a transport | CDK                                        |
+| Duplicates Nostr relay URLs when re-encoding decoded requests          | CDK; visible in cross-language round trips |
+| Drops `mint_preferred` and `supported_method` fields                   | Both                                       |
+
+The default exit code checks regressions against these exact observations. A report can have
+`regressionGate: "passed"` while **`conformance: "incomplete"`**. Add `--strict` to exit 1 for
+any known gap. Unexpected rejection, acceptance, field loss or encoding failure also exits 1;
+missing or broken native binaries exit 2. Known gaps cannot excuse unrelated field changes.
+
+This is offline codec evidence: no mint or relay is contacted, no proofs are created, and no
+funded delivery, Nostr encryption or spending-condition validation is claimed. Reports contain
+public synthetic requests. Amounts and fees use decimal strings to preserve `u64` precision.
+Comparison treats absent/false flags and absent/empty lists as equivalent, and normalizes
+`npub`/`nprofile` targets to their public key and relay list. Redundant `r` tags are represented
+by that relay list; relay order and duplicates remain significant. It does not certify the SDK's
+choice of `npub` versus an empty `nprofile`, exact TLV byte ordering, or every NUT-26 edge case.
+
+Use the locally built executable with `--cdk-codec`: that option executes the supplied file.
+Each invocation has a five-second timeout and bounded input/output. No TypeScript substitute
+is used when CDK is unavailable. The command is bundled in development npm builds, but the
+native executable must be built separately; it is not downloaded or installed by the CLI.
+
 ## Reports and secrets
 
 Expose hashes, status, amount, unit, and stable error codes. Keep proof secrets, signatures,
