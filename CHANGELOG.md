@@ -2,7 +2,7 @@
 
 ## 0.3.0 — 2026-09-28
 
-- Fix code generation and OpenAPI validation in checkout paths containing spaces.
+- Fix code generation, OpenAPI validation and the wallet-doctor CLI test harness in checkout paths containing spaces.
 - Add NUT-26 codec interoperability: 26 vectors and 108 decode stages across cashu-ts and native CDK, with 20 explicit SDK gaps and a strict conformance failure mode.
 - Add concurrent NIP-60 spending across independent cashu-ts/CDK journals, both winner directions, pre-commit SIGKILL recovery, and durable conflict reporting.
 - Add the NIP-61 recovery foundation, independent wallet journals and native Rust/CDK receiver interoperability.
