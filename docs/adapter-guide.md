@@ -4,7 +4,7 @@ An adapter gives the lab one control surface for a wallet or service. Keep walle
 
 ## Contract
 
-Version 0.2.0 accepts these routes only on loopback origins
+Version 0.3.0 accepts these routes only on loopback origins
 (`http://127.0.0.1:<port>` or `http://[::1]:<port>`):
 
 | Method | Route                | Purpose                                                              |
@@ -74,7 +74,7 @@ Treat the pinned NUT-26 NIP-04/raw-key mapping as a separate expected-failure pr
 
 ## NUT-26 codec interoperability
 
-The unreleased `payment-request matrix` command runs the `nut26-bech32m-v1` profile with
+The `payment-request matrix` command runs the `nut26-bech32m-v1` profile with
 cashu-ts 4.7.2 and native CDK 0.17.3. It tests 26 fixed vectors and 108 decode stages against
 [NUT-26 at `8bde3c0`](https://github.com/cashubtc/nuts/blob/8bde3c0c3684430d852ab543ac8ca72913770dc0/26.md).
 The report records that commit and the specification's SHA-256. The historical `nut26-nostr`
@@ -135,7 +135,7 @@ store only a domain-separated seed hash; callers provide the raw seed out of ban
 
 ## Maintainer preview
 
-Version 0.2.0 intentionally accepts only adapter and evidence origins on
+Version 0.3.0 intentionally accepts only adapter and evidence origins on
 `http://127.0.0.1:<port>` or `http://[::1]:<port>`. Hosted adapters, TLS termination, redirects,
 userinfo, paths, queries, and fragments are rejected. This keeps wallet control tokens and funded
 test traffic on the maintainer's machine while the external contract is still experimental.
@@ -143,10 +143,10 @@ test traffic on the maintainer's machine while the external contract is still ex
 Start the adapter processes, export the token variables named by `adapter-manifest.json`, and run:
 
 ```bash
-npx --yes cashu-fault-lab@0.2.0 adapter preflight \
+npx --yes cashu-fault-lab@0.3.0 adapter preflight \
   --adapters adapter-manifest.json
 
-npx --yes cashu-fault-lab@0.2.0 adapter preview \
+npx --yes cashu-fault-lab@0.3.0 adapter preview \
   --adapters adapter-manifest.json \
   --sender my-wallet \
   --receiver my-wallet \

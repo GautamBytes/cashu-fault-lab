@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { describe, expect, it } from 'vitest';
@@ -16,7 +17,7 @@ import { captureDigest, proofY, type Nip60Capture } from '@cashu-fault-lab/walle
  * requires `pnpm --filter @cashu-fault-lab/lab-cli build` first (see the
  * root `verify:wallet-doctor` script); excluded from the default unit tier.
  */
-const root = new URL('../../../', import.meta.url).pathname;
+const root = fileURLToPath(new URL('../../../', import.meta.url));
 const cliPath = path.join(root, 'apps/lab-cli/dist/bin.js');
 
 function publish(relayUrl: string, event: Event): Promise<void> {
@@ -41,8 +42,8 @@ function runCli(
   args: readonly string[],
   env: Readonly<Record<string, string>>,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const child = spawn('node', [cliPath, ...args], {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [cliPath, ...args], {
       cwd: root,
       env: { ...process.env, ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -51,6 +52,7 @@ function runCli(
     let stderr = '';
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+    child.once('error', reject);
     child.on('close', (code) => resolve({ code, stdout, stderr }));
   });
 }

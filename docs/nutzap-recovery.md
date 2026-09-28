@@ -37,7 +37,7 @@ The script removes only its own stacks and volumes; no real sats are required. M
 The funded mode uses cashu-ts 4.7.2 for actual P2PK proof creation, DLEQ validation,
 swap, NUT-09 output recovery, and NUT-07 proof states.
 
-## Two-mint funded matrix (unreleased)
+## Two-mint funded matrix
 
 The source checkout runs all thirty-two scenarios on each mint, including the cashu-ts/CDK
 race and crashes in both directions. Every scenario is replayed with fresh proofs.
@@ -139,7 +139,7 @@ remain future work. The sections below add bounded sender read-relay discovery a
 a pinned external CLI wallet round trip. The existing
 wallet doctor remains read-only.
 
-## Post-spend wallet recovery (unreleased)
+## Post-spend wallet recovery
 
 These two cashu-ts scenarios start with a redeemed nutzap in two separate wallet journals,
 spend 4 sats from that balance, and reconnect the second wallet. The spender reissues all
@@ -190,7 +190,7 @@ apply the same bounded scope to two different receiver implementations.
 The fault relays deliberately retain obsolete events to test stale responses; successful
 synchronization does not depend on a relay honoring a deletion request.
 
-## Cross-language post-spend recovery (unreleased)
+## Cross-language post-spend recovery
 
 Four funded cases extend the same partial-spend faults to Rust/CDK and cashu-ts:
 
@@ -309,7 +309,7 @@ Sources: [NIP-61](https://github.com/nostr-protocol/nips/blob/master/61.md),
 [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md),
 [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md).
 
-## Receiving-key rotation (unreleased)
+## Receiving-key rotation
 
 These six cases rotate the recipient's separate P2PK receiving key once while retaining
 the same Nostr identity, mint and sat unit. Three use cashu-ts; their `cdk-` equivalents
@@ -374,7 +374,7 @@ advertises a separate receiving key; it does not specify a complete rotation lif
 The private history here is not a new NIP-60 wire format or a production wallet key-backup
 service. Permanent loss of the old key before redemption remains unrecoverable in this profile.
 
-## NIP-65 sender read-relay discovery (unreleased)
+## NIP-65 sender read-relay discovery
 
 [NIP-61](https://github.com/nostr-protocol/nips/blob/master/61.md) recommends publishing
 redemption history to the sender's [NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md)
@@ -418,7 +418,7 @@ require one history and zero tokens on each sender read relay, no events on the
 write-only relay, stable outbox IDs and conserved value. Routing is opt-in for this
 profile; native CDK receivers retain their configured-relay behavior.
 
-## Upstream Nutshell wallet integration (unreleased)
+## Upstream Nutshell wallet integration
 
 The Nutshell funded lane additionally runs the independently maintained
 [Nutshell CLI wallet](https://github.com/cashubtc/nutshell/tree/0.20.2/cashu/wallet),
@@ -475,7 +475,7 @@ CI runs this integration in its Nutshell NIP-61 lane. Its separate redacted resu
 wallet/image versions, balances, fees and checked outcomes. Re-running the command
 uses fresh wallet state and proofs; this result is not a `nutzap replay` artifact.
 
-## Concurrent wallet spending (unreleased)
+## Concurrent wallet spending
 
 Two devices share the same NIP-60 wallet identity and original proofs, but persist
 separate spend plans for payments of 4 and 5 sats to separate recipient clients.

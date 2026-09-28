@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-09-28
+
+- Fix code generation, OpenAPI validation and the wallet-doctor CLI test harness in checkout paths containing spaces.
+- Add NUT-26 codec interoperability: 26 vectors and 108 decode stages across cashu-ts and native CDK, with 20 explicit SDK gaps and a strict conformance failure mode.
+- Add concurrent NIP-60 spending across independent cashu-ts/CDK journals, both winner directions, pre-commit SIGKILL recovery, and durable conflict reporting.
+- Add the NIP-61 recovery foundation, independent wallet journals and native Rust/CDK receiver interoperability.
+- Update release images to native amd64/arm64 builds, patch dependencies, and expand website evidence and installation guidance.
 
 - Extend receiving-key rotation to native Rust/CDK: retained-key selection, delayed nutzaps,
   post-swap SIGKILL recovery and missing-key backup import, with two-mint replay and installed CLI checks.

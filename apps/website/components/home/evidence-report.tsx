@@ -91,9 +91,9 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           <p className={styles.eyebrow}>First-party reproducible evidence</p>
           <h2 id="evidence-report-title">Evidence, not a success boolean.</h2>
           <p>
-            We ran the public npm package in a clean directory with Node 24 and Docker, exactly as a
-            new user would. First-party reproducible evidence is not independent wallet validation
-            or certification.
+            This historical v0.2.0 run used the public npm package in a clean directory with Node 24
+            and Docker, exactly as a new user would. First-party reproducible evidence is not
+            independent wallet validation or certification.
           </p>
           <div className={styles.evidenceCommand}>
             <span>Exact public command</span>

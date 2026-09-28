@@ -1,4 +1,4 @@
-# Cashu Fault Lab — experimental v0.2 developer preview
+# Cashu Fault Lab — experimental v0.3 developer preview
 
 Cashu Fault Lab checks payment delivery across retries, duplicates, transport loss, and process recovery. Funded cashu-ts has delivery-v1 sender and receiver paths over HTTP and NIP-17 Nostr, PostgreSQL-backed restart-safe sender state, optional T3 receiver evidence, and real SIGKILL coverage at four sender and six receiver boundaries. CDK remains a funded sender adapter against the reference receiver at T1.
 
@@ -7,11 +7,13 @@ receive, restore, reconcile, and independently verified melt recovery. It is int
 from the stable delivery routes and is not part of the current release qualification. See the
 [wallet lifecycle guide](docs/wallet-lifecycle.md) for implemented scope and remaining work.
 
-This is an experimental developer preview, not certification. Version 0.2.0 introduces the
-breaking wallet-doctor capture-v2 contract. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
+This is an experimental developer preview, not certification. Version 0.3.0 adds NIP-61 nutzap recovery,
+NIP-60 post-spend and concurrent-spend recovery, receiving-key rotation, NIP-65 sender routing,
+upstream Nutshell wallet interoperability, and the NUT-26 codec matrix. The wallet-doctor
+capture-v2 contract introduced in 0.2.0 is retained. The strict gate remains blocked on an independent wallet receiver, distinct qualifying mint
 identities, trustworthy build provenance, and external integrations. See the
-[v0.2.0 release notes](docs/releases/v0.2.0.md) and
-[v0.2.0 checklist](docs/releases/v0.2.0-checklist.md).
+[v0.3.0 release notes](docs/releases/v0.3.0.md) and
+[v0.3.0 checklist](docs/releases/v0.3.0-checklist.md).
 
 The lab implements an experimental `cashu-delivery-v1` application profile on existing Cashu and Nostr protocols. Harness operation does not require a new NUT. See [ADR 001](docs/adrs/001-delivery-semantics.md) for the standardization boundary.
 
@@ -20,8 +22,8 @@ The lab implements an experimental `cashu-delivery-v1` application profile on ex
 Run the developer preview without cloning the repository or installing pnpm and Rust:
 
 ```bash
-npx --yes cashu-fault-lab@0.2.0 doctor
-npx --yes cashu-fault-lab@0.2.0 demo
+npx --yes cashu-fault-lab@0.3.0 doctor
+npx --yes cashu-fault-lab@0.3.0 demo
 ```
 
 This requires Node.js 24 and Docker. The npm package contains the CLI, scenarios, schemas, and
@@ -30,11 +32,11 @@ writes redacted JSON and HTML evidence, and removes the stack when it finishes.
 
 ## Test a local wallet adapter
 
-The v0.2.0 maintainer preview scaffolds an adapter, validates its contract without mutating wallet
+The v0.3.0 maintainer preview scaffolds an adapter, validates its contract without mutating wallet
 state, then runs response-loss and duplicate-delivery checks:
 
 ```bash
-npx --yes cashu-fault-lab@0.2.0 adapter init \
+npx --yes cashu-fault-lab@0.3.0 adapter init \
   --language typescript \
   --name my-wallet
 ```
@@ -45,17 +47,17 @@ they are connected to real wallet operations. Then start the adapter and export 
 named by its manifest.
 
 ```bash
-npx --yes cashu-fault-lab@0.2.0 adapter preflight \
+npx --yes cashu-fault-lab@0.3.0 adapter preflight \
   --adapters ./my-wallet/adapter-manifest.json
 
-npx --yes cashu-fault-lab@0.2.0 adapter preview \
+npx --yes cashu-fault-lab@0.3.0 adapter preview \
   --adapters ./my-wallet/adapter-manifest.json \
   --sender my-wallet \
   --receiver my-wallet \
   --output-dir ./cashu-fault-results
 ```
 
-Choose `typescript`, `rust`, or `python` when generating the adapter. Version 0.2.0 accepts only
+Choose `typescript`, `rust`, or `python` when generating the adapter. Version 0.3.0 accepts only
 loopback HTTP origins; remote and hosted wallet adapters are intentionally rejected. The preview
 automatically manages its local fault gateway and writes redacted JSON, HTML, JUnit, preflight, and
 replay evidence to `cashu-fault-results/`. Share the bundle for developer feedback, not as release
@@ -79,8 +81,7 @@ The default matrix labels its mint as simulated. In the source checkout, the fun
 test runs all thirty-two scenarios and replay against both pinned Nutshell and mintd,
 using fake Lightning funding, real P2PK/DLEQ swaps and NUT-09 restoration. It saves
 redacted reports per mint under `artifacts/nutzap-funded/`. Select a single lane with
-`pnpm test:nutzap:funded --mint nutshell` or `--mint mintd`. This two-mint expansion
-is unreleased. The independent-database cases use separate SDK instances for
+`pnpm test:nutzap:funded --mint nutshell` or `--mint mintd`. This two-mint coverage is included in v0.3.0. The independent-database cases use separate SDK instances for
 the same wallet identity and synchronize through signed, encrypted relay events.
 The funded lane also runs a separately implemented Rust/CDK receiver against
 cashu-ts, including crashes in both directions and replay. It requires Rust 1.97;
@@ -88,7 +89,7 @@ these are lab receivers, not certification of external wallet products.
 The concurrent-spend cases race two independent wallet journals over the same proofs.
 They test both cashu-ts/CDK winner directions, recovery after SIGKILL before local
 commit, and a durable `spend-conflict` result for the losing payment. See
-[concurrent wallet spending](docs/nutzap-recovery.md#concurrent-wallet-spending-unreleased).
+[concurrent wallet spending](docs/nutzap-recovery.md#concurrent-wallet-spending).
 
 The post-spend cases receive a nutzap, spend part of it, and reconnect a second wallet
 through stale, deleted and reordered NIP-60 token events. They also kill the spender
@@ -302,7 +303,7 @@ pnpm lab matrix --profile delivery-v1 \
 
 `delivery-v1` runs configured receipt and idempotency pairs. `legacy-nut18` reports `N/A` until executable legacy receiver adapters are wired; pinned `creqA` vectors remain covered by adapter contract tests. `nut26-nostr` reports the pinned NIP-04/raw-key versus NIP-17/`nprofile` mismatch as an expected failure.
 
-The unreleased `payment-request matrix --cdk-codec <path>` command adds a separate
+The `payment-request matrix --cdk-codec <path>` command adds a separate
 `nut26-bech32m-v1` codec profile: 26 vectors exercise cashu-ts and native CDK round trips,
 malformed input and transport preservation. Run `pnpm test:payment-requests` from source.
 Known SDK gaps remain explicit, and `--strict` fails on them. See the
