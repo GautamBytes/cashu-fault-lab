@@ -155,8 +155,8 @@ function parseVerification(value: unknown): DemoVerification {
 
 export async function getDemoSummary(): Promise<DemoSummary> {
   const [source, provenanceSource] = await Promise.all([
-    readFile(resolveRepositoryPath('docs/examples/v0.2.0-demo.json'), 'utf8'),
-    readFile(resolveRepositoryPath('docs/examples/v0.2.0-provenance.json'), 'utf8'),
+    readFile(resolveRepositoryPath('docs/examples/v0.3.0-demo.json'), 'utf8'),
+    readFile(resolveRepositoryPath('docs/examples/v0.3.0-provenance.json'), 'utf8'),
   ]);
   const artifact: unknown = JSON.parse(source);
   const verification = parseVerification(JSON.parse(provenanceSource) as unknown);

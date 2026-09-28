@@ -96,16 +96,16 @@ describe('home components', () => {
 
     const verifiedRun = screen.getByRole('group', { name: 'Verified public-package run' });
     expect(verifiedRun).toHaveAttribute('id', 'verified-run');
-    expect(within(verifiedRun).getByText('cashu-fault-lab@0.2.0')).toBeVisible();
+    expect(within(verifiedRun).getByText('cashu-fault-lab@0.3.0')).toBeVisible();
     expect(within(verifiedRun).getByText('15 passed · 3 not applicable')).toBeVisible();
     expect(within(verifiedRun).getByText('0 containers · 0 networks · 0 volumes')).toBeVisible();
     expect(within(verifiedRun).getByRole('link', { name: 'Terminal output' })).toHaveAttribute(
       'href',
-      '/evidence/v0.2.0-terminal.png',
+      '/evidence/v0.3.0-terminal.png',
     );
     expect(within(verifiedRun).getByRole('link', { name: 'HTML report' })).toHaveAttribute(
       'href',
-      '/evidence/v0.2.0-report.png',
+      '/evidence/v0.3.0-report.png',
     );
     expect(screen.getByRole('heading', { name: 'Explore fault scenarios' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Explore all scenarios' })).toHaveAttribute(
@@ -127,7 +127,7 @@ describe('home components', () => {
     expect(within(explorer).getByText(String(expectedScenarioCount))).toBeVisible();
   });
 
-  it('labels the historical default seed as a stable identifier', async () => {
+  it('labels the recorded release run seed as a stable identifier', async () => {
     stubMotionPreference();
     const summary = await getDemoSummary();
     render(await HomePage());
@@ -157,7 +157,7 @@ describe('home components', () => {
     expect(within(command).getByText('Copied')).toBeVisible();
   });
 
-  it('renders canonical v0.2.0 artifact data without a second staged trace', async () => {
+  it('renders canonical v0.3.0 artifact data without a second staged trace', async () => {
     stubMotionPreference();
     const summary = await getDemoSummary();
     render(await HomePage());
@@ -174,10 +174,10 @@ describe('home components', () => {
     expect(runPanel).toHaveTextContent('Artifact');
     expect(runPanel).not.toHaveTextContent(/\blive\b/i);
     expect(hero).not.toHaveTextContent('v0.1.2');
-    expect(hero).toHaveTextContent('cashu-fault-lab-v0.1.0-demo');
+    expect(hero).toHaveTextContent('cashu-fault-lab-v0.3.0-public');
     expect(screen.getByRole('link', { name: /Machine-readable evidence/ })).toHaveAttribute(
       'href',
-      'https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.2.0-demo.json',
+      'https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.3.0-demo.json',
     );
     expect(within(runPanel).queryByRole('list')).not.toBeInTheDocument();
     expect(within(hero).queryByText(/^TRACE \//)).not.toBeInTheDocument();
@@ -327,7 +327,7 @@ describe('home components', () => {
     expect(css).not.toMatch(/\.statusGrid,\s*\.reportLinks\s*{[^}]*grid-template-columns:\s*1fr/s);
   });
 
-  it('shows every user-visible v0.2.0 result and invariant state', async () => {
+  it('shows every user-visible v0.3.0 result and invariant state', async () => {
     const summary = await getDemoSummary();
     render(<EvidenceReport summary={summary} />);
 
@@ -347,23 +347,27 @@ describe('home components', () => {
     expect(within(overview).getByText(summary.scenarioId)).toBeVisible();
     expect(within(overview).getByText(new RegExp(`Run ${summary.status}`, 'i'))).toBeVisible();
     expect(within(overview).getByText('First-party reproducible evidence')).toBeVisible();
-    expect(within(overview).getByText('npx --yes cashu-fault-lab@0.2.0 demo')).toBeVisible();
+    expect(
+      within(overview).getByText(
+        'npx --yes cashu-fault-lab@0.3.0 demo --seed cashu-fault-lab-v0.3.0-public --artifact ../v0.3.0-demo.json --report ../v0.3.0-demo.html',
+      ),
+    ).toBeVisible();
     expect(
       within(overview).getByText(
         /First-party reproducible evidence is not independent wallet validation or certification/i,
       ),
     ).toBeVisible();
     expect(
-      screen.getByRole('img', { name: /v0\.2\.0 terminal showing the public doctor and demo/i }),
+      screen.getByRole('img', { name: /v0\.3\.0 terminal showing the public doctor and demo/i }),
     ).toBeVisible();
-    expect(screen.getByRole('img', { name: /v0\.2\.0 generated evidence report/i })).toBeVisible();
+    expect(screen.getByRole('img', { name: /v0\.3\.0 generated evidence report/i })).toBeVisible();
     expect(
       screen.getByRole('button', { name: 'Enlarge terminal verification screenshot' }),
     ).toBeVisible();
     expect(
       screen.getByRole('button', { name: 'Enlarge generated evidence report screenshot' }),
     ).toBeVisible();
-    const results = screen.getByRole('list', { name: 'Verified v0.2.0 user results' });
+    const results = screen.getByRole('list', { name: 'Verified v0.3.0 user results' });
     expect(within(results).getByText('10 checks · 0 failed · 0 warned')).toBeVisible();
     expect(
       within(results).getByText('2 attempts · 1 redemption start · 1 merchant credit'),
@@ -376,10 +380,10 @@ describe('home components', () => {
     expect(screen.getByRole('link', { name: /Machine-readable evidence/ })).toBeVisible();
     expect(screen.getByRole('link', { name: /Full HTML report/ })).toBeVisible();
     expect(screen.getByRole('link', { name: /Provenance record/ })).toBeVisible();
-    expect(screen.getByRole('link', { name: /v0\.2\.0 release/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /v0\.3\.0 release/ })).toBeVisible();
     expect(screen.getByRole('link', { name: /Successful publication run/ })).toHaveAttribute(
       'href',
-      'https://github.com/GautamBytes/cashu-fault-lab/actions/runs/30937256267',
+      'https://github.com/GautamBytes/cashu-fault-lab/actions/runs/36415808797',
     );
     expect(items).toHaveLength(18);
     expect(within(contextList).getByText('Crash recovery')).toBeVisible();

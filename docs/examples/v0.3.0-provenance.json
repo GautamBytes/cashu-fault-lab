@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "release": "v0.3.0",
+  "releaseCommit": "678acbe1381fdeb548c19c11309f8e49f484b5b7",
+  "releaseUrl": "https://github.com/GautamBytes/cashu-fault-lab/releases/tag/v0.3.0",
+  "publicationRunUrl": "https://github.com/GautamBytes/cashu-fault-lab/actions/runs/36415808797",
+  "package": "cashu-fault-lab@0.3.0",
+  "npmIntegrity": "sha512-4uvmG7LbOISEAuvjwcjhtyP/cksjlmBbEqRYeI6M3iuij0CT4Nl5ISUeEMVoPBoRWkoqNrg7rZG/MEqiroN5wQ==",
+  "evidenceType": "first-party-reproducible",
+  "doctorCommand": "npx --yes cashu-fault-lab@0.3.0 doctor",
+  "command": "npx --yes cashu-fault-lab@0.3.0 demo --seed cashu-fault-lab-v0.3.0-public --artifact ../v0.3.0-demo.json --report ../v0.3.0-demo.html",
+  "executedAt": "2026-09-28T11:40:02.037Z",
+  "environment": {
+    "platform": "macOS arm64",
+    "node": "v24.19.0",
+    "dockerClient": "29.1",
+    "dockerServer": "29.1.3"
+  },
+  "results": {
+    "doctor": {
+      "checks": 10,
+      "failed": 0,
+      "warned": 0
+    },
+    "demo": {
+      "status": "passed",
+      "scenarioId": "http-response-lost",
+      "seed": "cashu-fault-lab-v0.3.0-public",
+      "fault": "drop_response",
+      "deliveryAttempts": 2,
+      "redemptionStarts": 1,
+      "merchantCredits": 1,
+      "invariants": {
+        "passed": 15,
+        "failed": 0,
+        "notObservable": 0,
+        "notApplicable": 3
+      }
+    },
+    "cleanup": {
+      "containers": 0,
+      "networks": 0,
+      "volumes": 0
+    }
+  },
+  "artifacts": {
+    "json": {
+      "path": "docs/examples/v0.3.0-demo.json",
+      "generatedSha256": "2f5d7bdfbc02de0835a1e2d253212fc0d99992492c935731e93c22cd25ad364e",
+      "sha256": "620f6ca4d52d5103b68d17d02a6106d5bb9082165dee01ce9c3d72478ef531a4",
+      "normalization": "Prettier 3.9.5 formatting only"
+    },
+    "html": {
+      "path": "docs/examples/v0.3.0-demo.html",
+      "generatedSha256": "d29f578c17affe2cd340cef14d7dff8596ea90ba48447ff7b558a55bbe41f3ba",
+      "sha256": "52051764fe9b02c90d899f1d9facf2c39887eef65cf1633e79b6ef1b506c3b12",
+      "normalization": "Prettier 3.9.5 formatting only"
+    },
+    "terminalScreenshot": {
+      "path": "apps/website/public/evidence/v0.3.0-terminal.png",
+      "sha256": "65d77a1f9e5f24f7503709c4ac92e265651bf01c988ad05de27a141dc40f16af",
+      "capture": "Sanitized transcript rendered from the verified public-package run, 1440x900 viewport"
+    },
+    "reportScreenshot": {
+      "path": "apps/website/public/evidence/v0.3.0-report.png",
+      "sha256": "142536ddbf87810962aa4e5c988abf975282bbf67cada7764b7d14883cda9177",
+      "capture": "Unmodified generated HTML report, 1440x960 viewport"
+    }
+  },
+  "boundary": "First-party reproducible evidence is not independent wallet validation or certification.",
+  "images": [
+    {
+      "image": "ghcr.io/gautambytes/cashu-fault-lab-node-wallets:0.3.0",
+      "digests": [
+        "ghcr.io/gautambytes/cashu-fault-lab-node-wallets@sha256:103509cf9a45f893e657415aeee188990f21537ab40d3e17a32a7d3037002cf3"
+      ],
+      "revision": "678acbe1381fdeb548c19c11309f8e49f484b5b7",
+      "architecture": "arm64"
+    },
+    {
+      "image": "ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter:0.3.0",
+      "digests": [
+        "ghcr.io/gautambytes/cashu-fault-lab-cdk-adapter@sha256:fa3de5dc46d0dbe00697c1ced30a8ff3d68e795c3fc11907c101849f470a3e33"
+      ],
+      "revision": "678acbe1381fdeb548c19c11309f8e49f484b5b7",
+      "architecture": "arm64"
+    },
+    {
+      "image": "ghcr.io/gautambytes/cashu-fault-lab-netns:0.3.0",
+      "digests": [
+        "ghcr.io/gautambytes/cashu-fault-lab-netns@sha256:5bc8701282f666e1551829b4f670b38b07eebc5f2bb794a985c26197855af698"
+      ],
+      "revision": "678acbe1381fdeb548c19c11309f8e49f484b5b7",
+      "architecture": "arm64"
+    }
+  ]
+}

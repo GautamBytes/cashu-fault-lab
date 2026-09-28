@@ -32,13 +32,13 @@ describe('EvidenceGallery', () => {
       triggerName: 'Enlarge terminal verification screenshot',
       dialogName: 'Terminal verification output',
       imageName: /terminal showing the public doctor/i,
-      imageSrc: '/evidence/v0.2.0-terminal.png',
+      imageSrc: '/evidence/v0.3.0-terminal.png',
     },
     {
       triggerName: 'Enlarge generated evidence report screenshot',
       dialogName: 'Generated evidence report',
       imageName: /generated evidence report showing the passed response-loss scenario/i,
-      imageSrc: '/evidence/v0.2.0-report.png',
+      imageSrc: '/evidence/v0.3.0-report.png',
     },
   ])(
     'opens $dialogName at full resolution',

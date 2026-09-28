@@ -203,10 +203,10 @@ test('evidence screenshots open clearly and support every close path', async ({
   await trigger.click();
   const dialog = page.getByRole('dialog', { name: 'Terminal verification output' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('img')).toHaveAttribute('src', '/evidence/v0.2.0-terminal.png');
+  await expect(dialog.getByRole('img')).toHaveAttribute('src', '/evidence/v0.3.0-terminal.png');
   await expect(dialog.getByRole('link', { name: 'Open original image' })).toHaveAttribute(
     'href',
-    '/evidence/v0.2.0-terminal.png',
+    '/evidence/v0.3.0-terminal.png',
   );
   if (testInfo.project.name === 'mobile-chromium') {
     const panel = dialog.getByTestId('evidence-dialog-panel');

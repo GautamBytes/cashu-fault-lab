@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { getDemoSummary } from './demo';
 
 describe('getDemoSummary', () => {
-  it('summarizes the public v0.2.0 demo artifact without exposing commands', async () => {
+  it('summarizes the public v0.3.0 demo artifact without exposing commands', async () => {
     const summary = await getDemoSummary();
     expect(summary).toMatchObject({
       scenarioId: 'http-response-lost',
-      seed: 'cashu-fault-lab-v0.1.0-demo',
+      seed: 'cashu-fault-lab-v0.3.0-public',
       status: 'passed',
       commandCount: 3,
       timelineCount: 14,
@@ -15,11 +15,12 @@ describe('getDemoSummary', () => {
       redemptionStartCount: 1,
       merchantCreditCount: 1,
       verification: {
-        release: 'v0.2.0',
-        package: 'cashu-fault-lab@0.2.0',
-        command: 'npx --yes cashu-fault-lab@0.2.0 demo',
+        release: 'v0.3.0',
+        package: 'cashu-fault-lab@0.3.0',
+        command:
+          'npx --yes cashu-fault-lab@0.3.0 demo --seed cashu-fault-lab-v0.3.0-public --artifact ../v0.3.0-demo.json --report ../v0.3.0-demo.html',
         publicationRunUrl:
-          'https://github.com/GautamBytes/cashu-fault-lab/actions/runs/30937256267',
+          'https://github.com/GautamBytes/cashu-fault-lab/actions/runs/36415808797',
         evidenceType: 'first-party-reproducible',
         doctor: { checks: 10, failed: 0, warned: 0 },
         cleanup: { containers: 0, networks: 0, volumes: 0 },
