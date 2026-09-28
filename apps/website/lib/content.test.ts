@@ -39,14 +39,14 @@ describe('canonical content', () => {
 
   it('serves the current release notes and checklist', () => {
     expect(DOCUMENTATION_DESTINATIONS.find((item) => item.slug === 'release-notes')).toMatchObject({
-      sourcePath: 'docs/releases/v0.2.0.md',
-      description: expect.stringContaining('0.2'),
+      sourcePath: 'docs/releases/v0.3.0.md',
+      description: expect.stringContaining('0.3'),
     });
     expect(
       DOCUMENTATION_DESTINATIONS.find((item) => item.slug === 'release-checklist'),
     ).toMatchObject({
-      sourcePath: 'docs/releases/v0.2.0-checklist.md',
-      description: expect.stringContaining('0.2.0'),
+      sourcePath: 'docs/releases/v0.3.0-checklist.md',
+      description: expect.stringContaining('0.3.0'),
     });
   });
 

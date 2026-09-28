@@ -16,7 +16,7 @@ test('the public npm package exposes only the bundled CLI and runtime assets', a
 
   assert.equal(workspace.name, '@cashu-fault-lab/workspace');
   assert.equal(packageManifest.name, 'cashu-fault-lab');
-  assert.equal(packageManifest.version, '0.2.0');
+  assert.equal(packageManifest.version, '0.3.0');
   assert.equal(packageManifest.private, false);
   assert.deepEqual(packageManifest.bin, { 'cashu-fault-lab': 'dist/bin.js' });
   assert.deepEqual(packageManifest.files, ['dist', 'runtime', 'README.md', 'LICENSE']);
@@ -162,8 +162,8 @@ test('the npm README stays concise and sends developers to the full website', as
   const words = readme.trim().split(/\s+/u);
 
   assert.ok(words.length <= 220, `npm README should stay under 220 words; found ${words.length}`);
-  assert.match(readme, /npx --yes cashu-fault-lab@0\.2\.0 doctor/u);
-  assert.match(readme, /npx --yes cashu-fault-lab@0\.2\.0 demo/u);
+  assert.match(readme, /npx --yes cashu-fault-lab@0\.3\.0 doctor/u);
+  assert.match(readme, /npx --yes cashu-fault-lab@0\.3\.0 demo/u);
   assert.match(readme, /https:\/\/www\.cashulabs\.online\//u);
   assert.match(readme, /experimental developer preview/iu);
   assert.match(readme, /not a certification/iu);

@@ -127,9 +127,9 @@ test('home is accessible, has one visible title, and fits the viewport', async (
   await codespacesAction.evaluate((element) => element.blur());
   const demoCommand = page.getByLabel('Demo command', { exact: true });
   const copyCommand = demoCommand.getByRole('button', { name: 'Copy demo command' });
-  await expect(demoCommand.getByText('npx --yes cashu-fault-lab@0.2.0 demo')).toBeVisible();
+  await expect(demoCommand.getByText('npx --yes cashu-fault-lab@0.3.0 demo')).toBeVisible();
   await expect(copyCommand).toBeVisible();
-  await expect(demoCommand.getByText('npx --yes cashu-fault-lab@0.2.0 demo')).toHaveCSS(
+  await expect(demoCommand.getByText('npx --yes cashu-fault-lab@0.3.0 demo')).toHaveCSS(
     'white-space',
     'nowrap',
   );
@@ -379,36 +379,28 @@ test('Architecture participates in docs navigation, search, and pagination', asy
   await expect(
     page.getByRole('heading', { level: 1, name: 'NIP-61 nutzap recovery' }),
   ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Two-mint funded matrix' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Post-spend wallet recovery' })).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Two-mint funded matrix (unreleased)' }),
+    page.getByRole('heading', { name: 'Cross-language post-spend recovery' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Post-spend wallet recovery (unreleased)' }),
+    page.getByRole('heading', { name: 'NIP-65 sender read-relay discovery' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Cross-language post-spend recovery (unreleased)' }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'NIP-65 sender read-relay discovery (unreleased)' }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Upstream Nutshell wallet integration (unreleased)' }),
+    page.getByRole('heading', { name: 'Upstream Nutshell wallet integration' }),
   ).toBeVisible();
   await expect(
     page.getByRole('cell', { name: 'sender-relay-response-lost', exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Receiving-key rotation (unreleased)' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Receiving-key rotation' })).toBeVisible();
   await expect(
     page.getByRole('cell', { name: 'key-rotation-missing-key', exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole('cell', { name: 'cdk-key-rotation-missing-key', exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole('heading', { name: 'Concurrent wallet spending (unreleased)' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Concurrent wallet spending' })).toBeVisible();
   await expect(
     page.getByRole('cell', { name: 'cdk-peer-concurrent-spend-crash-after-swap', exact: true }),
   ).toBeVisible();

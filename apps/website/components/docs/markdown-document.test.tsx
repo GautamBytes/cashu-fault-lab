@@ -14,11 +14,11 @@ const docsCss = readFileSync(resolve(process.cwd(), 'components/docs/docs.module
 
 describe('repository Markdown links', () => {
   it('maps a canonical document linked from the repository root to its docs route', () => {
-    expect(resolveMarkdownHref('docs/releases/v0.2.0.md', 'README.md')).toBe('/docs/release-notes');
+    expect(resolveMarkdownHref('docs/releases/v0.3.0.md', 'README.md')).toBe('/docs/release-notes');
   });
 
   it('resolves canonical documents relative to a nested source file', () => {
-    expect(resolveMarkdownHref('v0.2.0-checklist.md', 'docs/releases/v0.2.0.md')).toBe(
+    expect(resolveMarkdownHref('v0.3.0-checklist.md', 'docs/releases/v0.3.0.md')).toBe(
       '/docs/release-checklist',
     );
   });
@@ -37,8 +37,8 @@ describe('repository Markdown links', () => {
     );
     expect(
       resolveMarkdownHref(
-        'v0.2.0-checklist.md#external-validation-blockers',
-        'docs/releases/v0.2.0.md',
+        'v0.3.0-checklist.md#external-validation-blockers',
+        'docs/releases/v0.3.0.md',
       ),
     ).toBe('/docs/release-checklist#external-validation-blockers');
   });

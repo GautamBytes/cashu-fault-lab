@@ -11,7 +11,7 @@ Run the public deterministic demo first. It verifies the published package, exer
 ## 1. Check the environment
 
 ```bash
-npx --yes cashu-fault-lab@0.2.0 doctor
+npx --yes cashu-fault-lab@0.3.0 doctor
 ```
 
 The doctor reports ten prerequisite checks. Resolve any failed check before starting the demo.
@@ -19,7 +19,7 @@ The doctor reports ten prerequisite checks. Resolve any failed check before star
 ## 2. Run the verified demo
 
 ```bash
-npx --yes cashu-fault-lab@0.2.0 demo --output ./cashu-fault-lab-evidence
+npx --yes cashu-fault-lab@0.3.0 demo --output ./cashu-fault-lab-evidence
 ```
 
 The command downloads the published package, starts the Docker stack, runs the stable `retry-safe-v0.1.0` seed, writes JSON, JUnit, HTML, and screenshot evidence, then removes the demo resources.
