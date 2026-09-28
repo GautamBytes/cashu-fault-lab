@@ -91,8 +91,8 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           <p className={styles.eyebrow}>First-party reproducible evidence</p>
           <h2 id="evidence-report-title">Evidence, not a success boolean.</h2>
           <p>
-            This historical v0.2.0 run used the public npm package in a clean directory with Node 24
-            and Docker, exactly as a new user would. First-party reproducible evidence is not
+            This v0.3.0 run used the public npm package in a clean directory with Node 24 and
+            Docker, exactly as a new user would. First-party reproducible evidence is not
             independent wallet validation or certification.
           </p>
           <div className={styles.evidenceCommand}>
@@ -136,14 +136,14 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
             </div>
           </dl>
           <p className={styles.seedNote}>
-            Package {summary.verification.package}; the CLI&apos;s deterministic default seed
-            identifier remains <code>{summary.seed}</code>.
+            Package {summary.verification.package}; the recorded seed for this run is{' '}
+            <code>{summary.seed}</code>.
           </p>
         </div>
       </div>
 
       <div className={styles.reportShell}>
-        <ul aria-label="Verified v0.2.0 user results" className={styles.verificationGrid}>
+        <ul aria-label="Verified v0.3.0 user results" className={styles.verificationGrid}>
           <li>
             <span className={styles.verificationStep}>01</span>
             <div>
@@ -263,7 +263,7 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           </a>
           <a
             className={styles.reportLink}
-            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.2.0-demo.json"
+            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.3.0-demo.json"
             rel="noreferrer noopener"
             target="_blank"
           >
@@ -271,7 +271,7 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           </a>
           <a
             className={styles.reportLink}
-            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.2.0-demo.html"
+            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.3.0-demo.html"
             rel="noreferrer noopener"
             target="_blank"
           >
@@ -279,7 +279,7 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           </a>
           <a
             className={styles.reportLink}
-            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.2.0-provenance.json"
+            href="https://github.com/GautamBytes/cashu-fault-lab/blob/main/docs/examples/v0.3.0-provenance.json"
             rel="noreferrer noopener"
             target="_blank"
           >
@@ -287,11 +287,11 @@ export function EvidenceReport({ summary }: EvidenceReportProps) {
           </a>
           <a
             className={styles.reportLink}
-            href="https://github.com/GautamBytes/cashu-fault-lab/releases/tag/v0.2.0"
+            href="https://github.com/GautamBytes/cashu-fault-lab/releases/tag/v0.3.0"
             rel="noreferrer noopener"
             target="_blank"
           >
-            v0.2.0 release <span aria-hidden="true">↗</span>
+            v0.3.0 release <span aria-hidden="true">↗</span>
           </a>
           <a
             className={styles.reportLink}

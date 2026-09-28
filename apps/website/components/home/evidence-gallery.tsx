@@ -6,8 +6,8 @@ import styles from './home.module.css';
 
 const evidenceImages = [
   {
-    src: '/evidence/v0.2.0-terminal.png',
-    alt: 'v0.2.0 terminal showing the public doctor and demo passing',
+    src: '/evidence/v0.3.0-terminal.png',
+    alt: 'v0.3.0 terminal showing the public doctor and demo passing',
     title: 'Terminal verification output',
     triggerLabel: 'Enlarge terminal verification screenshot',
     width: 1440,
@@ -20,8 +20,8 @@ const evidenceImages = [
     ),
   },
   {
-    src: '/evidence/v0.2.0-report.png',
-    alt: 'v0.2.0 generated evidence report showing the passed response-loss scenario',
+    src: '/evidence/v0.3.0-report.png',
+    alt: 'v0.3.0 generated evidence report showing the passed response-loss scenario',
     title: 'Generated evidence report',
     triggerLabel: 'Enlarge generated evidence report screenshot',
     width: 1440,

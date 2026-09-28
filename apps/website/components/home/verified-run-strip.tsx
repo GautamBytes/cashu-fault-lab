@@ -37,8 +37,8 @@ export function VerifiedRunStrip({ summary }: { summary: DemoSummary }) {
         </div>
       </dl>
       <nav aria-label="Verified run artifacts" className={styles.verifiedRunLinks}>
-        <a href="/evidence/v0.2.0-terminal.png">Terminal output</a>
-        <a href="/evidence/v0.2.0-report.png">HTML report</a>
+        <a href="/evidence/v0.3.0-terminal.png">Terminal output</a>
+        <a href="/evidence/v0.3.0-report.png">HTML report</a>
       </nav>
     </div>
   );
